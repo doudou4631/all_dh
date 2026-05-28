@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkGovernRuleMapper">
+
+    <resultMap type="MarkGovernRule" id="MarkGovernRuleResult">
+        <result property="id" column="id"/>
+        <result property="ruleName" column="rule_name"/>
+        <result property="ruleKey" column="rule_key"/>
+        <result property="ruleValue" column="rule_value"/>
+        <result property="status" column="status"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkGovernRuleVo">
+        select
+            mgr.id,
+            mgr.rule_name,
+            mgr.rule_key,
+            mgr.rule_value,
+            mgr.status,
+            mgr.create_by,
+            mgr.create_time,
+            mgr.update_by,
+            mgr.update_time,
+            mgr.remark
+        from mark_govern_rule mgr
+    </sql>
+
+    <select id="selectMarkGovernRuleById" parameterType="Long" resultMap="MarkGovernRuleResult">
+        <include refid="selectMarkGovernRuleVo"/>
+        where mgr.id = #{id}
+    </select>
+
+    <select id="selectMarkGovernRuleList" parameterType="MarkGovernRule" resultMap="MarkGovernRuleResult">
+        <include refid="selectMarkGovernRuleVo"/>
+        <where>
+            <if test="ruleName != null and ruleName != ''"> and mgr.rule_name like concat('%', #{ruleName}, '%')</if>
+            <if test="ruleKey != null and ruleKey != ''"> and mgr.rule_key like concat('%', #{ruleKey}, '%')</if>
+            <if test="status != null and status != ''"> and mgr.status = #{status}</if>
+        </where>
+        order by mgr.id desc
+    </select>
+
+    <insert id="insertMarkGovernRule" parameterType="MarkGovernRule" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_govern_rule
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="ruleName != null and ruleName != ''">rule_name,</if>
+            <if test="ruleKey != null and ruleKey != ''">rule_key,</if>
+            <if test="ruleValue != null">rule_value,</if>
+            <if test="status != null and status != ''">status,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="ruleName != null and ruleName != ''">#{ruleName},</if>
+            <if test="ruleKey != null and ruleKey != ''">#{ruleKey},</if>
+            <if test="ruleValue != null">#{ruleValue},</if>
+            <if test="status != null and status != ''">#{status},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkGovernRule" parameterType="MarkGovernRule">
+        update mark_govern_rule
+        <trim prefix="set" suffixOverrides=",">
+            <if test="ruleName != null and ruleName != ''">rule_name = #{ruleName},</if>
+            <if test="ruleKey != null and ruleKey != ''">rule_key = #{ruleKey},</if>
+            <if test="ruleValue != null">rule_value = #{ruleValue},</if>
+            <if test="status != null and status != ''">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <delete id="deleteMarkGovernRuleByIds" parameterType="Long">
+        delete from mark_govern_rule where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

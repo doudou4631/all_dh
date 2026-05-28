@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkUserPlatformPriceMapper">
+
+    <resultMap type="MarkUserPlatformPrice" id="MarkUserPlatformPriceResult">
+        <result property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="platformCode" column="platform_code"/>
+        <result property="platformName" column="platform_name"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkUserPlatformPriceVo">
+        select
+            mupp.id,
+            mupp.user_id,
+            mupp.platform_code,
+            mupp.platform_name,
+            mupp.unit_price,
+            mupp.create_by,
+            mupp.create_time,
+            mupp.update_by,
+            mupp.update_time,
+            mupp.remark
+        from mark_user_platform_price mupp
+    </sql>
+
+    <select id="selectMarkUserPlatformPriceList" parameterType="MarkUserPlatformPrice" resultMap="MarkUserPlatformPriceResult">
+        <include refid="selectMarkUserPlatformPriceVo"/>
+        <where>
+            <if test="userId != null"> and mupp.user_id = #{userId}</if>
+            <if test="platformCode != null and platformCode != ''"> and mupp.platform_code = #{platformCode}</if>
+        </where>
+        order by mupp.id asc
+    </select>
+
+    <select id="selectByUserAndPlatform" resultMap="MarkUserPlatformPriceResult">
+        <include refid="selectMarkUserPlatformPriceVo"/>
+        where mupp.user_id = #{userId}
+          and mupp.platform_code = #{platformCode}
+        limit 1
+    </select>
+
+    <insert id="insertMarkUserPlatformPrice" parameterType="MarkUserPlatformPrice" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_user_platform_price
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="platformCode != null and platformCode != ''">platform_code,</if>
+            <if test="platformName != null and platformName != ''">platform_name,</if>
+            <if test="unitPrice != null">unit_price,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="platformCode != null and platformCode != ''">#{platformCode},</if>
+            <if test="platformName != null and platformName != ''">#{platformName},</if>
+            <if test="unitPrice != null">#{unitPrice},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkUserPlatformPrice" parameterType="MarkUserPlatformPrice">
+        update mark_user_platform_price
+        <trim prefix="set" suffixOverrides=",">
+            <if test="platformCode != null and platformCode != ''">platform_code = #{platformCode},</if>
+            <if test="platformName != null and platformName != ''">platform_name = #{platformName},</if>
+            <if test="unitPrice != null">unit_price = #{unitPrice},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+</mapper>

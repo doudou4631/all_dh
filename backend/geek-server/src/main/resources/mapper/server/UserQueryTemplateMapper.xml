@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.UserQueryTemplateMapper">
+    
+    <resultMap type="UserQueryTemplate" id="UserQueryTemplateResult">
+        <result property="id" column="id" />
+        <result property="templateName" column="template_name" />
+        <result property="waitDelay" column="wait_delay" />
+        <result property="templateInfo" column="template_info" />
+        <result property="status" column="status" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectUserQueryTemplateVo">
+        select 
+            uqt.id,
+            uqt.template_name,
+            uqt.wait_delay,
+            uqt.template_info,
+            uqt.status,
+            uqt.create_by,
+            uqt.create_time,
+            uqt.update_by,
+            uqt.update_time,
+            uqt.remark
+        from user_query_template uqt
+    </sql>
+
+    <select id="selectUserQueryTemplateList" parameterType="UserQueryTemplate" resultMap="UserQueryTemplateResult">
+        <include refid="selectUserQueryTemplateVo"/>
+        <where>
+            <if test="templateName != null  and templateName != ''"> and uqt.template_name like concat('%', #{templateName}, '%')</if>
+            <if test="waitDelay != null "> and uqt.wait_delay = #{waitDelay}</if>
+            <if test="templateInfo != null  and templateInfo != ''"> and uqt.template_info = #{templateInfo}</if>
+            <if test="status != null  and status != ''"> and uqt.status = #{status}</if>
+        </where>
+    </select>
+    
+    <select id="selectUserQueryTemplateById" parameterType="Long" resultMap="UserQueryTemplateResult">
+        <include refid="selectUserQueryTemplateVo"/>
+        where uqt.id = #{id}
+    </select>
+        
+    <insert id="insertUserQueryTemplate" parameterType="UserQueryTemplate" useGeneratedKeys="true" keyProperty="id">
+        insert into user_query_template
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="templateName != null and templateName != ''">template_name,</if>
+            <if test="waitDelay != null">wait_delay,</if>
+            <if test="templateInfo != null and templateInfo != ''">template_info,</if>
+            <if test="status != null">status,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="templateName != null and templateName != ''">#{templateName},</if>
+            <if test="waitDelay != null">#{waitDelay},</if>
+            <if test="templateInfo != null and templateInfo != ''">#{templateInfo},</if>
+            <if test="status != null">#{status},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateUserQueryTemplate" parameterType="UserQueryTemplate">
+        update user_query_template
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="templateName != null and templateName != ''">template_name = #{templateName},</if>
+            <if test="waitDelay != null">wait_delay = #{waitDelay},</if>
+            <if test="templateInfo != null and templateInfo != ''">template_info = #{templateInfo},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where user_query_template.id = #{id}
+    </update>
+
+    <delete id="deleteUserQueryTemplateById" parameterType="Long">
+        delete from user_query_template where id = #{id}
+    </delete>
+
+    <delete id="deleteUserQueryTemplateByIds" parameterType="String">
+        delete from user_query_template where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkArbitrationCaseMapper">
+
+    <resultMap type="MarkArbitrationCase" id="MarkArbitrationCaseResult">
+        <result property="id" column="id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="orderItemId" column="order_item_id"/>
+        <result property="userId" column="user_id"/>
+        <result property="agentId" column="agent_id"/>
+        <result property="caseStatus" column="case_status"/>
+        <result property="issueDesc" column="issue_desc"/>
+        <result property="evidenceText" column="evidence_text"/>
+        <result property="decisionText" column="decision_text"/>
+        <result property="decidedBy" column="decided_by"/>
+        <result property="decidedTime" column="decided_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkArbitrationCaseVo">
+        select
+            mac.id,
+            mac.order_id,
+            mac.order_item_id,
+            mac.user_id,
+            mac.agent_id,
+            mac.case_status,
+            mac.issue_desc,
+            mac.evidence_text,
+            mac.decision_text,
+            mac.decided_by,
+            mac.decided_time,
+            mac.create_by,
+            mac.create_time,
+            mac.update_by,
+            mac.update_time,
+            mac.remark
+        from mark_arbitration_case mac
+    </sql>
+
+    <select id="selectMarkArbitrationCaseById" parameterType="Long" resultMap="MarkArbitrationCaseResult">
+        <include refid="selectMarkArbitrationCaseVo"/>
+        where mac.id = #{id}
+    </select>
+
+    <select id="selectMarkArbitrationCaseList" parameterType="MarkArbitrationCase" resultMap="MarkArbitrationCaseResult">
+        <include refid="selectMarkArbitrationCaseVo"/>
+        <where>
+            <if test="orderId != null"> and mac.order_id = #{orderId}</if>
+            <if test="orderItemId != null"> and mac.order_item_id = #{orderItemId}</if>
+            <if test="userId != null"> and mac.user_id = #{userId}</if>
+            <if test="agentId != null"> and mac.agent_id = #{agentId}</if>
+            <if test="caseStatus != null and caseStatus != ''"> and mac.case_status = #{caseStatus}</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and mac.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and mac.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mac.id desc
+    </select>
+
+    <insert id="insertMarkArbitrationCase" parameterType="MarkArbitrationCase" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_arbitration_case
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">order_id,</if>
+            <if test="orderItemId != null">order_item_id,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="agentId != null">agent_id,</if>
+            <if test="caseStatus != null and caseStatus != ''">case_status,</if>
+            <if test="issueDesc != null">issue_desc,</if>
+            <if test="evidenceText != null">evidence_text,</if>
+            <if test="decisionText != null">decision_text,</if>
+            <if test="decidedBy != null">decided_by,</if>
+            <if test="decidedTime != null">decided_time,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">#{orderId},</if>
+            <if test="orderItemId != null">#{orderItemId},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="agentId != null">#{agentId},</if>
+            <if test="caseStatus != null and caseStatus != ''">#{caseStatus},</if>
+            <if test="issueDesc != null">#{issueDesc},</if>
+            <if test="evidenceText != null">#{evidenceText},</if>
+            <if test="decisionText != null">#{decisionText},</if>
+            <if test="decidedBy != null">#{decidedBy},</if>
+            <if test="decidedTime != null">#{decidedTime},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkArbitrationCase" parameterType="MarkArbitrationCase">
+        update mark_arbitration_case
+        <trim prefix="set" suffixOverrides=",">
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="orderItemId != null">order_item_id = #{orderItemId},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="agentId != null">agent_id = #{agentId},</if>
+            <if test="caseStatus != null and caseStatus != ''">case_status = #{caseStatus},</if>
+            <if test="issueDesc != null">issue_desc = #{issueDesc},</if>
+            <if test="evidenceText != null">evidence_text = #{evidenceText},</if>
+            <if test="decisionText != null">decision_text = #{decisionText},</if>
+            <if test="decidedBy != null">decided_by = #{decidedBy},</if>
+            <if test="decidedTime != null">decided_time = #{decidedTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+</mapper>

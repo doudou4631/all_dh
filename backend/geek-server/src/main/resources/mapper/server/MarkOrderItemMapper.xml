@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkOrderItemMapper">
+
+    <resultMap type="MarkOrderItem" id="MarkOrderItemResult">
+        <result property="id" column="id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="phone" column="phone"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="itemAmount" column="item_amount"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="processResult" column="process_result"/>
+        <result property="processNote" column="process_note"/>
+        <result property="processedBy" column="processed_by"/>
+        <result property="processedTime" column="processed_time"/>
+        <result property="refunded" column="refunded"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkOrderItemVo">
+        select
+            moi.id,
+            moi.order_id,
+            moi.phone,
+            moi.unit_price,
+            moi.item_amount,
+            moi.process_status,
+            moi.process_result,
+            moi.process_note,
+            moi.processed_by,
+            moi.processed_time,
+            moi.refunded,
+            moi.create_by,
+            moi.create_time,
+            moi.update_by,
+            moi.update_time,
+            moi.remark
+        from mark_order_item moi
+    </sql>
+
+    <select id="selectMarkOrderItemById" parameterType="Long" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        where moi.id = #{id}
+    </select>
+
+    <select id="selectMarkOrderItemList" parameterType="MarkOrderItem" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        <where>
+            <if test="orderId != null"> and moi.order_id = #{orderId}</if>
+            <if test="processStatus != null and processStatus != ''"> and moi.process_status = #{processStatus}</if>
+            <if test="phone != null and phone != ''"> and moi.phone like concat('%', #{phone}, '%')</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and moi.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and moi.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by moi.id asc
+    </select>
+
+    <select id="selectMarkOrderItemsByOrderId" parameterType="Long" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        where moi.order_id = #{orderId}
+        order by moi.id asc
+    </select>
+
+    <insert id="insertMarkOrderItem" parameterType="MarkOrderItem" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_order_item
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">order_id,</if>
+            <if test="phone != null and phone != ''">phone,</if>
+            <if test="unitPrice != null">unit_price,</if>
+            <if test="itemAmount != null">item_amount,</if>
+            <if test="processStatus != null and processStatus != ''">process_status,</if>
+            <if test="processResult != null and processResult != ''">process_result,</if>
+            <if test="processNote != null and processNote != ''">process_note,</if>
+            <if test="processedBy != null and processedBy != ''">processed_by,</if>
+            <if test="processedTime != null">processed_time,</if>
+            <if test="refunded != null and refunded != ''">refunded,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">#{orderId},</if>
+            <if test="phone != null and phone != ''">#{phone},</if>
+            <if test="unitPrice != null">#{unitPrice},</if>
+            <if test="itemAmount != null">#{itemAmount},</if>
+            <if test="processStatus != null and processStatus != ''">#{processStatus},</if>
+            <if test="processResult != null and processResult != ''">#{processResult},</if>
+            <if test="processNote != null and processNote != ''">#{processNote},</if>
+            <if test="processedBy != null and processedBy != ''">#{processedBy},</if>
+            <if test="processedTime != null">#{processedTime},</if>
+            <if test="refunded != null and refunded != ''">#{refunded},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkOrderItem" parameterType="MarkOrderItem">
+        update mark_order_item
+        <trim prefix="set" suffixOverrides=",">
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="unitPrice != null">unit_price = #{unitPrice},</if>
+            <if test="itemAmount != null">item_amount = #{itemAmount},</if>
+            <if test="processStatus != null and processStatus != ''">process_status = #{processStatus},</if>
+            <if test="processResult != null">process_result = #{processResult},</if>
+            <if test="processNote != null">process_note = #{processNote},</if>
+            <if test="processedBy != null">processed_by = #{processedBy},</if>
+            <if test="processedTime != null">processed_time = #{processedTime},</if>
+            <if test="refunded != null and refunded != ''">refunded = #{refunded},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+</mapper>

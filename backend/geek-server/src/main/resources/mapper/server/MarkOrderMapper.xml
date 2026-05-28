@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkOrderMapper">
+
+    <resultMap type="MarkOrder" id="MarkOrderResult">
+        <result property="id" column="id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="requestNo" column="request_no"/>
+        <result property="userId" column="user_id"/>
+        <result property="assignedAgentId" column="assigned_agent_id"/>
+        <result property="platformCode" column="platform_code"/>
+        <result property="platformName" column="platform_name"/>
+        <result property="totalCount" column="total_count"/>
+        <result property="successCount" column="success_count"/>
+        <result property="failedCount" column="failed_count"/>
+        <result property="totalAmount" column="total_amount"/>
+        <result property="refundAmount" column="refund_amount"/>
+        <result property="orderStatus" column="order_status"/>
+        <result property="completedTime" column="completed_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkOrderVo">
+        select
+            mo.id,
+            mo.order_no,
+            mo.request_no,
+            mo.user_id,
+            mo.assigned_agent_id,
+            mo.platform_code,
+            mo.platform_name,
+            mo.total_count,
+            mo.success_count,
+            mo.failed_count,
+            mo.total_amount,
+            mo.refund_amount,
+            mo.order_status,
+            mo.completed_time,
+            mo.create_by,
+            mo.create_time,
+            mo.update_by,
+            mo.update_time,
+            mo.remark
+        from mark_order mo
+    </sql>
+
+    <select id="selectMarkOrderById" parameterType="Long" resultMap="MarkOrderResult">
+        <include refid="selectMarkOrderVo"/>
+        where mo.id = #{id}
+    </select>
+
+    <select id="selectMarkOrderList" parameterType="MarkOrder" resultMap="MarkOrderResult">
+        <include refid="selectMarkOrderVo"/>
+        <where>
+            <if test="orderNo != null and orderNo != ''"> and mo.order_no like concat('%', #{orderNo}, '%')</if>
+            <if test="requestNo != null and requestNo != ''"> and mo.request_no like concat('%', #{requestNo}, '%')</if>
+            <if test="userId != null"> and mo.user_id = #{userId}</if>
+            <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
+            <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
+            <if test="orderStatus != null and orderStatus != ''"> and mo.order_status = #{orderStatus}</if>
+            <if test="phone != null and phone != ''">
+                and mo.id in (
+                    select moi.order_id
+                    from mark_order_item moi
+                    where moi.phone like concat('%', #{phone}, '%')
+                )
+            </if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and mo.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and mo.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mo.create_time desc
+    </select>
+
+    <select id="selectAgentOrderList" resultMap="MarkOrderResult">
+        select
+            mo.id,
+            mo.order_no,
+            mo.request_no,
+            mo.user_id,
+            mo.assigned_agent_id,
+            mo.platform_code,
+            mo.platform_name,
+            mo.total_count,
+            mo.success_count,
+            mo.failed_count,
+            mo.total_amount,
+            mo.refund_amount,
+            mo.order_status,
+            mo.completed_time,
+            mo.create_by,
+            mo.create_time,
+            mo.update_by,
+            mo.update_time,
+            mo.remark
+        from mark_order mo
+        left join sys_user su on su.user_id = mo.user_id
+        <where>
+            <if test="!isAdmin">
+                and (mo.assigned_agent_id = #{agentId} or (mo.assigned_agent_id is null and su.create_by = #{agentUsername}))
+            </if>
+            <if test="query != null and query.orderNo != null and query.orderNo != ''">
+                and mo.order_no like concat('%', #{query.orderNo}, '%')
+            </if>
+            <if test="query != null and query.requestNo != null and query.requestNo != ''">
+                and mo.request_no like concat('%', #{query.requestNo}, '%')
+            </if>
+            <if test="query != null and query.userId != null">
+                and mo.user_id = #{query.userId}
+            </if>
+            <if test="query != null and query.platformCode != null and query.platformCode != ''">
+                and mo.platform_code = #{query.platformCode}
+            </if>
+            <if test="query != null and query.orderStatus != null and query.orderStatus != ''">
+                and mo.order_status = #{query.orderStatus}
+            </if>
+            <if test="query != null and query.phone != null and query.phone != ''">
+                and mo.id in (
+                    select moi.order_id
+                    from mark_order_item moi
+                    where moi.phone like concat('%', #{query.phone}, '%')
+                )
+            </if>
+            <if test="query != null and query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                and mo.create_time &gt;= #{query.params.beginTime}
+            </if>
+            <if test="query != null and query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                and mo.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mo.create_time desc
+    </select>
+
+    <select id="selectOrderIdByUserAndRequestNo" resultType="Long">
+        select mo.id
+        from mark_order mo
+        where mo.user_id = #{userId}
+          and mo.request_no = #{requestNo}
+        limit 1
+    </select>
+
+    <insert id="insertMarkOrder" parameterType="MarkOrder" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_order
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="orderNo != null and orderNo != ''">order_no,</if>
+            <if test="requestNo != null and requestNo != ''">request_no,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="assignedAgentId != null">assigned_agent_id,</if>
+            <if test="platformCode != null and platformCode != ''">platform_code,</if>
+            <if test="platformName != null and platformName != ''">platform_name,</if>
+            <if test="totalCount != null">total_count,</if>
+            <if test="successCount != null">success_count,</if>
+            <if test="failedCount != null">failed_count,</if>
+            <if test="totalAmount != null">total_amount,</if>
+            <if test="refundAmount != null">refund_amount,</if>
+            <if test="orderStatus != null and orderStatus != ''">order_status,</if>
+            <if test="completedTime != null">completed_time,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="orderNo != null and orderNo != ''">#{orderNo},</if>
+            <if test="requestNo != null and requestNo != ''">#{requestNo},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="assignedAgentId != null">#{assignedAgentId},</if>
+            <if test="platformCode != null and platformCode != ''">#{platformCode},</if>
+            <if test="platformName != null and platformName != ''">#{platformName},</if>
+            <if test="totalCount != null">#{totalCount},</if>
+            <if test="successCount != null">#{successCount},</if>
+            <if test="failedCount != null">#{failedCount},</if>
+            <if test="totalAmount != null">#{totalAmount},</if>
+            <if test="refundAmount != null">#{refundAmount},</if>
+            <if test="orderStatus != null and orderStatus != ''">#{orderStatus},</if>
+            <if test="completedTime != null">#{completedTime},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkOrder" parameterType="MarkOrder">
+        update mark_order
+        <trim prefix="set" suffixOverrides=",">
+            <if test="orderNo != null and orderNo != ''">order_no = #{orderNo},</if>
+            <if test="requestNo != null and requestNo != ''">request_no = #{requestNo},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="assignedAgentId != null">assigned_agent_id = #{assignedAgentId},</if>
+            <if test="platformCode != null and platformCode != ''">platform_code = #{platformCode},</if>
+            <if test="platformName != null and platformName != ''">platform_name = #{platformName},</if>
+            <if test="totalCount != null">total_count = #{totalCount},</if>
+            <if test="successCount != null">success_count = #{successCount},</if>
+            <if test="failedCount != null">failed_count = #{failedCount},</if>
+            <if test="totalAmount != null">total_amount = #{totalAmount},</if>
+            <if test="refundAmount != null">refund_amount = #{refundAmount},</if>
+            <if test="orderStatus != null and orderStatus != ''">order_status = #{orderStatus},</if>
+            <if test="completedTime != null">completed_time = #{completedTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+</mapper>

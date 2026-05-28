@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkWalletLogMapper">
+
+    <resultMap type="MarkWalletLog" id="MarkWalletLogResult">
+        <result property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="orderItemId" column="order_item_id"/>
+        <result property="bizType" column="biz_type"/>
+        <result property="changeAmount" column="change_amount"/>
+        <result property="balanceBefore" column="balance_before"/>
+        <result property="balanceAfter" column="balance_after"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkWalletLogVo">
+        select
+            mwl.id,
+            mwl.user_id,
+            mwl.order_id,
+            mwl.order_item_id,
+            mwl.biz_type,
+            mwl.change_amount,
+            mwl.balance_before,
+            mwl.balance_after,
+            mwl.create_by,
+            mwl.create_time,
+            mwl.remark
+        from mark_wallet_log mwl
+    </sql>
+
+    <select id="selectMarkWalletLogList" parameterType="MarkWalletLog" resultMap="MarkWalletLogResult">
+        <include refid="selectMarkWalletLogVo"/>
+        <where>
+            <if test="userId != null"> and mwl.user_id = #{userId}</if>
+            <if test="orderId != null"> and mwl.order_id = #{orderId}</if>
+            <if test="orderItemId != null"> and mwl.order_item_id = #{orderItemId}</if>
+            <if test="bizType != null and bizType != ''"> and mwl.biz_type = #{bizType}</if>
+            <if test="createBy != null and createBy != ''"> and mwl.create_by like concat('%', #{createBy}, '%')</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and mwl.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and mwl.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mwl.create_time desc, mwl.id desc
+    </select>
+
+    <insert id="insertMarkWalletLog" parameterType="MarkWalletLog" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_wallet_log
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="orderId != null">order_id,</if>
+            <if test="orderItemId != null">order_item_id,</if>
+            <if test="bizType != null and bizType != ''">biz_type,</if>
+            <if test="changeAmount != null">change_amount,</if>
+            <if test="balanceBefore != null">balance_before,</if>
+            <if test="balanceAfter != null">balance_after,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="orderId != null">#{orderId},</if>
+            <if test="orderItemId != null">#{orderItemId},</if>
+            <if test="bizType != null and bizType != ''">#{bizType},</if>
+            <if test="changeAmount != null">#{changeAmount},</if>
+            <if test="balanceBefore != null">#{balanceBefore},</if>
+            <if test="balanceAfter != null">#{balanceAfter},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+</mapper>

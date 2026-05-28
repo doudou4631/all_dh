@@ -1,0 +1,18 @@
+[submodule "Geek-Module-Generator"]
+	path = geek-modules/Geek-Module-Generator
+	url = https://gitee.com/geek-xd/geek-module-generator.git
+[submodule "geek-modules/Geek-Module-Generator"]
+	path = geek-modules/Geek-Module-Generator
+	url = https://gitee.com/geek-xd/geek-module-generator.git
+[submodule "Geek-Module-Quartz"]
+	path = geek-modules/Geek-Module-Quartz
+	url = https://gitee.com/geek-xd/geek-module-quartz.git
+[submodule "geek-modules/Geek-Module-Quartz"]
+	path = geek-modules/Geek-Module-Quartz
+	url = https://gitee.com/geek-xd/geek-module-quartz.git
+[submodule "Geek-Module-Online"]
+	path = geek-modules/Geek-Module-Online
+	url = https://gitee.com/geek-xd/geek-module-online.git
+[submodule "geek-modules/Geek-Module-Online"]
+	path = geek-modules/Geek-Module-Online
+	url = https://gitee.com/geek-xd/geek-module-online.git

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <parent>
+        <artifactId>geek</artifactId>
+        <groupId>com.geekxd</groupId>
+        <version>3.9.1-G</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+    <modelVersion>4.0.0</modelVersion>
+
+    <artifactId>geek-module-online</artifactId>
+
+    <description>
+        online系统模块
+    </description>
+
+    <dependencies>
+        <!-- 系统框架 -->
+        <dependency>
+            <groupId>com.geekxd</groupId>
+            <artifactId>geek-common</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
