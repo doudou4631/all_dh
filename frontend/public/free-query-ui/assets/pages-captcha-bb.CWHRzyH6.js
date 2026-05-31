@@ -1,0 +1,1 @@
+import{c as e,o,z as r}from"./index-D9KmEUIS.js";import{_ as a}from"./_plugin-vue_export-helper.BCo6x5W8.js";const t=a({data:()=>({}),onLoad(e){},onShow(){},methods:{}},[["render",function(a,t,n,s,p,m){const d=r;return o(),e(d,{src:"https://mhaoma.baidu.com/pages/report-mark/report-mark?type=inner&pagef=topbanner",bindmessage:""})}]]);export{t as default};

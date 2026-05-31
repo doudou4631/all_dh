@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>个人中心</title>
+  <link rel="stylesheet" href="../assets/fixed-layout.css" />
+  <link rel="stylesheet" href="../assets/bottom-nav.css" />
+  <style>
+    .profile-page {
+      min-height: 100vh;
+      background: #f0f6fb;
+    }
+    .profile-header {
+      background: linear-gradient(180deg, #d2e9fb 0%, #e8f4fc 100%);
+      padding: 36px 20px 28px;
+      text-align: center;
+    }
+    .profile-avatar {
+      width: 64px;
+      height: 64px;
+      margin: 0 auto 12px;
+      border-radius: 50%;
+      background: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(59, 113, 254, 0.15);
+    }
+    .profile-avatar svg {
+      width: 36px;
+      height: 36px;
+      color: #3b71fe;
+    }
+    .profile-name {
+      font-size: 1.125rem;
+      font-weight: 600;
+      color: #111;
+    }
+    .profile-menu {
+      padding: 12px 15px;
+    }
+    .profile-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+      font-size: 15px;
+      color: #333;
+      text-decoration: none;
+      box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+    }
+    .profile-item span:last-child {
+      color: #bbb;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="profile-page">
+    <div class="profile-header">
+      <div class="profile-avatar">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.6"/><path d="M5.5 19.5c1.2-3 3.4-4.5 6.5-4.5s5.3 1.5 6.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </div>
+      <p class="profile-name">个人中心</p>
+    </div>
+    <div class="profile-menu">
+      <a class="profile-item" href="../">首页 <span>›</span></a>
+      <a class="profile-item" href="../batch/">批量查询 <span>›</span></a>
+      <button type="button" class="profile-item" id="btn-contact" style="width:100%;border:none;cursor:pointer;text-align:left">
+        联系客服 <span>›</span>
+      </button>
+      <a class="profile-item" href="tel:13027616171">服务电话 <span>13027616171</span></a>
+    </div>
+  </div>
+
+  <script src="../assets/bottom-nav.js"></script>
+  <script>
+    document.getElementById('btn-contact').addEventListener('click', function () {
+      if (window.AppBottomNav) window.AppBottomNav.openWechatModal();
+    });
+  </script>
+</body>
+</html>

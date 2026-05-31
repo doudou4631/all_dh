@@ -395,7 +395,7 @@ function goLogManage() {
 }
 
 function backToPublicQueryPage() {
-  router.push({ path: '/free-query' }).catch(() => {})
+  router.push({ path: '/free-query2' }).catch(() => {})
 }
 
 lastQueryResults.value = []

@@ -34,17 +34,6 @@ export const constantRoutes: RouteItem[] = [
     ]
   },
   {
-    path: '/free-query',
-    component: () => import('@/views/public/free-query/index.vue'),
-    hidden: true,
-    meta: { title: '号码免费查询' }
-  },
-  {
-    path: '/free_query',
-    redirect: '/free-query',
-    hidden: true
-  },
-  {
     path: '/free-query2',
     component: () => import('@/views/public/free-query2/index.vue'),
     hidden: true,

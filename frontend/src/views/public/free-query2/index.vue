@@ -1,19 +1,23 @@
 <template>
-  <div class="public-shell">
-    <ApiQueryPage customer-wechat-image="/wechat/customer-wechat2.png" />
-  </div>
+  <div class="redirecting">正在进入免费查询页面...</div>
 </template>
 
 <script setup name="PublicFreeQuery2Shell">
-import ApiQueryPage from '@/views/server/web/apiquery.vue'
+import { onMounted } from 'vue'
+
+onMounted(() => {
+  window.location.replace('/free-query-ui/')
+})
 </script>
 
 <style scoped>
-.public-shell {
+.redirecting {
   min-height: 100vh;
-  background: #f5f7fa;
-  padding: 12px;
-  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #666;
+  font-size: 14px;
 }
 </style>
 

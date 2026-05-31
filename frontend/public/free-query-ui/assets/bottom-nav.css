@@ -1,0 +1,126 @@
+/* 底部导航栏 */
+:root {
+  --bottom-nav-h: 56px;
+}
+
+body.has-bottom-nav {
+  padding-bottom: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+.app-bottom-nav {
+  position: fixed;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  z-index: 998;
+  width: 100%;
+  max-width: 30rem;
+  height: calc(var(--bottom-nav-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #fff;
+  border-top: 1px solid #ebebeb;
+  box-sizing: border-box;
+  display: flex;
+  align-items: stretch;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.app-bottom-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 2px 3px;
+  border: none;
+  background: transparent;
+  color: #444;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: 0.2px;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.app-bottom-nav-item .nav-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.app-bottom-nav-item .nav-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.app-bottom-nav-item .nav-label {
+  white-space: nowrap;
+  transform: none;
+}
+
+.app-bottom-nav-item.is-active {
+  color: #3b71fe;
+  font-weight: 600;
+}
+
+.app-bottom-nav-item.is-active .nav-icon-stroke {
+  stroke: #3b71fe;
+}
+
+.app-bottom-nav-item.is-active .nav-icon-fill {
+  fill: #3b71fe;
+}
+
+/* 客服弹窗 */
+.bn-wechat-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bn-wechat-modal[hidden] {
+  display: none !important;
+}
+
+.bn-wechat-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.bn-wechat-modal-panel {
+  position: relative;
+  width: min(280px, 78vw);
+  padding: 24px 20px 20px;
+  background: #fff;
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+}
+
+.bn-wechat-modal-qr {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  margin: 0 auto 12px;
+  display: block;
+}
+
+.bn-wechat-modal-tip {
+  font-size: 14px;
+  color: #666;
+  line-height: 1.5;
+}
+
+body.bn-modal-open {
+  overflow: hidden;
+}
