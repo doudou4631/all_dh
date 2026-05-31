@@ -19,6 +19,8 @@ const whiteList: string[] = [
   '/free_query',
   '/free-query2',
   '/free_query2',
+  '/free-query-marked',
+  '/free_query_marked',
   '/server/web/apiquery',
   '/server/freeQuery/quota'
 ]

@@ -35,6 +35,11 @@
             {{ parseIp(row) }}
           </template>
         </el-table-column>
+        <el-table-column label="设备ID" align="center" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ parseDeviceId(row) }}
+          </template>
+        </el-table-column>
         <el-table-column label="次数" align="center" width="90">
           <template #default="{ row }">
             {{ parseUsedAfter(row) }}
@@ -92,6 +97,9 @@ function parseFromRequestParams(row, key) {
 
 function parseIp(row) {
   return parseFromRequestParams(row, 'ip') || row?.createBy?.replace('free-ip-', '') || '-'
+}
+function parseDeviceId(row) {
+  return parseFromRequestParams(row, 'deviceId') || '-'
 }
 
 function parseUsedAfter(row) {

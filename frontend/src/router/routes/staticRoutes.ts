@@ -56,6 +56,17 @@ export const constantRoutes: RouteItem[] = [
     hidden: true
   },
   {
+    path: '/free-query-marked',
+    component: () => import('@/views/public/free-query-marked/index.vue'),
+    hidden: true,
+    meta: { title: '号码免费查询（仅标记结果）' }
+  },
+  {
+    path: '/free_query_marked',
+    redirect: '/free-query-marked',
+    hidden: true
+  },
+  {
     path: "/:pathMatch(.*)*",
     component: () => import('@/views/error/404.vue'),
     hidden: true
