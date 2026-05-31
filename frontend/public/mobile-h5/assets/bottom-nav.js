@@ -1,7 +1,7 @@
 (function () {
-  var BASE_PATH = '/free-query-ui';
-  var WECHAT_QR = BASE_PATH + '/assets/icons/customer-wechat.png';
+  var WECHAT_QR = '/assets/icons/customer-wechat.png';
   var SERVICE_PHONE = '13027616171';
+  var PROFILE_ACCOUNT_KEY = 'profile_user_account';
 
   var ICONS = {
     home:
@@ -17,23 +17,49 @@
   };
 
   var NAV_ITEMS = [
-    { id: 'home', label: '首页', href: BASE_PATH + '/' },
-    { id: 'free-query', label: '免费查询', href: BASE_PATH + '/?tab=query' },
-    { id: 'batch', label: '批量查询', href: BASE_PATH + '/batch/' },
+    { id: 'home', label: '首页', href: '/' },
+    { id: 'free-query', label: '免费查询', href: '/?tab=query' },
+    { id: 'batch', label: '批量查询', href: '/batch/' },
     { id: 'contact', label: '联系客服', action: 'contact' },
-    { id: 'profile', label: '个人中心', href: BASE_PATH + '/profile/' }
+    { id: 'profile', label: '个人中心', href: '/profile/' }
   ];
+  var toastTimer = null;
 
-  function normalizePath(path) {
-    if (path.indexOf(BASE_PATH) === 0) {
-      var sliced = path.slice(BASE_PATH.length);
-      return sliced || '/';
+  function getAppBase() {
+    var path = location.pathname || '/';
+    if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
+      return '/mobile-h5';
+    }
+    return '';
+  }
+
+  function stripAppBase(path) {
+    var base = getAppBase();
+    if (base && path.indexOf(base) === 0) {
+      var stripped = path.slice(base.length);
+      return stripped || '/';
     }
     return path;
   }
 
+  function getProfileAccount() {
+    try {
+      return (localStorage.getItem(PROFILE_ACCOUNT_KEY) || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function isBatchLoginReady() {
+    return !!getProfileAccount();
+  }
+
+  function getBatchLoginRedirectHref() {
+    return resolveHref('/profile/');
+  }
+
   function getActiveId() {
-    var path = normalizePath(location.pathname.replace(/\/+$/, '') || '/');
+    var path = stripAppBase(location.pathname.replace(/\/+$/, '') || '/');
     if (path === '/batch' || path.indexOf('/batch/') === 0) return 'batch';
     if (path === '/profile' || path.indexOf('/profile/') === 0) return 'profile';
     if (path.indexOf('/result') === 0) return 'free-query';
@@ -42,12 +68,13 @@
     return 'home';
   }
 
-  function rootPrefix() {
-    return '/';
-  }
-
   function resolveHref(href) {
-    return href;
+    if (!href || href.charAt(0) !== '/') return href;
+    var base = getAppBase();
+    if (!base) return href;
+    if (href === '/') return base + '/';
+    if (href.indexOf(base + '/') === 0) return href;
+    return base + href;
   }
 
   function scrollToSearch() {
@@ -78,6 +105,120 @@
       modal.hidden = true;
       document.body.classList.remove('bn-modal-open');
     }
+  }
+
+  function ensureUiStyle() {
+    if (document.getElementById('bn-ui-style')) return;
+    var style = document.createElement('style');
+    style.id = 'bn-ui-style';
+    style.textContent =
+      '.bn-toast{position:fixed;left:50%;bottom:96px;transform:translate(-50%,8px);background:rgba(28,28,30,.92);color:#fff;padding:10px 14px;border-radius:10px;font-size:13px;line-height:1.4;max-width:82vw;text-align:center;box-shadow:0 8px 24px rgba(0,0,0,.22);z-index:2300;opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s ease;}' +
+      '.bn-toast.is-show{opacity:1;transform:translate(-50%,0);}' +
+      '.bn-confirm-open{overflow:hidden;}' +
+      '.bn-confirm-modal{position:fixed;inset:0;z-index:2400;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;}' +
+      '.bn-confirm-mask{position:absolute;inset:0;background:rgba(0,0,0,.35);}' +
+      '.bn-confirm-panel{position:relative;width:min(320px,90vw);background:#fff;border-radius:14px;padding:18px 16px 14px;box-shadow:0 18px 48px rgba(0,0,0,.24);}' +
+      '.bn-confirm-message{margin:0;color:#1f2d3d;font-size:15px;line-height:1.6;text-align:center;word-break:break-word;}' +
+      '.bn-confirm-actions{margin-top:14px;display:flex;gap:10px;}' +
+      '.bn-confirm-btn{flex:1;height:38px;border-radius:10px;border:1px solid #d9e0ee;background:#fff;color:#334155;font-size:14px;cursor:pointer;}' +
+      '.bn-confirm-btn--ok{border-color:#1f6bff;background:#1f6bff;color:#fff;}';
+    document.head.appendChild(style);
+  }
+
+  function notify(message) {
+    var text = String(message || '').trim();
+    if (!text) return;
+    ensureUiStyle();
+    var toast = document.getElementById('bn-toast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'bn-toast';
+      toast.className = 'bn-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = text;
+    toast.classList.add('is-show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () {
+      toast.classList.remove('is-show');
+    }, 1800);
+  }
+
+  function ensureConfirmModal() {
+    var modal = document.getElementById('bn-confirm-modal');
+    if (modal) return modal;
+    ensureUiStyle();
+    modal = document.createElement('div');
+    modal.id = 'bn-confirm-modal';
+    modal.className = 'bn-confirm-modal';
+    modal.hidden = true;
+    modal.innerHTML =
+      '<div class="bn-confirm-mask" id="bn-confirm-mask"></div>' +
+      '<div class="bn-confirm-panel" role="dialog" aria-modal="true" aria-label="提示">' +
+      '<p class="bn-confirm-message" id="bn-confirm-message"></p>' +
+      '<div class="bn-confirm-actions">' +
+      '<button type="button" class="bn-confirm-btn bn-confirm-btn--cancel" id="bn-confirm-cancel">取消</button>' +
+      '<button type="button" class="bn-confirm-btn bn-confirm-btn--ok" id="bn-confirm-ok">确定</button>' +
+      '</div></div>';
+    document.body.appendChild(modal);
+    return modal;
+  }
+
+  function confirmDialog(message, onConfirm, onCancel) {
+    var modal = ensureConfirmModal();
+    var msgEl = document.getElementById('bn-confirm-message');
+    var mask = document.getElementById('bn-confirm-mask');
+    var cancelBtn = document.getElementById('bn-confirm-cancel');
+    var okBtn = document.getElementById('bn-confirm-ok');
+
+    if (msgEl) msgEl.textContent = String(message || '请确认操作');
+
+    modal.hidden = false;
+    document.body.classList.add('bn-confirm-open');
+
+    function cleanup() {
+      if (mask) mask.removeEventListener('click', onCancelClick);
+      if (cancelBtn) cancelBtn.removeEventListener('click', onCancelClick);
+      if (okBtn) okBtn.removeEventListener('click', onConfirmClick);
+      modal.removeEventListener('click', onModalClick);
+      document.removeEventListener('keydown', onKeydown);
+    }
+
+    function close(result) {
+      modal.hidden = true;
+      document.body.classList.remove('bn-confirm-open');
+      cleanup();
+      if (result) {
+        if (typeof onConfirm === 'function') onConfirm();
+      } else if (typeof onCancel === 'function') {
+        onCancel();
+      }
+    }
+
+    function onCancelClick(e) {
+      if (e) e.preventDefault();
+      close(false);
+    }
+
+    function onConfirmClick(e) {
+      if (e) e.preventDefault();
+      close(true);
+    }
+
+    function onModalClick(e) {
+      if (e.target === modal) close(false);
+    }
+
+    function onKeydown(e) {
+      if (e.key === 'Escape') close(false);
+    }
+
+    if (mask) mask.addEventListener('click', onCancelClick);
+    if (cancelBtn) cancelBtn.addEventListener('click', onCancelClick);
+    if (okBtn) okBtn.addEventListener('click', onConfirmClick);
+    modal.addEventListener('click', onModalClick);
+    document.addEventListener('keydown', onKeydown);
+    if (okBtn) okBtn.focus();
   }
 
   function buildModal() {
@@ -142,9 +283,9 @@
 
       if (item.id === 'free-query') {
         link.addEventListener('click', function (e) {
-          var normalizedPath = normalizePath(location.pathname.replace(/\/+$/, '') || '/');
+          var currentPath = stripAppBase(location.pathname.replace(/\/+$/, '') || '/');
           var onHome =
-            (normalizedPath === '/' || normalizedPath === '/index.html') &&
+            (currentPath === '/' || currentPath === '/index.html') &&
             location.search.indexOf('tab=query') < 0;
           if (onHome) {
             e.preventDefault();
@@ -154,6 +295,14 @@
             });
             link.classList.add('is-active');
           }
+        });
+      }
+
+      if (item.id === 'batch') {
+        link.addEventListener('click', function (e) {
+          if (isBatchLoginReady()) return;
+          e.preventDefault();
+          window.location.href = getBatchLoginRedirectHref();
         });
       }
 
@@ -188,6 +337,8 @@
 
   window.AppBottomNav = {
     openWechatModal: openWechatModal,
-    closeWechatModal: closeWechatModal
+    closeWechatModal: closeWechatModal,
+    notify: notify,
+    confirmDialog: confirmDialog
   };
 })();

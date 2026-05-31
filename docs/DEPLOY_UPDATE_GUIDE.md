@@ -5,6 +5,9 @@
 - 服务器登录用户：`ubuntu`（`sudo`）
 - Nginx 站点配置：`/etc/nginx/sites-available/biaoji.aleo1314.vip.conf`
 - 前端目录：`/www/wwwroot/frontend`
+- 手机端页面目录（线上）：`/www/wwwroot/frontend/mobile-h5`
+- 手机端访问路径：`https://biaoji.aleo1314.vip/mobile-h5/`
+- 手机端源码目录（仓库）：`frontend/public/mobile-h5`
 - 后端 Jar：`/www/wwwroot/backend/geek-admin.jar`
 - 后端服务：`geek-admin.service`（systemd 托管）
 - 后端端口：`8080`
@@ -25,6 +28,8 @@ npm --prefix frontend ci
 npm --prefix frontend run build:prod
 ```
 产物目录：`frontend/dist`
+手机端产物目录：`frontend/dist/mobile-h5`
+说明：旧目录 `frontend/dist/free-query-ui` 已迁移为 `mobile-h5`
 
 ### 2.2 后端打包
 ```bash
@@ -34,16 +39,40 @@ mvn -f backend/pom.xml clean package -DskipTests
 
 ## 3. 上传发布包到服务器
 建议统一放到服务器 `/tmp/deploy`。
+### 3.1 常规上传（前后端或前端整包发布）
 
 ```bash
-ssh ubuntu@43.142.125.17 "mkdir -p /tmp/deploy"
+ssh ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/frontend-dist /tmp/deploy/geek-admin.jar /tmp/deploy/migration.sql"
 
 scp -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
 scp ./backend/geek-admin/target/geek-admin.jar ubuntu@43.142.125.17:/tmp/deploy/geek-admin.jar
 
 # 如果本次有数据库变更，再上传 SQL（文件名示例）
 scp ./backend/sql/m4_mark_migration.sql ubuntu@43.142.125.17:/tmp/deploy/migration.sql
+
+# 上传后做结构校验（必须通过）：防止出现 /tmp/deploy/frontend-dist/dist 嵌套
+ssh ubuntu@43.142.125.17 '
+  test -f /tmp/deploy/frontend-dist/index.html &&
+  test -d /tmp/deploy/frontend-dist/assets &&
+  test ! -d /tmp/deploy/frontend-dist/dist &&
+  echo "frontend-dist 结构OK"
+'
 ```
+
+### 3.2 仅手机端快速上传（可选）
+仅当本次变更只涉及 `frontend/public/mobile-h5/**` 时使用：
+```bash
+ssh ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/mobile-h5"
+scp -r ./frontend/public/mobile-h5 ubuntu@43.142.125.17:/tmp/deploy/mobile-h5
+
+# 上传后做结构校验（必须通过）：防止出现 /tmp/deploy/mobile-h5/mobile-h5 嵌套
+ssh ubuntu@43.142.125.17 '
+  test -f /tmp/deploy/mobile-h5/index.html &&
+  test ! -d /tmp/deploy/mobile-h5/mobile-h5 &&
+  echo "mobile-h5 结构OK"
+'
+```
+如果改动包含 `frontend/src/**` 或其他会影响 `dist` 构建产物的文件，必须走 3.1 常规上传。
 
 ## 4. 服务器发布步骤（SSH 后执行）
 ```bash
@@ -89,8 +118,12 @@ MYSQL_PWD="$DB_PASS" mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" "$DB_NAME" < "
 unset DB_PASS MYSQL_PWD
 ```
 
-### 4.4 发布前端
+### 4.4 常规发布前端（整包）
 ```bash
+# 发布前防呆校验（必须通过）：防止把错误目录结构发布到线上
+sudo test -f "$TMP_DIR/frontend-dist/index.html"
+sudo test -d "$TMP_DIR/frontend-dist/assets"
+sudo test ! -d "$TMP_DIR/frontend-dist/dist"
 sudo rm -rf "$FRONT_DIR"/*
 sudo cp -a "$TMP_DIR/frontend-dist/." "$FRONT_DIR"/
 
@@ -99,15 +132,27 @@ sudo find "$FRONT_DIR" -type d -exec chmod 755 {} +
 sudo find "$FRONT_DIR" -type f -exec chmod 644 {} +
 sudo chown -R www-data:www-data "$FRONT_DIR"
 ```
+### 4.5 （可选）仅手机端快速发布（mobile-h5）
+仅当本次变更只涉及 `frontend/public/mobile-h5/**` 时使用：
+```bash
+if [ -d "$FRONT_DIR/mobile-h5" ]; then
+  sudo cp -a "$FRONT_DIR/mobile-h5" "$BACKUP_DIR/mobile-h5"
+fi
+sudo rm -rf "$FRONT_DIR/mobile-h5"
+sudo cp -a "$TMP_DIR/mobile-h5" "$FRONT_DIR/mobile-h5"
 
-### 4.5 发布后端并重启服务
+sudo find "$FRONT_DIR/mobile-h5" -type d -exec chmod 755 {} +
+sudo find "$FRONT_DIR/mobile-h5" -type f -exec chmod 644 {} +
+sudo chown -R www-data:www-data "$FRONT_DIR/mobile-h5"
+```
+
+### 4.6 发布后端并重启服务
 ```bash
 sudo cp -f "$TMP_DIR/geek-admin.jar" "$JAR_PATH"
 sudo systemctl restart geek-admin
 sudo systemctl status geek-admin --no-pager
 ```
-
-### 4.6 校验 Nginx 配置并重载
+### 4.7 校验 Nginx 配置并重载
 ```bash
 sudo nginx -t
 sudo systemctl reload nginx
@@ -117,17 +162,26 @@ sudo systemctl reload nginx
 ### 5.1 服务器本机验收（Host 头）
 ```bash
 curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/
-
-ASSET_JS=$(ls /www/wwwroot/frontend/assets/index-*.js | sed -n '1p' | xargs -n1 basename)
+ASSET_JS=$(grep -oE '/assets/index-[^"]+\.js' /www/wwwroot/frontend/index.html | sed -n '1p' | sed 's#^/assets/##')
+test -n "$ASSET_JS"
 curl -I -m 8 -H "Host: biaoji.aleo1314.vip" "http://127.0.0.1/assets/$ASSET_JS"
 
 curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/prod-api/
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/assets/result-page.js
 ```
 
 ### 5.2 外网验收
 ```bash
 curl -I -m 10 https://biaoji.aleo1314.vip/
 curl -I -m 10 https://biaoji.aleo1314.vip/prod-api/
+curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/
+curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/assets/result-page.js
+
+# 可选：外网首页实时提取正在引用的入口 JS 并校验（排查 CDN/缓存时很有用）
+ASSET_JS=$(curl -fsSL https://biaoji.aleo1314.vip/ | grep -oE '/assets/index-[^"]+\.js' | sed -n '1p')
+test -n "$ASSET_JS"
+curl -I -m 10 "https://biaoji.aleo1314.vip$ASSET_JS"
 ```
 
 ### 5.3 日志与端口检查
@@ -149,6 +203,8 @@ sudo mysql -N -D verifynum -e "SELECT COUNT(*) AS admin_menu_count FROM sys_role
 - `/` 返回 `200`
 - `/assets/index-*.js` 返回 `200` 且 `Content-Type` 为 `application/javascript`
 - `/prod-api/` 返回 `200`
+- `/mobile-h5/` 返回 `200`
+- `/mobile-h5/assets/result-page.js` 返回 `200` 且 `Content-Type` 为 `application/javascript`
 - `geek-admin` 服务状态为 `active (running)`
 
 ## 6. 回滚流程（发布失败立即执行）
@@ -167,12 +223,20 @@ sudo systemctl restart geek-admin
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-## 7. 日常最短发布流程（前后端都改了）
+## 7. 日常发布流程
+### 7.1 前后端都改了（常规）
 1. 本地打包前端和后端。
-2. 上传 `frontend-dist` 和 `geek-admin.jar` 到 `/tmp/deploy`。
-3. 服务器先备份，再替换前端，再替换后端并重启 `geek-admin`。
-4. 如有 SQL 变更，执行迁移脚本。
-5. 按第 5 节做本机 + 外网验收。
+2. 上传前先清空 `/tmp/deploy` 旧包，再上传 `frontend-dist` 和 `geek-admin.jar`（见 3.1）。
+3. 上传后立即做结构校验：必须有 `frontend-dist/index.html`、`frontend-dist/assets`，且不能有 `frontend-dist/dist`。
+4. 服务器先备份，再执行 4.4 的发布前防呆校验，通过后再替换前端。
+5. 替换后端并重启 `geek-admin`；如有 SQL 变更，执行迁移脚本。
+6. 按第 5 节做本机 + 外网验收（含按 `index.html` 提取真实入口 JS 校验）。
+
+### 7.2 仅手机端改了（快速）
+1. 确认变更仅在 `frontend/public/mobile-h5/**`。
+2. 上传 `mobile-h5` 到 `/tmp/deploy/mobile-h5`（见 3.2）。
+3. 服务器备份并替换 `/www/wwwroot/frontend/mobile-h5`（见 4.5）。
+4. 验收 `/mobile-h5/` 与 `/mobile-h5/assets/result-page.js`。
 
 ## 8. 常见问题快速判断
 ### 8.1 页面 500 或 JS MIME 错误
@@ -198,3 +262,27 @@ sudo nginx -t
 sudo mysql -N -D verifynum -e "SELECT COUNT(*) AS admin_menu_count FROM sys_role_menu WHERE role_id=1;"
 ```
 如果数量异常偏少，先恢复最近备份里的 `sys_role_menu.sql`，再重新执行正确的迁移脚本。
+
+### 8.5 手机端页面 404 或未生效
+优先检查：
+- `/www/wwwroot/frontend/mobile-h5` 是否存在且权限正确（目录 `755`、文件 `644`）。
+- 本次是否误用“快速发布”：若改动包含 `frontend/src/**`，必须走 3.1 常规整包发布。
+- `https://biaoji.aleo1314.vip/mobile-h5/assets/result-page.js` 是否返回 `200` 且 `Content-Type` 为 `application/javascript`。
+
+### 8.6 前端已发布但页面仍是旧版（`frontend-dist/dist` 嵌套）
+典型现象：
+- 发布流程看起来成功，但页面仍是旧内容。
+- `/tmp/deploy/frontend-dist` 下存在异常嵌套（如 `dist/` 子目录），导致复制到了错误层级文件。
+
+快速修复：
+```bash
+ssh ubuntu@43.142.125.17 "rm -rf /tmp/deploy/frontend-dist && mkdir -p /tmp/deploy"
+scp -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
+ssh ubuntu@43.142.125.17 '
+  test -f /tmp/deploy/frontend-dist/index.html &&
+  test -d /tmp/deploy/frontend-dist/assets &&
+  test ! -d /tmp/deploy/frontend-dist/dist &&
+  echo "frontend-dist 结构OK"
+'
+```
+然后重新执行 4.4 前端发布步骤与第 5 节验收步骤。

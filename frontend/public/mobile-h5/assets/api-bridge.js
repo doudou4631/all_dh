@@ -1,5 +1,5 @@
 (function () {
-  var API_BASE = '/prod-api/';
+  var API_BASE = 'https://biaoji.aleo1314.vip/prod-api/';
 
   var PLATFORM_ID_MAP = {
     泰迪熊: 0,
@@ -79,10 +79,15 @@
     };
   }
 
-  function requestJson(url, method, data, success, fail) {
+  function requestJson(url, method, data, success, fail, headers) {
     var xhr = new XMLHttpRequest();
     xhr.open(method, url, true);
     xhr.setRequestHeader('Content-Type', 'application/json;charset=UTF-8');
+    if (headers) {
+      Object.keys(headers).forEach(function (key) {
+        xhr.setRequestHeader(key, headers[key]);
+      });
+    }
     xhr.onload = function () {
       var body = {};
       try {

@@ -1,7 +1,6 @@
 (function () {
-  var BASE_PATH = '/free-query-ui';
   var SERVICE_PHONE = '13027616171';
-  var ICON_BASE = BASE_PATH + '/assets/icons/';
+  var ICON_BASE = '/assets/icons/';
 
   var PLATFORM_ICONS = {
     泰迪熊: ICON_BASE + 'teddy.png',
@@ -14,12 +13,29 @@
     联通: ICON_BASE + 'unicom.svg',
     联通管家: ICON_BASE + 'unicom.svg',
     电话邦: ICON_BASE + 'dianhuabang.ico',
-    小米手机: ICON_BASE + 'xiaomi.png?v=2'
+    小米手机: '/assets/icons/xiaomi.png?v=2'
   };
 
   function getQueryPhone() {
     var params = new URLSearchParams(window.location.search);
     return (params.get('phone') || '').trim();
+  }
+
+  function getAppBase() {
+    var path = window.location.pathname || '/';
+    if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
+      return '/mobile-h5';
+    }
+    return '';
+  }
+
+  function resolveHref(href) {
+    if (!href || href.charAt(0) !== '/') return href;
+    var base = getAppBase();
+    if (!base) return href;
+    if (href === '/') return base + '/';
+    if (href.indexOf(base + '/') === 0) return href;
+    return base + href;
   }
 
   function isMarked(item) {
@@ -106,6 +122,7 @@
     }
 
     window.BiaojiApiBridge.queryPhone(phone, function (err, data) {
+      if (!err && window.QueryStats) window.QueryStats.recordQueryForCurrentUser(1);
       document.getElementById('loading').hidden = true;
 
       if (err) {
@@ -131,7 +148,7 @@
   }
 
   document.getElementById('btn-back').addEventListener('click', function () {
-    window.location.assign(window.location.origin + BASE_PATH + '/');
+    window.location.assign(resolveHref('/'));
   });
 
   document.getElementById('btn-wechat').addEventListener('click', function () {

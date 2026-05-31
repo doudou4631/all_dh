@@ -6,7 +6,7 @@
 import { onMounted } from 'vue'
 
 onMounted(() => {
-  window.location.replace('/free-query-ui/')
+  window.location.replace('/mobile-h5/')
 })
 </script>
 

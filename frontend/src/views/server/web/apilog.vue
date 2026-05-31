@@ -35,7 +35,7 @@
             {{ parseIp(row) }}
           </template>
         </el-table-column>
-        <el-table-column label="设备ID" align="center" min-width="200" show-overflow-tooltip>
+        <el-table-column label="设备/浏览器指纹ID" align="center" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             {{ parseDeviceId(row) }}
           </template>
