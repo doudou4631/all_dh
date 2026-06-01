@@ -3,6 +3,7 @@
 
 ## 1. 当前线上环境基线（以此为准）
 - 服务器登录用户：`ubuntu`（`sudo`）
+- SSH 免密登录：已配置（推荐固定私钥：`~/.ssh/id_rsa_43_142_125_17`）
 - Nginx 站点配置：`/etc/nginx/sites-available/biaoji.aleo1314.vip.conf`
 - 前端目录：`/www/wwwroot/frontend`
 - 手机端页面目录（线上）：`/www/wwwroot/frontend/mobile-h5`
@@ -42,16 +43,17 @@ mvn -f backend/pom.xml clean package -DskipTests
 ### 3.1 常规上传（前后端或前端整包发布）
 
 ```bash
-ssh ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/frontend-dist /tmp/deploy/geek-admin.jar /tmp/deploy/migration.sql"
+KEY_OPTS="-i ~/.ssh/id_rsa_43_142_125_17"
+ssh $KEY_OPTS ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/frontend-dist /tmp/deploy/geek-admin.jar /tmp/deploy/migration.sql"
 
-scp -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
-scp ./backend/geek-admin/target/geek-admin.jar ubuntu@43.142.125.17:/tmp/deploy/geek-admin.jar
+scp $KEY_OPTS -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
+scp $KEY_OPTS ./backend/geek-admin/target/geek-admin.jar ubuntu@43.142.125.17:/tmp/deploy/geek-admin.jar
 
 # 如果本次有数据库变更，再上传 SQL（文件名示例）
-scp ./backend/sql/m4_mark_migration.sql ubuntu@43.142.125.17:/tmp/deploy/migration.sql
+scp $KEY_OPTS ./backend/sql/m4_mark_migration.sql ubuntu@43.142.125.17:/tmp/deploy/migration.sql
 
 # 上传后做结构校验（必须通过）：防止出现 /tmp/deploy/frontend-dist/dist 嵌套
-ssh ubuntu@43.142.125.17 '
+ssh $KEY_OPTS ubuntu@43.142.125.17 '
   test -f /tmp/deploy/frontend-dist/index.html &&
   test -d /tmp/deploy/frontend-dist/assets &&
   test ! -d /tmp/deploy/frontend-dist/dist &&
@@ -62,11 +64,12 @@ ssh ubuntu@43.142.125.17 '
 ### 3.2 仅手机端快速上传（可选）
 仅当本次变更只涉及 `frontend/public/mobile-h5/**` 时使用：
 ```bash
-ssh ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/mobile-h5"
-scp -r ./frontend/public/mobile-h5 ubuntu@43.142.125.17:/tmp/deploy/mobile-h5
+KEY_OPTS="-i ~/.ssh/id_rsa_43_142_125_17"
+ssh $KEY_OPTS ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/mobile-h5"
+scp $KEY_OPTS -r ./frontend/public/mobile-h5 ubuntu@43.142.125.17:/tmp/deploy/mobile-h5
 
 # 上传后做结构校验（必须通过）：防止出现 /tmp/deploy/mobile-h5/mobile-h5 嵌套
-ssh ubuntu@43.142.125.17 '
+ssh $KEY_OPTS ubuntu@43.142.125.17 '
   test -f /tmp/deploy/mobile-h5/index.html &&
   test ! -d /tmp/deploy/mobile-h5/mobile-h5 &&
   echo "mobile-h5 结构OK"
@@ -76,7 +79,7 @@ ssh ubuntu@43.142.125.17 '
 
 ## 4. 服务器发布步骤（SSH 后执行）
 ```bash
-ssh ubuntu@43.142.125.17
+ssh -i ~/.ssh/id_rsa_43_142_125_17 ubuntu@43.142.125.17
 ```
 
 ### 4.1 定义变量
@@ -276,9 +279,10 @@ sudo mysql -N -D verifynum -e "SELECT COUNT(*) AS admin_menu_count FROM sys_role
 
 快速修复：
 ```bash
-ssh ubuntu@43.142.125.17 "rm -rf /tmp/deploy/frontend-dist && mkdir -p /tmp/deploy"
-scp -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
-ssh ubuntu@43.142.125.17 '
+KEY_OPTS="-i ~/.ssh/id_rsa_43_142_125_17"
+ssh $KEY_OPTS ubuntu@43.142.125.17 "rm -rf /tmp/deploy/frontend-dist && mkdir -p /tmp/deploy"
+scp $KEY_OPTS -r ./frontend/dist ubuntu@43.142.125.17:/tmp/deploy/frontend-dist
+ssh $KEY_OPTS ubuntu@43.142.125.17 '
   test -f /tmp/deploy/frontend-dist/index.html &&
   test -d /tmp/deploy/frontend-dist/assets &&
   test ! -d /tmp/deploy/frontend-dist/dist &&
@@ -286,3 +290,17 @@ ssh ubuntu@43.142.125.17 '
 '
 ```
 然后重新执行 4.4 前端发布步骤与第 5 节验收步骤。
+
+### 8.7 `UNPROTECTED PRIVATE KEY FILE`（私钥权限过宽）
+典型报错：
+- `WARNING: UNPROTECTED PRIVATE KEY FILE!`
+- `Permissions for '...id_rsa_43_142_125_17' are too open`
+
+处理方式（在本地执行）：
+```bash
+# Linux/macOS
+chmod 700 ~/.ssh
+chmod 600 ~/.ssh/id_rsa_43_142_125_17
+```
+
+如果是 Windows + OpenSSH，需去掉该私钥文件对其他用户/组的读权限，仅保留当前登录用户可读写。

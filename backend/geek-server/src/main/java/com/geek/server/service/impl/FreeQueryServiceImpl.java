@@ -48,10 +48,10 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     private static final String DICT_KEY_DAILY_ALL_LIMIT = "daily_all_limit";
     private static final String DICT_KEY_DAILY_DEVICE_LIMIT = "daily_device_limit";
     private static final String DICT_KEY_DEVICE_OVER_LIMIT_MSG = "device_over_limit_msg";
-    /** \u514d\u8d39\u67e5\u8be2\u7981\u7528\u7684\u5e73\u53f0\u540d\u79f0\uff08\u82f1\u6587\u9017\u53f7\u5206\u9694\uff0c\u4e0e UserPlatformUrlConfig.platformName \u4e00\u81f4\uff09\uff1b\u672a\u914d\u7f6e\u5b57\u5178\u9879\u65f6\u9ed8\u8ba4\u7981\u7528\u6cf0\u8fea\u718a\u3001\u8054\u901a\u7ba1\u5bb6 */
+    /** \u514d\u8d39\u67e5\u8be2\u7981\u7528\u7684\u5e73\u53f0\u540d\u79f0\uff08\u82f1\u6587\u9017\u53f7\u5206\u9694\uff0c\u4e0e UserPlatformUrlConfig.platformName \u4e00\u81f4\uff09\uff1b\u672a\u914d\u7f6e\u5b57\u5178\u9879\u65f6\u9ed8\u8ba4\u7981\u7528\u8054\u901a\u7ba1\u5bb6 */
     private static final String DICT_KEY_DISABLED_PLATFORMS = "disabled_platforms";
     /** \u5b57\u5178\u672a\u914d\u7f6e disabled_platforms \u65f6\u7684\u9ed8\u8ba4\u7981\u7528\u5217\u8868 */
-    private static final String DEFAULT_FREE_QUERY_DISABLED_PLATFORMS = "\u6cf0\u8fea\u718a,\u8054\u901a\u7ba1\u5bb6";
+    private static final String DEFAULT_FREE_QUERY_DISABLED_PLATFORMS = "\u8054\u901a\u7ba1\u5bb6";
     /** \u5e73\u53f0\u5f53\u65e5\u514d\u8d39\u989d\u5ea6\u5df2\u7528\u5b8c\uff0c\u8bf7\u8054\u7cfb\u5ba2\u670d */
     private static final String ALL_LIMIT_MSG =
             "\u5e73\u53f0\u5f53\u65e5\u514d\u8d39\u989d\u5ea6\u5df2\u7528\u5b8c\uff0c\u8bf7\u8054\u7cfb\u5ba2\u670d";
@@ -301,7 +301,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
     /**
      * \u8bfb\u53d6\u514d\u8d39\u67e5\u8be2\u4e0d\u53d1\u8d77\u5916\u90e8\u8bf7\u6c42\u7684\u5e73\u53f0\u540d\u79f0\u5217\u8868\u3002
-     * \u5b57\u5178\u65e0 disabled_platforms \u9879\u65f6\u4f7f\u7528\u9ed8\u8ba4\uff08\u6cf0\u8fea\u718a\u3001\u8054\u901a\u7ba1\u5bb6\uff09\uff1b
+     * \u5b57\u5178\u65e0 disabled_platforms \u9879\u65f6\u4f7f\u7528\u9ed8\u8ba4\uff08\u8054\u901a\u7ba1\u5bb6\uff09\uff1b
      * \u5b57\u5178\u9879\u5b58\u5728\u4e14\u503c\u4e3a\u7a7a\u5b57\u7b26\u4e32\u65f6\u8868\u793a\u4e0d\u989d\u5916\u7981\u7528\u4efb\u4f55\u5e73\u53f0\u3002
      */
     private List<String> loadFreeQueryDisabledPlatformNames() {

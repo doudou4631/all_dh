@@ -1,3 +1,8 @@
+﻿-- AUTO-GENERATED: merged migration script
+-- order: m4_mark_migration.sql -> m5_free_query_menu.sql -> m6_free_query_dict.sql -> m7_mobile_menu_group.sql
+-- NOTE: keep source scripts in sync when changing migration logic.
+
+-- >>> BEGIN m4_mark_migration.sql
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
@@ -397,4 +402,473 @@ JOIN (
 LEFT JOIN `sys_role_menu` rm ON rm.role_id = r.role_id AND rm.menu_id = m.menu_id
 WHERE r.role_key = 'agent' AND rm.role_id IS NULL;
 
+-- =========================================================
+-- M4 扩展（合并原 M9）：管理端核心功能平铺到“代理管理”二级菜单
+-- 目标：
+-- 1) 代理账户 / 治理规则 / 仲裁工单 / 审计看板 直接挂到 代理管理(900100000001) 下
+-- 2) admin 不显示：管理端目录、旧代理账户、代理处理、用户订单、用户钱包
+-- =========================================================
+SET @mark_root_menu_id := 900100000001;
+
+-- 兜底：若菜单不存在则补齐
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000108, '代理账户', @mark_root_menu_id, 1, 'agentAccount', 'system/user/index', '', '',
+       1, 0, 'C', '0', '0', 'system:user:list', 'peoples', 'admin', NOW(), 'M4-代理账户二级菜单'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000108);
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000105, '治理规则', @mark_root_menu_id, 2, 'rule', 'server/mark/admin/rule', '', '',
+       1, 0, 'C', '0', '0', 'server:markAdmin:rule:list', 'edit', 'admin', NOW(), 'M4-治理规则二级菜单'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000105);
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000106, '仲裁工单', @mark_root_menu_id, 3, 'case', 'server/mark/admin/case', '', '',
+       1, 0, 'C', '0', '0', 'server:markAdmin:case:list', 'message', 'admin', NOW(), 'M4-仲裁工单二级菜单'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000106);
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000107, '审计看板', @mark_root_menu_id, 4, 'audit', 'server/mark/admin/audit', '', '',
+       1, 0, 'C', '0', '0', 'server:markAdmin:audit:order:list', 'monitor', 'admin', NOW(), 'M4-审计看板二级菜单'
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000107);
+
+-- 统一菜单挂载关系（幂等）
+UPDATE `sys_menu`
+SET `menu_name` = '代理账户',
+    `parent_id` = @mark_root_menu_id,
+    `order_num` = 1,
+    `path` = 'agentAccount',
+    `component` = 'system/user/index',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'system:user:list',
+    `icon` = 'peoples',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M4-代理账户二级菜单'
+WHERE `menu_id` = 900100000108;
+
+UPDATE `sys_menu`
+SET `menu_name` = '治理规则',
+    `parent_id` = @mark_root_menu_id,
+    `order_num` = 2,
+    `path` = 'rule',
+    `component` = 'server/mark/admin/rule',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:markAdmin:rule:list',
+    `icon` = 'edit',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M4-治理规则二级菜单'
+WHERE `menu_id` = 900100000105;
+
+UPDATE `sys_menu`
+SET `menu_name` = '仲裁工单',
+    `parent_id` = @mark_root_menu_id,
+    `order_num` = 3,
+    `path` = 'case',
+    `component` = 'server/mark/admin/case',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:markAdmin:case:list',
+    `icon` = 'message',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M4-仲裁工单二级菜单'
+WHERE `menu_id` = 900100000106;
+
+UPDATE `sys_menu`
+SET `menu_name` = '审计看板',
+    `parent_id` = @mark_root_menu_id,
+    `order_num` = 4,
+    `path` = 'audit',
+    `component` = 'server/mark/admin/audit',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:markAdmin:audit:order:list',
+    `icon` = 'monitor',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M4-审计看板二级菜单'
+WHERE `menu_id` = 900100000107;
+
+-- admin 角色补齐新二级菜单与功能点授权
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT r.role_id, m.menu_id
+FROM `sys_role` r
+JOIN (
+  SELECT 900100000108 AS menu_id UNION ALL
+  SELECT 900100000105 UNION ALL
+  SELECT 900100000106 UNION ALL
+  SELECT 900100000107 UNION ALL
+  SELECT 900100001401 UNION ALL
+  SELECT 900100001402 UNION ALL
+  SELECT 900100001403 UNION ALL
+  SELECT 900100001404 UNION ALL
+  SELECT 900100001501 UNION ALL
+  SELECT 900100001502 UNION ALL
+  SELECT 900100001503 UNION ALL
+  SELECT 900100001601 UNION ALL
+  SELECT 900100001602
+) m
+LEFT JOIN `sys_role_menu` rm ON rm.role_id = r.role_id AND rm.menu_id = m.menu_id
+WHERE r.role_key = 'admin'
+  AND rm.role_id IS NULL;
+
+-- admin 角色移除旧入口（与当前菜单策略保持一致）
+DELETE rm
+FROM `sys_role_menu` rm
+JOIN `sys_role` r ON rm.role_id = r.role_id
+WHERE r.role_key = 'admin'
+  AND rm.menu_id IN (
+    900100000104, -- 管理端目录
+    900100000109, -- 旧代理账户（直连）
+    900100000103, -- 代理处理
+    900100000101, -- 用户订单
+    900100000102, -- 用户钱包
+    900100001301,
+    900100001302,
+    900100001303,
+    900100001101,
+    900100001102,
+    900100001201,
+    900100001202
+  );
+
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- <<< END m4_mark_migration.sql
+
+-- >>> BEGIN m5_free_query_menu.sql
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- =========================================================
+-- M5：管理端补充“免费查询 / 日志管理”菜单（幂等）
+-- 归属目录：号码查询（menu_id = 92281941572000140）
+-- =========================================================
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000201, '免费查询', 92281941572000140, 12, 'apiquery', 'server/web/apiquery', '', 'freeApiQuery',
+       1, 0, 'C', '0', '0', 'server:freeQuery:page', 'search', 'admin', NOW(), 'M5-免费查询管理端菜单'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM `sys_menu`
+  WHERE `menu_id` = 900100000201
+     OR (`parent_id` = 92281941572000140 AND `path` = 'apiquery')
+);
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000202, '日志管理', 92281941572000140, 13, 'apilog', 'server/web/apilog', '', 'freeApiLog',
+       1, 0, 'C', '0', '0', 'server:freeQuery:log:list', 'form', 'admin', NOW(), 'M5-免费查询日志菜单'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM `sys_menu`
+  WHERE `menu_id` = 900100000202
+     OR (`parent_id` = 92281941572000140 AND `path` = 'apilog')
+);
+
+-- 若菜单已存在（历史手工配置等），统一矫正为目标配置
+UPDATE `sys_menu`
+SET `menu_name` = '免费查询',
+    `order_num` = 12,
+    `component` = 'server/web/apiquery',
+    `route_name` = 'freeApiQuery',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:freeQuery:page',
+    `icon` = 'search',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M5-免费查询管理端菜单'
+WHERE `parent_id` = 92281941572000140
+  AND `path` = 'apiquery';
+
+UPDATE `sys_menu`
+SET `menu_name` = '日志管理',
+    `order_num` = 13,
+    `component` = 'server/web/apilog',
+    `route_name` = 'freeApiLog',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:freeQuery:log:list',
+    `icon` = 'form',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M5-免费查询日志菜单'
+WHERE `parent_id` = 92281941572000140
+  AND `path` = 'apilog';
+
+-- admin 角色绑定（按路径取 menu_id，适配历史手工创建或不同ID）
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT r.role_id, m.menu_id
+FROM `sys_role` r
+JOIN `sys_menu` m
+  ON m.parent_id = 92281941572000140
+ AND m.path IN ('apiquery', 'apilog')
+LEFT JOIN `sys_role_menu` rm
+  ON rm.role_id = r.role_id
+ AND rm.menu_id = m.menu_id
+WHERE r.role_key = 'admin'
+  AND rm.role_id IS NULL;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- <<< END m5_free_query_menu.sql
+
+-- >>> BEGIN m6_free_query_dict.sql
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- =========================================================
+-- M6：补齐免费查询字典配置（幂等）
+-- dict_type: free_query_config
+-- =========================================================
+
+INSERT INTO `sys_dict_type` (
+  `dict_name`, `dict_type`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT '免费查询配置', 'free_query_config', '0', 'admin', NOW(), '免费查询每日额度与平台限制配置'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_type` WHERE `dict_type` = 'free_query_config'
+);
+
+-- 若类型已存在，确保可用
+UPDATE `sys_dict_type`
+SET `dict_name` = '免费查询配置',
+    `status` = '0',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = '免费查询每日额度与平台限制配置'
+WHERE `dict_type` = 'free_query_config';
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 1, 'daily_limit', '20', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '单IP每日免费查询次数上限'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'daily_limit'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 2, 'over_limit_msg', '当前IP今日免费查询次数已达上限，请添加客服微信查询。', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '单IP额度用尽提示文案'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'over_limit_msg'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 3, 'daily_all_limit', '2000', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '平台每日总免费查询次数上限'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'daily_all_limit'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 4, 'disabled_platforms', '联通管家', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '免费查询禁用平台名称，英文逗号分隔'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'disabled_platforms'
+);
+
+-- 历史默认值兼容迁移：仅将旧默认“泰迪熊,联通管家”调整为“联通管家”，不覆盖自定义配置
+UPDATE `sys_dict_data`
+SET `dict_value` = '联通管家',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `dict_type` = 'free_query_config'
+  AND `dict_label` = 'disabled_platforms'
+  AND `dict_value` = '泰迪熊,联通管家';
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- <<< END m6_free_query_dict.sql
+
+-- >>> BEGIN m7_mobile_menu_group.sql
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
+-- =========================================================
+-- M7：新增独立一级“手机端”菜单，并将“免费查询/日志管理”迁移到其下（幂等）
+-- 一级顺序：默认放在“代理管理”后一个顺位
+-- =========================================================
+SET @root_parent_id := 0;
+SET @agent_order := (
+  SELECT `order_num`
+  FROM `sys_menu`
+  WHERE `menu_name` = '代理管理'
+    AND `parent_id` = 0
+  ORDER BY `menu_id`
+  LIMIT 1
+);
+SET @mobile_root_order := IFNULL(@agent_order + 1, 9);
+SET @mobile_menu_default_id := 900100000203;
+
+-- 1) 新增“手机端”目录（若不存在）
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT @mobile_menu_default_id, '手机端', @root_parent_id, @mobile_root_order, 'mobile', '', '', 'mobileClient',
+       1, 0, 'M', '0', '0', NULL, 'component', 'admin', NOW(), 'M7-手机端目录'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM `sys_menu`
+  WHERE `menu_id` = @mobile_menu_default_id
+     OR (`parent_id` = @root_parent_id AND `path` = 'mobile')
+);
+
+-- 2) 统一“手机端”目录配置
+UPDATE `sys_menu`
+SET `menu_name` = '手机端',
+    `parent_id` = @root_parent_id,
+    `order_num` = @mobile_root_order,
+    `component` = '',
+    `route_name` = 'mobileClient',
+    `menu_type` = 'M',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = NULL,
+    `icon` = 'component',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M7-手机端目录'
+WHERE `menu_id` = @mobile_menu_default_id
+   OR (`menu_name` = '手机端' AND `path` = 'mobile');
+
+SET @mobile_menu_id := (
+  SELECT `menu_id`
+  FROM `sys_menu`
+  WHERE `menu_name` = '手机端'
+    AND `path` = 'mobile'
+  ORDER BY `menu_id`
+  LIMIT 1
+);
+
+-- 3) 若历史环境没有这两个菜单，先补齐
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000201, '免费查询', @mobile_menu_id, 1, 'apiquery', 'server/web/apiquery', '', 'freeApiQuery',
+       1, 0, 'C', '0', '0', 'server:freeQuery:page', 'search', 'admin', NOW(), 'M7-免费查询管理端菜单'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM `sys_menu`
+  WHERE `menu_id` = 900100000201
+     OR (`component` = 'server/web/apiquery')
+);
+
+INSERT INTO `sys_menu` (
+  `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
+  `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
+)
+SELECT 900100000202, '日志管理', @mobile_menu_id, 2, 'apilog', 'server/web/apilog', '', 'freeApiLog',
+       1, 0, 'C', '0', '0', 'server:freeQuery:log:list', 'form', 'admin', NOW(), 'M7-免费查询日志菜单'
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM `sys_menu`
+  WHERE `menu_id` = 900100000202
+     OR (`component` = 'server/web/apilog')
+);
+
+-- 4) 统一把两个菜单迁移到“手机端”下
+UPDATE `sys_menu`
+SET `menu_name` = '免费查询',
+    `parent_id` = @mobile_menu_id,
+    `order_num` = 1,
+    `component` = 'server/web/apiquery',
+    `route_name` = 'freeApiQuery',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:freeQuery:page',
+    `icon` = 'search',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M7-免费查询管理端菜单'
+WHERE `menu_id` = 900100000201
+   OR (`path` = 'apiquery' AND `component` = 'server/web/apiquery');
+
+UPDATE `sys_menu`
+SET `menu_name` = '日志管理',
+    `parent_id` = @mobile_menu_id,
+    `order_num` = 2,
+    `component` = 'server/web/apilog',
+    `route_name` = 'freeApiLog',
+    `menu_type` = 'C',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:freeQuery:log:list',
+    `icon` = 'form',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = 'M7-免费查询日志菜单'
+WHERE `menu_id` = 900100000202
+   OR (`path` = 'apilog' AND `component` = 'server/web/apilog');
+
+-- 5) admin 角色补齐目录与子菜单授权
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT r.role_id, @mobile_menu_id
+FROM `sys_role` r
+LEFT JOIN `sys_role_menu` rm
+  ON rm.role_id = r.role_id
+ AND rm.menu_id = @mobile_menu_id
+WHERE r.role_key = 'admin'
+  AND rm.role_id IS NULL;
+
+INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
+SELECT r.role_id, m.menu_id
+FROM `sys_role` r
+JOIN `sys_menu` m
+  ON m.parent_id = @mobile_menu_id
+ AND m.path IN ('apiquery', 'apilog')
+LEFT JOIN `sys_role_menu` rm
+  ON rm.role_id = r.role_id
+ AND rm.menu_id = m.menu_id
+WHERE r.role_key = 'admin'
+  AND rm.role_id IS NULL;
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- <<< END m7_mobile_menu_group.sql
+
