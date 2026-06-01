@@ -3,19 +3,25 @@ package com.geek.server.service.impl;
 import com.geek.common.exception.ServiceException;
 import com.geek.common.utils.DateUtils;
 import com.geek.common.utils.SecurityUtils;
+import com.geek.common.utils.ip.IpUtils;
 import com.geek.common.core.domain.entity.SysUser;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkOrderItem;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
+import com.geek.server.domain.entity.BatchTask;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.vo.FreeSingleQueryRequest;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
+import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
+import com.geek.server.domain.vo.MarkPhoneCheckItemVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
 import com.geek.server.mapper.MarkOrderItemMapper;
 import com.geek.server.mapper.MarkOrderMapper;
 import com.geek.server.mapper.MarkUserPlatformPriceMapper;
 import com.geek.server.mapper.MarkWalletLogMapper;
+import com.geek.server.service.IFreeQueryService;
 import com.geek.server.service.IMarkOrderService;
 import com.geek.system.mapper.SysUserMapper;
 import org.apache.commons.lang3.StringUtils;
@@ -66,6 +72,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Autowired
     private SysUserMapper sysUserMapper;
+
+    @Autowired
+    private IFreeQueryService freeQueryService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -148,6 +157,89 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 now
         );
         return buildOrderDetail(order.getId());
+    }
+
+    @Override
+    public MarkOrderPrecheckResultVO precheckOrder(MarkOrderCreateRequest request) {
+        Long currentUserId = SecurityUtils.getUserId();
+        if (request == null || StringUtils.isBlank(request.getPlatformCode())) {
+            throw new ServiceException("平台编码不能为空");
+        }
+        List<String> normalizedPhones = normalizePhones(request.getPhones());
+        if (normalizedPhones.isEmpty()) {
+            throw new ServiceException("没有可用号码");
+        }
+
+        String sourceIp;
+        try {
+            sourceIp = IpUtils.getIpAddr();
+        } catch (Exception e) {
+            sourceIp = "mark-precheck-" + currentUserId;
+        }
+        if (StringUtils.isBlank(sourceIp) || "unknown".equalsIgnoreCase(sourceIp)) {
+            sourceIp = "mark-precheck-" + currentUserId;
+        }
+
+        MarkOrderPrecheckResultVO resultVO = new MarkOrderPrecheckResultVO();
+        resultVO.setPlatformCode(request.getPlatformCode());
+        resultVO.setPlatformName(resolvePlatformName(request.getPlatformCode(), request.getPlatformName()));
+
+        List<String> markedPhones = new ArrayList<>();
+        List<String> unmarkedPhones = new ArrayList<>();
+        List<String> failedPhones = new ArrayList<>();
+        List<MarkPhoneCheckItemVO> items = new ArrayList<>();
+
+        for (String phone : normalizedPhones) {
+            MarkPhoneCheckItemVO item = new MarkPhoneCheckItemVO();
+            item.setPhone(phone);
+            try {
+                FreeSingleQueryRequest singleQueryRequest = new FreeSingleQueryRequest();
+                singleQueryRequest.setPhone(phone);
+                singleQueryRequest.setDeviceId("mark-user-" + currentUserId);
+                Map<String, Object> queryResult = freeQueryService.singleQuery(singleQueryRequest, sourceIp);
+                int code = parseInt(queryResult == null ? null : queryResult.get("code"), -1);
+                if (code != 0) {
+                    String errorMessage = asString(queryResult == null ? null : queryResult.get("message"));
+                    if (StringUtils.isBlank(errorMessage)) {
+                        errorMessage = "预查询失败";
+                    }
+                    item.setQuerySuccess(false);
+                    item.setMarked(false);
+                    item.setStatus("FAIL");
+                    item.setDetail(errorMessage);
+                    item.setErrorMessage(errorMessage);
+                    failedPhones.add(phone);
+                } else {
+                    item.setQuerySuccess(true);
+                    item.setMarked(false);
+                    fillPrecheckItemFromData(item, queryResult.get("data"));
+                    if (Boolean.TRUE.equals(item.getMarked())) {
+                        markedPhones.add(phone);
+                    } else {
+                        unmarkedPhones.add(phone);
+                    }
+                }
+            } catch (Exception e) {
+                String errorMessage = StringUtils.defaultIfBlank(e.getMessage(), "预查询失败");
+                item.setQuerySuccess(false);
+                item.setMarked(false);
+                item.setStatus("FAIL");
+                item.setDetail(errorMessage);
+                item.setErrorMessage(errorMessage);
+                failedPhones.add(phone);
+            }
+            items.add(item);
+        }
+
+        resultVO.setTotalCount(normalizedPhones.size());
+        resultVO.setMarkedCount(markedPhones.size());
+        resultVO.setUnmarkedCount(unmarkedPhones.size());
+        resultVO.setFailedCount(failedPhones.size());
+        resultVO.setMarkedPhones(markedPhones);
+        resultVO.setUnmarkedPhones(unmarkedPhones);
+        resultVO.setFailedPhones(failedPhones);
+        resultVO.setItems(items);
+        return resultVO;
     }
 
     @Override
@@ -460,6 +552,220 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         }
         String name = PLATFORM_NAME_MAP.get(platformCode);
         return StringUtils.isBlank(name) ? platformCode : name;
+    }
+
+    private void fillPrecheckItemFromData(MarkPhoneCheckItemVO item, Object dataObj) {
+        if (!(dataObj instanceof Map<?, ?>)) {
+            item.setStatus("UNKNOWN");
+            item.setDetail("未返回平台结果");
+            return;
+        }
+        Map<?, ?> dataMap = (Map<?, ?>) dataObj;
+        Object resultsObj = dataMap.get("results");
+        if (!(resultsObj instanceof List<?>)) {
+            item.setStatus("EMPTY");
+            item.setDetail("未返回平台结果");
+            return;
+        }
+        List<?> results = (List<?>) resultsObj;
+        if (results.isEmpty()) {
+            item.setStatus("EMPTY");
+            item.setDetail("未返回平台结果");
+            return;
+        }
+
+        String fallbackStatus = null;
+        String fallbackDetail = null;
+        Long maxResponseTime = null;
+        boolean marked = false;
+
+        for (Object resultObj : results) {
+            if (resultObj instanceof BatchTask.ApiResult) {
+                BatchTask.ApiResult apiResult = (BatchTask.ApiResult) resultObj;
+                maxResponseTime = maxLong(maxResponseTime, apiResult.getResponseTime());
+                if (Boolean.FALSE.equals(apiResult.getSuccess()) && StringUtils.isBlank(item.getErrorMessage())) {
+                    item.setErrorMessage(asString(apiResult.getError()));
+                }
+                PrecheckStatusInfo statusInfo = extractStatusInfo(apiResult.getData());
+                if (statusInfo == null) {
+                    continue;
+                }
+                if (fallbackStatus == null) {
+                    fallbackStatus = statusInfo.status;
+                    fallbackDetail = statusInfo.detail;
+                }
+                if (statusInfo.marked) {
+                    marked = true;
+                    item.setStatus(statusInfo.status);
+                    item.setDetail(statusInfo.detail);
+                }
+            } else if (resultObj instanceof Map<?, ?>) {
+                Map<?, ?> resultMap = (Map<?, ?>) resultObj;
+                maxResponseTime = maxLong(maxResponseTime, parseLong(resultMap.get("responseTime")));
+                Object success = resultMap.get("success");
+                if (Boolean.FALSE.equals(success) && StringUtils.isBlank(item.getErrorMessage())) {
+                    item.setErrorMessage(asString(resultMap.get("error")));
+                }
+                PrecheckStatusInfo statusInfo = extractStatusInfo(resultMap.get("data"));
+                if (statusInfo == null) {
+                    continue;
+                }
+                if (fallbackStatus == null) {
+                    fallbackStatus = statusInfo.status;
+                    fallbackDetail = statusInfo.detail;
+                }
+                if (statusInfo.marked) {
+                    marked = true;
+                    item.setStatus(statusInfo.status);
+                    item.setDetail(statusInfo.detail);
+                }
+            }
+        }
+
+        item.setMarked(marked);
+        if (StringUtils.isBlank(item.getStatus())) {
+            item.setStatus(StringUtils.defaultIfBlank(fallbackStatus, marked ? "yes" : "no"));
+        }
+        if (StringUtils.isBlank(item.getDetail())) {
+            item.setDetail(StringUtils.defaultIfBlank(fallbackDetail, marked ? "已标记" : "未标记"));
+        }
+        if (maxResponseTime != null) {
+            item.setResponseTime(maxResponseTime);
+        }
+    }
+
+    private PrecheckStatusInfo extractStatusInfo(Object apiDataObj) {
+        if (!(apiDataObj instanceof Map<?, ?>)) {
+            return null;
+        }
+        Map<?, ?> dataMap = (Map<?, ?>) apiDataObj;
+        Object platformResultsObj = dataMap.get("platformResults");
+        if (!(platformResultsObj instanceof List<?>)) {
+            return null;
+        }
+        List<?> platformResults = (List<?>) platformResultsObj;
+        PrecheckStatusInfo fallback = null;
+        for (Object platformObj : platformResults) {
+            if (!(platformObj instanceof Map<?, ?>)) {
+                continue;
+            }
+            Map<?, ?> platformMap = (Map<?, ?>) platformObj;
+            String status = asString(platformMap.get("status"));
+            if (StringUtils.isBlank(status)) {
+                continue;
+            }
+            String platform = asString(platformMap.get("platform"));
+            boolean marked = isMarkedStatus(status);
+            String detail = buildStatusDetail(platform, status, marked);
+            PrecheckStatusInfo info = new PrecheckStatusInfo(marked, status, detail);
+            if (fallback == null) {
+                fallback = info;
+            }
+            if (marked) {
+                return info;
+            }
+        }
+        return fallback;
+    }
+
+    private String buildStatusDetail(String platform, String status, boolean marked) {
+        String pureStatus = StringUtils.trimToEmpty(status);
+        String detail;
+        if (pureStatus.toLowerCase().startsWith("yes-")) {
+            detail = pureStatus.substring(4).trim();
+        } else if ("yes".equalsIgnoreCase(pureStatus)) {
+            detail = "有标记";
+        } else if ("no".equalsIgnoreCase(pureStatus) || "无".equals(pureStatus)
+                || "无标记".equals(pureStatus) || "未标记".equals(pureStatus)) {
+            detail = "未标记";
+        } else if ("normal".equalsIgnoreCase(pureStatus)) {
+            detail = "正常";
+        } else if ("risk".equalsIgnoreCase(pureStatus)) {
+            detail = "风险";
+        } else if ("unknown".equalsIgnoreCase(pureStatus)) {
+            detail = "未知";
+        } else {
+            detail = pureStatus;
+        }
+        if (StringUtils.isBlank(detail)) {
+            detail = marked ? "有标记" : "未标记";
+        }
+        if (StringUtils.isBlank(platform)) {
+            return detail;
+        }
+        return platform + "：" + detail;
+    }
+
+    private boolean isMarkedStatus(String status) {
+        if (StringUtils.isBlank(status)) {
+            return false;
+        }
+        String normalized = status.trim().toLowerCase();
+        if ("no".equals(normalized) || normalized.startsWith("no-")) {
+            return false;
+        }
+        if ("无".equals(status) || "无标记".equals(status) || "未标记".equals(status)
+                || "查询失败".equals(status) || "未开放".equals(status) || "-".equals(status)) {
+            return false;
+        }
+        if ("normal".equals(normalized) || "unknown".equals(normalized)) {
+            return false;
+        }
+        return true;
+    }
+
+    private int parseInt(Object value, int defaultValue) {
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private Long parseLong(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(value));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Long maxLong(Long current, Long candidate) {
+        if (candidate == null) {
+            return current;
+        }
+        if (current == null || candidate > current) {
+            return candidate;
+        }
+        return current;
+    }
+
+    private String asString(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private static class PrecheckStatusInfo {
+        private final boolean marked;
+        private final String status;
+        private final String detail;
+
+        private PrecheckStatusInfo(boolean marked, String status, String detail) {
+            this.marked = marked;
+            this.status = status;
+            this.detail = detail;
+        }
     }
 
     private List<String> normalizePhones(List<String> phones) {

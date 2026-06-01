@@ -18,6 +18,15 @@ export function createMarkUserOrder(data) {
   })
 }
 
+// 用户提交前预查询
+export function precheckMarkUserOrder(data) {
+  return request({
+    url: '/server/markUser/order/precheck',
+    method: 'post',
+    data
+  })
+}
+
 // 用户订单详情
 export function getMarkUserOrderDetail(orderId) {
   return request({

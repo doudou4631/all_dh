@@ -1,9 +1,7 @@
 package com.geek.server.service.impl;
 
-import com.geek.common.core.domain.entity.SysUser;
 import com.geek.common.utils.SecurityUtils;
 import com.geek.server.domain.UserApiQueryRecord;
-import com.geek.server.domain.UserPointRecord;
 import com.geek.server.domain.dto.OptimizedBatchItemOutcome;
 import com.geek.server.domain.entity.BatchTask;
 import com.geek.server.domain.entity.BatchTaskRecord;
@@ -14,7 +12,6 @@ import com.geek.server.service.IOptimizedBatchApiExecutor;
 import com.geek.server.service.IBatchTaskRecordService;
 import com.geek.server.service.IUserAggregateConfigService;
 import com.geek.server.task.BatchTaskManager;
-import com.geek.system.service.ISysUserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Lazy;
@@ -50,7 +47,6 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
     private final Executor batchOptimizedItemExecutor;
     private final IOptimizedBatchApiExecutor optimizedBatchApiExecutor;
     private final IUserAggregateConfigService userAggregateConfigService;
-    private final ISysUserService sysUserService;
     private final OptimizedBatchPersistenceService optimizedBatchPersistenceService;
 
     public AsyncBatchOptimizedServiceImpl(
@@ -60,7 +56,6 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
             @Qualifier("batchOptimizedItemExecutor") Executor batchOptimizedItemExecutor,
             IOptimizedBatchApiExecutor optimizedBatchApiExecutor,
             IUserAggregateConfigService userAggregateConfigService,
-            ISysUserService sysUserService,
             OptimizedBatchPersistenceService optimizedBatchPersistenceService) {
         this.taskManager = taskManager;
         this.batchTaskRecordService = batchTaskRecordService;
@@ -68,7 +63,6 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
         this.batchOptimizedItemExecutor = batchOptimizedItemExecutor;
         this.optimizedBatchApiExecutor = optimizedBatchApiExecutor;
         this.userAggregateConfigService = userAggregateConfigService;
-        this.sysUserService = sysUserService;
         this.optimizedBatchPersistenceService = optimizedBatchPersistenceService;
     }
 
@@ -76,14 +70,6 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
     public String submitBatchQueryOptimized(List<ApiRequestVO> requests) {
         if (requests == null) {
             throw new IllegalArgumentException("request list must not be null");
-        }
-        if (!requests.isEmpty()) {
-            Long uid = SecurityUtils.getUserId();
-            SysUser user = sysUserService.selectUserById(uid);
-            if (user == null || user.getPoints() == null || user.getPoints() < requests.size()) {
-                throw new IllegalStateException("insufficient points: need at least " + requests.size()
-                        + " points for this batch (worst case all sub-queries succeed)");
-            }
         }
 
         OptimizedBatchSession session = new OptimizedBatchSession(
@@ -181,8 +167,6 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
 
             List<BatchTask.ApiResult> apiResults = new ArrayList<>(c);
             List<UserApiQueryRecord> records = new ArrayList<>();
-            List<UserPointRecord> pointRows = new ArrayList<>();
-            Date now = new Date();
             for (OptimizedBatchItemOutcome o : outcomes) {
                 if (o.getApiResult() != null) {
                     apiResults.add(o.getApiResult());
@@ -190,22 +174,10 @@ public class AsyncBatchOptimizedServiceImpl implements IAsyncBatchOptimizedServi
                 if (o.getQueryRecord() != null) {
                     records.add(o.getQueryRecord());
                 }
-                if (o.isNeedPointDeduction() && o.getApiResult() != null) {
-                    BatchTask.ApiResult ar = o.getApiResult();
-                    UserPointRecord pr = new UserPointRecord();
-                    pr.setUserId(session.getUserId());
-                    pr.setPointAmount(-1L);
-                    pr.setPointType("3");
-                    pr.setReason("API query deduction - " + (ar.getPlatformName() != null ? ar.getPlatformName() : "unknown"));
-                    pr.setOperatorId(session.getUserId());
-                    pr.setCreateBy(session.getUsername());
-                    pr.setCreateTime(now);
-                    pointRows.add(pr);
-                }
             }
 
             try {
-                optimizedBatchPersistenceService.persistAfterOptimizedBatch(records, session.getUserId(), pointRows);
+                optimizedBatchPersistenceService.persistAfterOptimizedBatch(records, session.getUserId(), new ArrayList<>());
             } catch (Exception e) {
                 log.error("optimized batch persist failed taskId={}", taskId, e);
                 BatchTask t = taskManager.getTask(taskId);

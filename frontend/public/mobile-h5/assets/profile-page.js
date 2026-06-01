@@ -350,7 +350,16 @@
       if (getAccount()) {
         confirmAction('是否退出登录？', function () {
           setAccount('');
+          if (window.UserAuth && typeof window.UserAuth.logout === 'function') {
+            window.UserAuth.logout();
+          }
           renderUserHeader();
+          var homeHref = resolveHref('/');
+          try {
+            window.location.replace(homeHref);
+          } catch (e) {
+            window.location.href = homeHref;
+          }
         });
         return;
       }

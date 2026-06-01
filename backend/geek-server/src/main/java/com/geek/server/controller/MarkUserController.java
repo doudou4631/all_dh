@@ -51,6 +51,13 @@ public class MarkUserController extends BaseController {
         return AjaxResult.success("下单成功", markOrderService.createOrder(request));
     }
 
+    @Operation(summary = "用户提交前预查询号码是否被标记")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:add')")
+    @PostMapping("/order/precheck")
+    public AjaxResult precheckOrder(@Valid @RequestBody MarkOrderCreateRequest request) {
+        return AjaxResult.success("预查询完成", markOrderService.precheckOrder(request));
+    }
+
     @Operation(summary = "用户订单详情")
     @PreAuthorize("@ss.hasPermi('server:markUser:order:query')")
     @GetMapping("/order/{orderId}")

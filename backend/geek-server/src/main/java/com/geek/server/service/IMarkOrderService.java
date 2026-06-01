@@ -6,6 +6,7 @@ import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
+import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
 
 import java.util.List;
@@ -16,6 +17,8 @@ import java.util.List;
 public interface IMarkOrderService {
 
     MarkOrderDetailVO createOrder(MarkOrderCreateRequest request);
+
+    MarkOrderPrecheckResultVO precheckOrder(MarkOrderCreateRequest request);
 
     List<MarkOrder> selectMyOrderList(MarkOrder query);
 

@@ -602,8 +602,7 @@ function parseNumbersInRealTime() {
       .filter(num => num !== null)
       .filter((num, index, arr) => arr.indexOf(num) === index); // 去重
     
-    // 限制最多200个号码
-    const limitedNumbers = cleanedNumbers.slice(0, 200);
+    const limitedNumbers = cleanedNumbers;
     
     parsedNumbers.value = limitedNumbers;
     numberList.value = limitedNumbers.map((num, index) => ({

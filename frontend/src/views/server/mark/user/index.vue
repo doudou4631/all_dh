@@ -1,33 +1,7 @@
 <template>
   <div class="app-container mark-user-order-page">
-    <el-card shadow="never" class="mb10">
-      <el-row :gutter="16">
-        <el-col :xs="24" :sm="8">
-          <el-statistic title="当前积分" :value="walletSummary.pointsBalance || 0" />
-        </el-col>
-        <el-col :xs="24" :sm="8">
-          <el-statistic title="累计扣费" :value="walletSummary.totalDeductAmount || 0" />
-        </el-col>
-        <el-col :xs="24" :sm="8">
-          <el-statistic title="累计退款" :value="walletSummary.totalRefundAmount || 0" />
-        </el-col>
-      </el-row>
-    </el-card>
 
     <el-card shadow="never" class="platform-card">
-      <el-tabs
-        v-if="platformOptions.length > 0"
-        v-model="activePlatformCode"
-        class="platform-tabs"
-        @tab-change="handlePlatformTabChange"
-      >
-        <el-tab-pane
-          v-for="platform in platformOptions"
-          :key="platform.platformCode"
-          :label="platform.platformName"
-          :name="platform.platformCode"
-        />
-      </el-tabs>
 
       <el-empty v-if="platformOptions.length === 0" description="当前未配置可用平台" />
 
@@ -228,6 +202,74 @@
         </el-tab-pane>
       </el-tabs>
     </el-card>
+    <el-dialog
+      v-model="precheckDialogVisible"
+      title="预查询结果确认"
+      width="900px"
+      destroy-on-close
+      append-to-body
+      @closed="handlePrecheckDialogClosed"
+    >
+      <div class="precheck-dialog-tip">
+        平台：{{ precheckDialogData.platformName || activePlatformName }}，请确认预查询结果后决定是否提交。
+      </div>
+
+      <el-descriptions :column="5" border class="precheck-dialog-summary">
+        <el-descriptions-item label="总查询">{{ precheckDialogData.totalCount || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="已标记">{{ precheckDialogData.markedCount || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="未标记">{{ precheckDialogData.unmarkedCount || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="失败">{{ precheckDialogData.failedCount || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="待提交">{{ precheckMarkedCount }}</el-descriptions-item>
+      </el-descriptions>
+
+      <el-alert
+        v-if="precheckMarkedCount === 0"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="本次预查询没有可提交的已标记号码。"
+        class="mb10"
+      />
+
+      <el-table :data="precheckTableData" border max-height="360">
+        <el-table-column label="序号" type="index" width="56" align="center" />
+        <el-table-column label="号码" prop="phone" min-width="130" />
+        <el-table-column label="查询状态" width="100" align="center">
+          <template #default="scope">
+            <el-tag :type="queryStatusType(scope.row)" size="small">
+              {{ queryStatusLabel(scope.row) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="标记结果" width="110" align="center">
+          <template #default="scope">
+            <el-tag :type="markStatusType(scope.row)" size="small">
+              {{ markStatusLabel(scope.row) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态码" prop="status" width="120" align="center" show-overflow-tooltip />
+        <el-table-column label="详情" prop="detail" min-width="180" show-overflow-tooltip />
+        <el-table-column label="错误信息" prop="errorMessage" min-width="180" show-overflow-tooltip />
+        <el-table-column label="响应时长(ms)" width="110" align="center">
+          <template #default="scope">
+            {{ scope.row.responseTime ?? '-' }}
+          </template>
+        </el-table-column>
+      </el-table>
+
+      <template #footer>
+        <el-button @click="precheckDialogVisible = false">不提交</el-button>
+        <el-button
+          type="primary"
+          :disabled="precheckMarkedCount === 0"
+          :loading="submitLoading"
+          @click="confirmSubmitAfterPrecheck"
+        >
+          提交已标记号码（{{ precheckMarkedCount }}）
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -235,12 +277,14 @@
 import {
   listMarkUserOrder,
   createMarkUserOrder,
+  precheckMarkUserOrder,
   getMarkUserOrderDetail,
-  getMarkUserWalletSummary,
   listMarkUserPlatformPrice
 } from '@/api/server/markUser'
+import { useRoute } from 'vue-router'
 
 const { proxy } = getCurrentInstance()
+const route = useRoute()
 
 const showSearch = ref(true)
 const loading = ref(false)
@@ -249,12 +293,30 @@ const resultLoading = ref(false)
 const total = ref(0)
 const orderList = ref([])
 const platformOptions = ref([])
-const walletSummary = ref({})
 const activePlatformCode = ref('')
 const activeSubTab = ref('submit')
 const selectedResultOrderId = ref(null)
 const loadedResultOrderId = ref(null)
 const detailData = ref({ order: {}, items: [] })
+const precheckDialogVisible = ref(false)
+const pendingSubmitPayload = ref(null)
+
+function createEmptyPrecheckData() {
+  return {
+    platformCode: '',
+    platformName: '',
+    totalCount: 0,
+    markedCount: 0,
+    unmarkedCount: 0,
+    failedCount: 0,
+    markedPhones: [],
+    unmarkedPhones: [],
+    failedPhones: [],
+    items: []
+  }
+}
+
+const precheckDialogData = ref(createEmptyPrecheckData())
 
 const queryParams = reactive({
   pageNum: 1,
@@ -305,6 +367,7 @@ const activePlatformHint = computed(() => {
   if (!activePlatform.value) return '请选择平台后提交号码。'
   return platformHintMap[activePlatform.value.platformCode] || `${activePlatformName.value}支持号码标记处理，请按行输入号码。`
 })
+const routePlatformCode = computed(() => String(route.query?.platformCode || '').trim())
 
 function parsePhonesWithStats(text) {
   const source = String(text || '')
@@ -349,6 +412,57 @@ const canSubmit = computed(() => {
 const expectedSubmitCount = computed(() => submitPhoneStats.value.validCount)
 
 const expectedDeductAmount = computed(() => expectedSubmitCount.value * activeUnitPrice.value)
+const precheckTableData = computed(() => Array.isArray(precheckDialogData.value.items) ? precheckDialogData.value.items : [])
+const precheckMarkedCount = computed(() => Array.isArray(precheckDialogData.value.markedPhones) ? precheckDialogData.value.markedPhones.length : 0)
+
+function toSafeNumber(value, fallback = 0) {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+
+function normalizePhoneList(source) {
+  if (!Array.isArray(source)) return []
+  const set = new Set()
+  const result = []
+  source.forEach((item) => {
+    const phone = String(item || '').trim()
+    if (!phone || set.has(phone)) return
+    set.add(phone)
+    result.push(phone)
+  })
+  return result
+}
+
+function queryStatusLabel(row) {
+  if (row?.querySuccess === true) return '成功'
+  if (row?.querySuccess === false) return '失败'
+  return '-'
+}
+
+function queryStatusType(row) {
+  if (row?.querySuccess === true) return 'success'
+  if (row?.querySuccess === false) return 'danger'
+  return 'info'
+}
+
+function markStatusLabel(row) {
+  if (row?.querySuccess === false) return '失败'
+  if (row?.marked === true) return '已标记'
+  if (row?.marked === false) return '未标记'
+  return '-'
+}
+
+function markStatusType(row) {
+  if (row?.querySuccess === false) return 'danger'
+  if (row?.marked === true) return 'success'
+  if (row?.marked === false) return 'info'
+  return ''
+}
+
+function handlePrecheckDialogClosed() {
+  pendingSubmitPayload.value = null
+  precheckDialogData.value = createEmptyPrecheckData()
+}
 
 function orderStatusLabel(status) {
   const map = { '0': '待处理', '1': '处理中', '2': '已完成', '3': '已取消' }
@@ -382,7 +496,7 @@ function formatDateTime(value) {
 }
 
 function normalizeQueryPlatform() {
-  queryParams.platformCode = activePlatformCode.value || null
+  queryParams.platformCode = activePlatformCode.value || routePlatformCode.value || null
 }
 
 function pickDefaultResultOrder() {
@@ -415,23 +529,14 @@ function getList() {
 }
 
 function loadSummaryAndPrice() {
-  return Promise.allSettled([
-    getMarkUserWalletSummary(),
-    listMarkUserPlatformPrice()
-  ]).then(([summaryResp, priceResp]) => {
-    if (summaryResp.status === 'fulfilled') {
-      const data = summaryResp.value?.data || {}
-      walletSummary.value = data
-      if (Array.isArray(data.platformPrices) && data.platformPrices.length > 0) {
-        platformOptions.value = data.platformPrices
-      }
-    }
-
-    if (priceResp.status === 'fulfilled') {
-      const list = priceResp.value?.data
-      if (Array.isArray(list) && list.length > 0) {
-        platformOptions.value = list
-      }
+  return listMarkUserPlatformPrice().then((resp) => {
+    const allList = Array.isArray(resp?.data) ? resp.data : []
+    const menuPreferredPlatformCode = routePlatformCode.value
+    if (menuPreferredPlatformCode) {
+      const matched = allList.find((item) => item.platformCode === menuPreferredPlatformCode)
+      platformOptions.value = matched ? [matched] : []
+    } else {
+      platformOptions.value = allList
     }
 
     if (platformOptions.value.length > 0) {
@@ -442,6 +547,10 @@ function loadSummaryAndPrice() {
     } else {
       activePlatformCode.value = ''
     }
+  }).catch((error) => {
+    console.error('加载平台配置失败:', error)
+    platformOptions.value = []
+    activePlatformCode.value = ''
   })
 }
 
@@ -466,7 +575,7 @@ function handleQuery() {
 
 function resetQuery() {
   proxy.resetForm('queryRef')
-  queryParams.platformCode = activePlatformCode.value || null
+  queryParams.platformCode = activePlatformCode.value || routePlatformCode.value || null
   handleQuery()
 }
 
@@ -474,7 +583,7 @@ function clearSubmitPhones() {
   submitForm.phonesText = ''
 }
 
-function submitBatchOrder() {
+async function submitBatchOrder() {
   if (!activePlatform.value) {
     proxy.$modal.msgError('当前未选择平台')
     return
@@ -494,9 +603,62 @@ function submitBatchOrder() {
   }
 
   submitLoading.value = true
-  createMarkUserOrder(payload).then(async (res) => {
+  try {
+    const precheckRes = await precheckMarkUserOrder(payload)
+    const source = precheckRes?.data || {}
+    const markedPhones = normalizePhoneList(source.markedPhones)
+    const unmarkedPhones = normalizePhoneList(source.unmarkedPhones)
+    const failedPhones = normalizePhoneList(source.failedPhones)
+    const items = Array.isArray(source.items) ? source.items : []
+
+    precheckDialogData.value = {
+      platformCode: source.platformCode || payload.platformCode,
+      platformName: source.platformName || payload.platformName,
+      totalCount: toSafeNumber(source.totalCount, phones.length),
+      markedCount: toSafeNumber(source.markedCount, markedPhones.length),
+      unmarkedCount: toSafeNumber(source.unmarkedCount, unmarkedPhones.length),
+      failedCount: toSafeNumber(source.failedCount, failedPhones.length),
+      markedPhones,
+      unmarkedPhones,
+      failedPhones,
+      items
+    }
+
+    pendingSubmitPayload.value = {
+      ...payload,
+      phones: markedPhones
+    }
+    precheckDialogVisible.value = true
+
+    if (markedPhones.length === 0) {
+      if (precheckDialogData.value.failedCount > 0) {
+        proxy.$modal.msgWarning(`预查询完成，失败 ${precheckDialogData.value.failedCount} 个，可提交 0 个`)
+      } else {
+        proxy.$modal.msgWarning('预查询未发现被标记号码，请确认后再决定是否重试')
+      }
+    }
+  } catch (error) {
+    console.error('预查询失败:', error)
+    proxy.$modal.msgError(error?.message || '预查询失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+async function confirmSubmitAfterPrecheck() {
+  const payload = pendingSubmitPayload.value
+  const markedCount = precheckMarkedCount.value
+  if (!payload || markedCount <= 0) {
+    proxy.$modal.msgWarning('预查询无可提交号码')
+    return
+  }
+
+  submitLoading.value = true
+  try {
+    const res = await createMarkUserOrder(payload)
     proxy.$modal.msgSuccess(res.msg || '下单成功')
     const createdOrderId = res?.data?.order?.id
+    precheckDialogVisible.value = false
     submitForm.phonesText = ''
     submitForm.requestNo = ''
     submitForm.remark = ''
@@ -507,9 +669,12 @@ function submitBatchOrder() {
       loadOrderDetail(createdOrderId)
     }
     activeSubTab.value = 'submit'
-  }).finally(() => {
+  } catch (error) {
+    console.error('提交订单失败:', error)
+    proxy.$modal.msgError(error?.message || '提交失败')
+  } finally {
     submitLoading.value = false
-  })
+  }
 }
 
 function loadOrderDetail(orderId) {
@@ -552,11 +717,15 @@ watch(activeSubTab, (tab) => {
     loadOrderDetail(selectedResultOrderId.value)
   }
 })
+watch(routePlatformCode, () => {
+  loadSummaryAndPrice().then(() => {
+    handlePlatformTabChange()
+  })
+})
 
 onMounted(async () => {
   await loadSummaryAndPrice()
-  normalizeQueryPlatform()
-  getList()
+  handlePlatformTabChange()
 })
 </script>
 
@@ -573,9 +742,6 @@ onMounted(async () => {
   margin-bottom: 10px;
 }
 
-.platform-tabs {
-  margin-bottom: 2px;
-}
 
 .sub-tabs {
   margin-top: 2px;
@@ -647,6 +813,15 @@ onMounted(async () => {
 }
 
 .record-search-card {
+  margin-bottom: 10px;
+}
+
+.precheck-dialog-tip {
+  margin-bottom: 10px;
+  color: var(--el-text-color-regular);
+}
+
+.precheck-dialog-summary {
   margin-bottom: 10px;
 }
 

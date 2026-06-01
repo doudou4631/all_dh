@@ -58,6 +58,30 @@
       <!-- 右侧内容区 -->
       <el-col :lg="18" :md="16" :sm="24" :xs="24">
         <el-row :gutter="20">
+          <el-col :span="24" v-if="walletSummaryVisible">
+            <el-card class="wallet-summary-card">
+              <el-row :gutter="16" class="wallet-stats">
+                <el-col :xs="24" :sm="8">
+                  <div class="wallet-stat-item">
+                    <div class="wallet-stat-label">当前积分</div>
+                    <div class="wallet-stat-value">{{ walletSummary.pointsBalance }}</div>
+                  </div>
+                </el-col>
+                <el-col :xs="24" :sm="8">
+                  <div class="wallet-stat-item">
+                    <div class="wallet-stat-label">累计扣费</div>
+                    <div class="wallet-stat-value">{{ walletSummary.totalDeductAmount }}</div>
+                  </div>
+                </el-col>
+                <el-col :xs="24" :sm="8">
+                  <div class="wallet-stat-item">
+                    <div class="wallet-stat-label">累计退款</div>
+                    <div class="wallet-stat-value">{{ walletSummary.totalRefundAmount }}</div>
+                  </div>
+                </el-col>
+              </el-row>
+            </el-card>
+          </el-col>
 
 
           <!-- 移动端公告展示 -->
@@ -112,6 +136,7 @@ import profile from '@/assets/images/profile.jpg'
 import useUserStore from '@/store/modules/user'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { GeekResponseForList } from '@/types/request'
+import { getMarkUserWalletSummary } from '@/api/server/markUser'
 const router = useRouter()
 interface Feature {
   icon: string;
@@ -196,6 +221,12 @@ const noticeList = ref<Notice[]>([])
 const noticeLoading = ref(false)
 const noticeDialogVisible = ref(false)
 const currentNotice = ref<Notice>({} as Notice)
+const walletSummaryVisible = ref(false)
+const walletSummary = ref({
+  pointsBalance: 0,
+  totalDeductAmount: 0,
+  totalRefundAmount: 0
+})
 
 // 用户信息store
 const userInfo = useUserStore()
@@ -225,9 +256,25 @@ const viewMoreNotices = () => {
   router.push(route)
 }
 
+const getWalletSummary = async () => {
+  try {
+    const res: any = await getMarkUserWalletSummary()
+    const data = res?.data || {}
+    walletSummary.value = {
+      pointsBalance: Number(data.pointsBalance) || 0,
+      totalDeductAmount: Number(data.totalDeductAmount) || 0,
+      totalRefundAmount: Number(data.totalRefundAmount) || 0
+    }
+    walletSummaryVisible.value = true
+  } catch (error) {
+    walletSummaryVisible.value = false
+  }
+}
+
 onMounted(() => {
   userInfo.getInfo()
   getNoticeList()
+  getWalletSummary()
 })
 </script>
 
@@ -399,6 +446,31 @@ onMounted(() => {
           color: var(--el-text-color-secondary);
         }
       }
+    }
+  }
+
+  .wallet-summary-card {
+    .wallet-stats {
+      row-gap: 12px;
+    }
+
+    .wallet-stat-item {
+      border-radius: 8px;
+      padding: 12px 16px;
+      background: var(--el-fill-color-light);
+    }
+
+    .wallet-stat-label {
+      font-size: 14px;
+      color: var(--el-text-color-secondary);
+      margin-bottom: 6px;
+    }
+
+    .wallet-stat-value {
+      font-size: 30px;
+      line-height: 1.2;
+      color: var(--el-text-color-primary);
+      font-weight: 600;
     }
   }
 
