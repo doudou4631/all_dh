@@ -1,0 +1,4 @@
+time=20260603_025025
+db=verifynum
+operator=ubuntu
+note=full backup before large changes

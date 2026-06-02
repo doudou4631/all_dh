@@ -366,7 +366,10 @@ const { proxy } = getCurrentInstance();
 const userStore = useUserStore();
 const { sys_normal_disable, sys_user_sex } = proxy.useDict("sys_normal_disable", "sys_user_sex");
 const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
-const isAgent = computed(() => proxy.$auth.hasRoleOr(['agent', 'mark_agent']));
+const isAgent = computed(() => {
+   const roleSet = new Set(Array.isArray(userStore.roles) ? userStore.roles : []);
+   return roleSet.has('agent') || roleSet.has('mark_agent');
+});
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
 
 const userList = ref([]);

@@ -73,4 +73,4 @@ mysql -h{{DB_HOST}} -P{{DB_PORT}} -u{{DB_USER}} -p{{DB_NAME}} < backend/sql/m4_m
 ## 8. 相关文档
 - 发布流程：`../docs/DEPLOY_UPDATE_GUIDE.md`
 - 数据库备份：`../docs/DB_BACKUP_TO_PROJECT_GUIDE.md`
-- 角色矩阵：`../docs/MARK_ROLE_MATRIX.md`
+- 角色矩阵（主文档）：`doc/权限控制.md`

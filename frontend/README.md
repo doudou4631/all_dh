@@ -89,7 +89,7 @@ frontend/
 ## 9. 相关文档
 - 部署流程：`../docs/DEPLOY_UPDATE_GUIDE.md`
 - 数据库备份：`../docs/DB_BACKUP_TO_PROJECT_GUIDE.md`
-- 角色矩阵：`../docs/MARK_ROLE_MATRIX.md`
+- 角色矩阵（主文档）：`../backend/doc/权限控制.md`
 
 ## 10. 代理账户页角色约束（2026-06 更新）
 `src/views/system/user/index.vue` 在代理账户场景新增了角色与模板收敛逻辑，避免前端继续暴露越权选项：
