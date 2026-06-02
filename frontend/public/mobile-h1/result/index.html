@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>号码标记查询结果</title>
+  <link rel="preconnect" href="https://biaoji.aleo1314.vip" crossorigin />
+  <link rel="dns-prefetch" href="https://biaoji.aleo1314.vip" />
+  <link rel="stylesheet" href="../assets/fixed-layout.css" />
+  <link rel="stylesheet" href="../assets/result-page.css" />
+  <link rel="stylesheet" href="../assets/bottom-nav.css" />
+</head>
+<body class="result-body">
+  <div id="result-app" class="result-app">
+    <header class="result-hero">
+      <div class="result-hero-bg" aria-hidden="true"></div>
+      <div class="result-hero-inner">
+        <p class="result-hero-tip">针对全网所有平台查询到您的号码：</p>
+        <p class="result-hero-phone" id="hero-phone">--</p>
+        <p class="result-hero-count">
+          被 <span id="hero-count">0</span> 个平台标记
+        </p>
+      </div>
+      <aside class="result-float-actions">
+        <a class="result-float-btn" id="btn-call" href="tel:13027616171">
+          <span class="result-float-icon result-float-icon--phone" aria-hidden="true">
+            <img src="/assets/icons/service-phone.png?v=2" alt="" width="22" height="22" />
+          </span>
+          <span class="result-float-label">服务电话</span>
+        </a>
+        <button type="button" class="result-float-btn" id="btn-wechat">
+          <span class="result-float-icon result-float-icon--wechat" aria-hidden="true">
+            <img src="/assets/icons/wechat.png?v=2" alt="" width="22" height="22" />
+          </span>
+          <span class="result-float-label">客服微信</span>
+        </button>
+      </aside>
+    </header>
+
+    <main class="result-main">
+      <div id="loading" class="result-loading">
+        <span class="result-loading-spinner" aria-hidden="true"></span>
+        正在查询各平台标记，请稍候…
+        <small class="result-loading-tip">通常需要 5～15 秒</small>
+      </div>
+      <div id="error" class="result-error" hidden></div>
+      <div id="cards" class="result-cards" hidden></div>
+      <div id="empty" class="result-empty" hidden>该号码当前未发现被标记平台</div>
+    </main>
+
+    <footer class="result-footer">
+      <button type="button" class="result-back-btn" id="btn-back">返回重新查询</button>
+      <p class="result-contact">联系我们: <a href="tel:13027616171">13027616171</a></p>
+      <img
+        class="result-qrcode"
+        id="wechat-qr"
+        src="/mobile-h1/assets/icons/customer-wechat-h1.png"
+        alt="客服微信二维码"
+        loading="lazy"
+        decoding="async"
+      />
+    </footer>
+  </div>
+
+  <div id="wechat-modal" class="wechat-modal" hidden>
+    <div class="wechat-modal-mask" id="wechat-modal-mask"></div>
+    <div class="wechat-modal-panel" role="dialog" aria-modal="true" aria-label="客服微信">
+      <img
+        class="wechat-modal-qr"
+        id="wechat-modal-qr"
+        data-src="/mobile-h1/assets/icons/customer-wechat-h1.png"
+        alt="客服微信二维码"
+      />
+      <p class="wechat-modal-tip">长按识别二维码添加客服微信</p>
+    </div>
+  </div>
+
+  <script src="../assets/api-bridge.js"></script>
+  <script src="../assets/query-stats.js"></script>
+  <script src="../assets/result-page.js"></script>
+  <script src="../assets/bottom-nav.js" defer></script>
+</body>
+</html>

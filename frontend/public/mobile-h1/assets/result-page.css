@@ -1,0 +1,389 @@
+/* 查询结果页 - 参考移动端标记结果样式 */
+.result-body {
+  margin: 0;
+  background: #eef2f6;
+}
+
+.result-app {
+  max-width: 30rem;
+  margin: 0 auto;
+  min-height: 100vh;
+  background: #eef2f6;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei',
+    sans-serif;
+  color: #333;
+  padding-bottom: 24px;
+}
+
+/* 顶部蓝色区域 */
+.result-hero {
+  position: relative;
+  z-index: 2;
+  background: linear-gradient(160deg, #2f8fe8 0%, #2b7fd9 55%, #256fc8 100%);
+  padding: 28px 16px 28px;
+  overflow: hidden;
+}
+
+.result-hero-bg {
+  position: absolute;
+  right: -20px;
+  bottom: -30px;
+  width: 160px;
+  height: 160px;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 120'%3E%3Ccircle cx='52' cy='52' r='32' fill='none' stroke='rgba(255,255,255,0.15)' stroke-width='8'/%3E%3Cline x1='76' y1='76' x2='98' y2='98' stroke='rgba(255,255,255,0.15)' stroke-width='8' stroke-linecap='round'/%3E%3C/svg%3E")
+    center/contain no-repeat;
+  pointer-events: none;
+}
+
+.result-hero-inner {
+  position: relative;
+  z-index: 1;
+  padding-right: 72px;
+}
+
+.result-hero-tip {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.95);
+  line-height: 1.5;
+}
+
+.result-hero-phone {
+  margin: 0 0 12px;
+  font-size: 32px;
+  font-weight: 700;
+  color: #f5a623;
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+
+.result-hero-count {
+  margin: 0;
+  font-size: 15px;
+  color: #fff;
+}
+
+.result-hero-count span {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f5a623;
+  margin: 0 4px;
+}
+
+/* 右侧悬浮按钮 */
+.result-float-actions {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-float-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 8px 10px;
+  border: none;
+  border-radius: 20px 0 0 20px;
+  background: #fff;
+  color: #111;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.result-float-label {
+  color: #111;
+  white-space: nowrap;
+}
+
+.result-float-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.result-float-icon svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+}
+
+.result-float-icon--wechat img,
+.result-float-icon--phone img {
+  display: block;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+
+/* 结果卡片区：从蓝框下方开始，不重叠 */
+.result-main {
+  padding: 14px 14px 0;
+  margin-top: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.result-loading[hidden],
+.result-error[hidden],
+.result-empty[hidden],
+.result-cards[hidden] {
+  display: none !important;
+}
+
+.result-loading,
+.result-error,
+.result-empty {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 15px;
+  color: #666;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.result-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e8eef8;
+  border-top-color: #3b71fe;
+  border-radius: 50%;
+  animation: result-spin 0.8s linear infinite;
+}
+
+.result-loading-tip {
+  display: block;
+  font-size: 12px;
+  color: #999;
+}
+
+@keyframes result-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.result-error {
+  color: #e53935;
+}
+
+.result-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.result-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.result-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.result-card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  object-fit: contain;
+  flex-shrink: 0;
+  background: #f5f5f5;
+  border: 1px solid #eee;
+}
+
+.result-card-icon--xiaomi {
+  width: 32px;
+  height: 32px;
+  border-radius: 22%;
+  object-fit: cover;
+  background: #ff6700;
+  border: none;
+}
+
+.result-card-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: #4caf50;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.result-card-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2b7fd9;
+}
+
+.result-card-row {
+  display: flex;
+  align-items: flex-start;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.result-card-label {
+  flex-shrink: 0;
+  color: #888;
+  margin-right: 4px;
+}
+
+.result-card-value {
+  color: #333;
+  word-break: break-all;
+}
+
+/* 底部 */
+.result-footer {
+  padding: 20px 14px 0;
+  text-align: center;
+}
+
+.result-back-btn {
+  width: 100%;
+  max-width: 100%;
+  padding: 14px 0;
+  border: none;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #3d9ef0 0%, #2b7fd9 100%);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(43, 127, 217, 0.35);
+}
+
+.result-back-btn:active {
+  opacity: 0.9;
+}
+
+.result-contact {
+  margin: 16px 0 12px;
+  font-size: 14px;
+  color: #666;
+}
+
+.result-contact a {
+  color: #2b7fd9;
+  text-decoration: none;
+}
+
+.result-qrcode {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.result-qrcode.highlight {
+  animation: qr-pulse 0.6s ease;
+}
+
+@keyframes qr-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+/* 客服微信弹窗 */
+body.wechat-modal-open {
+  overflow: hidden;
+}
+
+.wechat-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 20px;
+}
+
+.wechat-modal[hidden] {
+  display: none !important;
+}
+
+.wechat-modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 25, 45, 0.72);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.wechat-modal-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 320px);
+  background: #fff;
+  border-radius: 16px;
+  padding: 28px 24px 22px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.28);
+  text-align: center;
+  animation: wechat-modal-in 0.25s ease;
+}
+
+.wechat-modal-qr {
+  width: min(72vw, 240px);
+  height: min(72vw, 240px);
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+.wechat-modal-tip {
+  margin: 18px 0 0;
+  font-size: 15px;
+  color: #666;
+  line-height: 1.5;
+}
+
+@keyframes wechat-modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
