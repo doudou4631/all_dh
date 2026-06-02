@@ -159,14 +159,14 @@ WHERE NOT EXISTS (
 );
 
 -- =========================================================
--- 代理管理功能迁移：角色
+-- 标记业务管理功能迁移：角色
 -- =========================================================
 
 INSERT INTO `sys_role` (
   `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`,
   `status`, `del_flag`, `create_by`, `create_time`, `remark`
 )
-SELECT '迁移用户', 'user', 30, '2', 1, 1, '0', '0', 'admin', NOW(), 'M4迁移-用户角色'
+SELECT '标记用户（下单）', 'user', 30, '2', 1, 1, '0', '0', 'admin', NOW(), 'M4迁移-用户角色'
 WHERE NOT EXISTS (
   SELECT 1 FROM `sys_role` WHERE `role_key` = 'user'
 );
@@ -175,14 +175,24 @@ INSERT INTO `sys_role` (
   `role_name`, `role_key`, `role_sort`, `data_scope`, `menu_check_strictly`, `dept_check_strictly`,
   `status`, `del_flag`, `create_by`, `create_time`, `remark`
 )
-SELECT '迁移代理', 'agent', 31, '1', 1, 1, '0', '0', 'admin', NOW(), 'M4迁移-代理角色'
+SELECT '标记代理（处理）', 'agent', 31, '1', 1, 1, '0', '0', 'admin', NOW(), 'M4迁移-代理角色'
 WHERE NOT EXISTS (
   SELECT 1 FROM `sys_role` WHERE `role_key` = 'agent'
 );
 UPDATE `sys_role` SET `data_scope` = '1' WHERE `role_key` = 'agent';
+UPDATE `sys_role`
+SET `role_name` = '标记用户（下单）',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `role_key` = 'user';
+UPDATE `sys_role`
+SET `role_name` = '标记代理（处理）',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `role_key` = 'agent';
 
 -- =========================================================
--- 代理管理功能迁移：菜单与权限
+-- 标记业务管理功能迁移：菜单与权限
 -- =========================================================
 
 INSERT INTO `sys_menu` (
@@ -205,8 +215,8 @@ INSERT INTO `sys_menu` (
   `menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`,
   `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`, `remark`
 )
-SELECT 900100000001, '代理管理', 0, 8, 'mark', '', '', '',
-       1, 0, 'M', '0', '0', '', 'guide', 'admin', NOW(), '代理管理目录'
+SELECT 900100000001, '标记业务管理', 0, 8, 'mark', '', '', '',
+       1, 0, 'M', '0', '0', '', 'guide', 'admin', NOW(), '标记业务管理目录'
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000001);
 
 INSERT INTO `sys_menu` (
@@ -266,6 +276,21 @@ SELECT 900100000107, '审计看板', 900100000104, 4, 'audit', 'server/mark/admi
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100000107);
 
 UPDATE `sys_menu` SET `order_num` = 1 WHERE `menu_id` = 900100000108;
+UPDATE `sys_menu`
+SET `menu_name` = '标记业务管理',
+    `parent_id` = 0,
+    `order_num` = 8,
+    `path` = 'mark',
+    `component` = '',
+    `menu_type` = 'M',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = '',
+    `icon` = 'guide',
+    `update_by` = 'admin',
+    `update_time` = NOW(),
+    `remark` = '标记业务管理目录'
+WHERE `menu_id` = 900100000001;
 UPDATE `sys_menu`
 SET `menu_name` = '代理账户',
     `parent_id` = 900100000001,
@@ -403,9 +428,9 @@ LEFT JOIN `sys_role_menu` rm ON rm.role_id = r.role_id AND rm.menu_id = m.menu_i
 WHERE r.role_key = 'agent' AND rm.role_id IS NULL;
 
 -- =========================================================
--- M4 扩展（合并原 M9）：管理端核心功能平铺到“代理管理”二级菜单
+-- M4 扩展（合并原 M9）：管理端核心功能平铺到“标记业务管理”二级菜单
 -- 目标：
--- 1) 代理账户 / 治理规则 / 仲裁工单 / 审计看板 直接挂到 代理管理(900100000001) 下
+-- 1) 代理账户 / 治理规则 / 仲裁工单 / 审计看板 直接挂到 标记业务管理(900100000001) 下
 -- 2) admin 不显示：管理端目录、旧代理账户、代理处理、用户订单、用户钱包
 -- =========================================================
 SET @mark_root_menu_id := 900100000001;
@@ -507,6 +532,36 @@ SET `menu_name` = '审计看板',
     `update_time` = NOW(),
     `remark` = 'M4-审计看板二级菜单'
 WHERE `menu_id` = 900100000107;
+
+-- 标记业务管理保留 8 个二级菜单可见：
+-- 管理端：代理账户(900100000108) / 治理规则 / 仲裁工单 / 审计看板
+-- 代理端：代理处理(900100000103) / 代理账户(900100000109)
+-- 用户端：用户订单(900100000101) / 用户钱包(900100000102)
+UPDATE `sys_menu`
+SET `visible` = '1',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `parent_id` = @mark_root_menu_id
+  AND `menu_id` NOT IN (900100000108, 900100000105, 900100000106, 900100000107, 900100000103, 900100000109, 900100000101, 900100000102);
+
+UPDATE `sys_menu`
+SET `visible` = '0',
+    `status` = '0',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `menu_id` IN (900100000108, 900100000105, 900100000106, 900100000107);
+UPDATE `sys_menu`
+SET `visible` = '0',
+    `status` = '0',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `menu_id` IN (900100000103, 900100000109);
+UPDATE `sys_menu`
+SET `visible` = '0',
+    `status` = '0',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `menu_id` IN (900100000101, 900100000102);
 
 -- admin 角色补齐新二级菜单与功能点授权
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
@@ -703,7 +758,51 @@ INSERT INTO `sys_dict_data` (
   `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
   `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
 )
-SELECT 4, 'disabled_platforms', '联通管家', 'free_query_config',
+SELECT 4, 'daily_device_limit', '20', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '单设备每日免费查询次数上限'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'daily_device_limit'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 5, 'device_over_limit_msg', '当前设备今日免费查询次数已达上限，请明日再试。', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '单设备额度用尽提示文案'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'device_over_limit_msg'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 6, 'require_device_id', '0', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '是否强制要求携带设备标识（1是，0否）'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'require_device_id'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 7, 'require_device_id_msg', '当前设备标识缺失，请刷新页面后重试。', 'free_query_config',
+       '', 'default', 'N', '0', 'admin', NOW(), '强制设备标识时的提示文案'
+WHERE NOT EXISTS (
+  SELECT 1 FROM `sys_dict_data`
+  WHERE `dict_type` = 'free_query_config' AND `dict_label` = 'require_device_id_msg'
+);
+
+INSERT INTO `sys_dict_data` (
+  `dict_sort`, `dict_label`, `dict_value`, `dict_type`,
+  `css_class`, `list_class`, `is_default`, `status`, `create_by`, `create_time`, `remark`
+)
+SELECT 8, 'disabled_platforms', '联通管家', 'free_query_config',
        '', 'default', 'N', '0', 'admin', NOW(), '免费查询禁用平台名称，英文逗号分隔'
 WHERE NOT EXISTS (
   SELECT 1 FROM `sys_dict_data`
@@ -729,14 +828,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 
 -- =========================================================
 -- M7：新增独立一级“手机端”菜单，并将“免费查询/日志管理”迁移到其下（幂等）
--- 一级顺序：默认放在“代理管理”后一个顺位
+-- 一级顺序：默认放在“标记业务管理”后一个顺位
 -- =========================================================
 SET @root_parent_id := 0;
 SET @agent_order := (
   SELECT `order_num`
   FROM `sys_menu`
-  WHERE `menu_name` = '代理管理'
-    AND `parent_id` = 0
+  WHERE `menu_id` = 900100000001
   ORDER BY `menu_id`
   LIMIT 1
 );

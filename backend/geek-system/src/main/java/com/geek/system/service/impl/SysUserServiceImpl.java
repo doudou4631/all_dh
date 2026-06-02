@@ -5,6 +5,7 @@ import static com.geek.common.core.domain.entity.table.SysUserTableDef.*;
 import static com.geek.system.domain.table.SysPostTableDef.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -95,10 +96,44 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                             .select(SYS_DEPT.DEPT_ID)
                             .where(SqlUtil.findInSet(user.getDeptId().toString(), "ancestors")))));
         }
+        if (StringUtils.isNotBlank(user.getRoleKey())) {
+            List<Long> scopedUserIds = selectUserIdsByRoleKey(user.getRoleKey());
+            if (CollectionUtils.isEmpty(scopedUserIds)) {
+                queryChain.eq(SysUser::getUserId, -1L);
+            } else {
+                queryChain.in(SysUser::getUserId, scopedUserIds);
+            }
+        }
+        if (StringUtils.isNotBlank(user.getExcludeRoleKey())) {
+            List<Long> excludedUserIds = selectUserIdsByRoleKey(user.getExcludeRoleKey());
+            if (!CollectionUtils.isEmpty(excludedUserIds)) {
+                queryChain.notIn(SysUser::getUserId, excludedUserIds);
+            }
+        }
         if (!SecurityUtils.isAdmin() && SecurityUtils.hasRole("agent")) {
             queryChain.eq(SysUser::getCreateBy, SecurityUtils.getUsername());
         }
         return queryChain;
+    }
+
+    private List<Long> selectUserIdsByRoleKey(String roleKey) {
+        List<String> roleKeys = Arrays.stream(roleKey.split(","))
+                .map(String::trim)
+                .filter(StringUtils::isNotBlank)
+                .distinct()
+                .collect(Collectors.toList());
+        if (CollectionUtils.isEmpty(roleKeys)) {
+            return new ArrayList<>();
+        }
+        return QueryChain.of(SysUserRole.class)
+                .leftJoin(SysRole.class)
+                .on(SysUserRole::getRoleId, SysRole::getRoleId)
+                .in(SysRole::getRoleKey, roleKeys)
+                .list()
+                .stream()
+                .map(SysUserRole::getUserId)
+                .distinct()
+                .collect(Collectors.toList());
     }
 
     @Override

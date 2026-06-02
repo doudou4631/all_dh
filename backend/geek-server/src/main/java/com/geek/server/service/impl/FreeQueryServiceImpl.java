@@ -17,6 +17,7 @@ import com.geek.server.service.IUserPlatformUrlConfigService;
 import com.geek.server.service.IUserApiQueryRecordService;
 import com.geek.system.service.ISysDictTypeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -39,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class FreeQueryServiceImpl implements IFreeQueryService {
 
@@ -48,6 +50,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     private static final String DICT_KEY_DAILY_ALL_LIMIT = "daily_all_limit";
     private static final String DICT_KEY_DAILY_DEVICE_LIMIT = "daily_device_limit";
     private static final String DICT_KEY_DEVICE_OVER_LIMIT_MSG = "device_over_limit_msg";
+    private static final String DICT_KEY_REQUIRE_DEVICE_ID = "require_device_id";
+    private static final String DICT_KEY_REQUIRE_DEVICE_ID_MSG = "require_device_id_msg";
     /** \u514d\u8d39\u67e5\u8be2\u7981\u7528\u7684\u5e73\u53f0\u540d\u79f0\uff08\u82f1\u6587\u9017\u53f7\u5206\u9694\uff0c\u4e0e UserPlatformUrlConfig.platformName \u4e00\u81f4\uff09\uff1b\u672a\u914d\u7f6e\u5b57\u5178\u9879\u65f6\u9ed8\u8ba4\u7981\u7528\u8054\u901a\u7ba1\u5bb6 */
     private static final String DICT_KEY_DISABLED_PLATFORMS = "disabled_platforms";
     /** \u5b57\u5178\u672a\u914d\u7f6e disabled_platforms \u65f6\u7684\u9ed8\u8ba4\u7981\u7528\u5217\u8868 */
@@ -59,6 +63,9 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             "\u5f53\u524dIP\u4eca\u65e5\u514d\u8d39\u67e5\u8be2\u6b21\u6570\u5df2\u8fbe\u4e0a\u9650\uff0c\u8bf7\u6dfb\u52a0\u5ba2\u670d\u5fae\u4fe1\u67e5\u8be2\u3002";
     private static final String DEFAULT_DEVICE_OVER_LIMIT_MSG =
             "\u5f53\u524d\u8bbe\u5907\u4eca\u65e5\u514d\u8d39\u67e5\u8be2\u6b21\u6570\u5df2\u8fbe\u4e0a\u9650\uff0c\u8bf7\u660e\u65e5\u518d\u8bd5\u3002";
+    private static final String DEFAULT_REQUIRE_DEVICE_ID_MSG =
+            "\u5f53\u524d\u8bbe\u5907\u6807\u8bc6\u7f3a\u5931\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5\u3002";
+    private static final boolean DEFAULT_REQUIRE_DEVICE_ID = false;
     private static final int DEFAULT_DAILY_LIMIT = 20;
     private static final int DEFAULT_DAILY_ALL_LIMIT = 2000;
     private static final int MAX_DEVICE_ID_LENGTH = 128;
@@ -82,6 +89,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         QuotaCounter counter = currentCounter(ip, config.dailyLimit());
         Map<String, Object> quota = buildQuota(ip, config.dailyLimit(), counter.used());
         quota.put("deviceLimit", config.dailyDeviceLimit());
+        quota.put("deviceRequired", config.requireDeviceId());
         quota.put("disabledPlatforms", loadFreeQueryDisabledPlatformNames());
         if (config.dailyAllLimit() < DEFAULT_DAILY_ALL_LIMIT) {
             int allUsed = getCounter(buildGlobalDailyCounterKey());
@@ -97,19 +105,35 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     public Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip) {
         DictConfig config = loadDictConfig();
         String phone = normalizePhone(request != null ? request.getPhone() : null);
-        String deviceId = normalizeDeviceId(request != null ? request.getDeviceId() : null, ip);
+        NormalizedDeviceId normalizedDeviceId = normalizeDeviceId(request != null ? request.getDeviceId() : null, ip);
+        String deviceId = normalizedDeviceId.value();
         validatePhone(phone);
         List<String> disabledPlatformNames = loadFreeQueryDisabledPlatformNames();
+        if (normalizedDeviceId.usedIpFallback()) {
+            log.warn("free_query missing client deviceId, fallback to ip-based deviceId. ip={}, phone={}, deviceId={}",
+                    ip, phone, deviceId);
+        }
+        if (config.requireDeviceId() && normalizedDeviceId.usedIpFallback()) {
+            QuotaCounter deviceCounter = currentDeviceCounter(deviceId, config.dailyDeviceLimit());
+            saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceCounter.used(), deviceCounter.used(),
+                    config.requireDeviceIdMsg(), deviceId, null, normalizedDeviceId.deviceSource());
+            Map<String, Object> fail = new HashMap<>();
+            fail.put("code", 42903);
+            fail.put("message", config.requireDeviceIdMsg());
+            fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(),
+                    currentCounter(ip, config.dailyLimit()).used(), disabledPlatformNames, config));
+            return fail;
+        }
 
         CounterDecision globalDecision = reserveGlobalSlotIfNeeded(config.dailyAllLimit());
         if (!globalDecision.allowed()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyAllLimit(), globalDecision.usedBefore(),
-                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null);
+                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null, normalizedDeviceId.deviceSource());
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42902);
             fail.put("message", ALL_LIMIT_MSG);
             fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(),
-                    currentCounter(ip, config.dailyLimit()).used(), disabledPlatformNames));
+                    currentCounter(ip, config.dailyLimit()).used(), disabledPlatformNames, config));
             return fail;
         }
 
@@ -117,11 +141,11 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (!decision.allowed()) {
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    config.overLimitMsg(), deviceId, null);
+                    config.overLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource());
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.overLimitMsg());
-            fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames));
+            fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames, config));
             return fail;
         }
 
@@ -130,12 +154,12 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             rollbackIpOne(ip);
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceDecision.usedBefore(), deviceDecision.usedAfter(),
-                    config.deviceOverLimitMsg(), deviceId, null);
+                    config.deviceOverLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource());
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.deviceOverLimitMsg());
             fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(),
-                    currentCounter(ip, config.dailyLimit()).used(), disabledPlatformNames));
+                    currentCounter(ip, config.dailyLimit()).used(), disabledPlatformNames, config));
             return fail;
         }
 
@@ -158,11 +182,11 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 .toList();
         if (enabledPlatforms.isEmpty()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    "\u6682\u65e0\u53ef\u7528\u5e73\u53f0", deviceId, taskId);
+                    "\u6682\u65e0\u53ef\u7528\u5e73\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource());
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 500);
             fail.put("message", "\u6682\u65e0\u53ef\u7528\u5e73\u53f0");
-            fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames));
+            fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames, config));
             return fail;
         }
 
@@ -195,7 +219,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
         long costMs = System.currentTimeMillis() - start;
         saveIpLog(ip, phone, "0", costMs, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                "\u67e5\u8be2\u6210\u529f", deviceId, taskId);
+                "\u67e5\u8be2\u6210\u529f", deviceId, taskId, normalizedDeviceId.deviceSource());
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", taskId);
@@ -207,7 +231,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         ok.put("code", 0);
         ok.put("message", "\u67e5\u8be2\u6210\u529f");
         ok.put("data", data);
-        ok.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames));
+        ok.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames, config));
         return ok;
     }
 
@@ -264,15 +288,17 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         return val.replaceAll("[^\\d]", "");
     }
 
-    private String normalizeDeviceId(String value, String ip) {
+    private NormalizedDeviceId normalizeDeviceId(String value, String ip) {
         String normalized = StringUtils.isEmpty(value) ? "" : value.trim().replaceAll("\\s+", "");
+        boolean usedIpFallback = false;
         if (StringUtils.isEmpty(normalized)) {
             normalized = "ip#" + ip;
+            usedIpFallback = true;
         }
         if (normalized.length() > MAX_DEVICE_ID_LENGTH) {
             normalized = normalized.substring(0, MAX_DEVICE_ID_LENGTH);
         }
-        return normalized;
+        return new NormalizedDeviceId(normalized, usedIpFallback, usedIpFallback ? "ip-fallback" : "client");
     }
 
     private String appendIpToRequestParams(String requestParams, String ip) {
@@ -281,7 +307,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     }
 
     private void saveIpLog(String ip, String phone, String requestStatus, Long requestTime, int limit, int usedBefore,
-                           int usedAfter, String message, String deviceId, String taskId) {
+                           int usedAfter, String message, String deviceId, String taskId, String deviceSource) {
         UserApiQueryRecord row = new UserApiQueryRecord();
         row.setQueryType("9");
         row.setPlatformId(0L);
@@ -294,7 +320,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         row.setCreateTime(new Date());
         row.setTaskId(taskId);
         row.setResults(message);
-        row.setRequestParams("ip=" + ip + ", deviceId=" + deviceId + ", limit=" + limit + ", usedBefore=" + usedBefore + ", usedAfter=" + usedAfter);
+        row.setRequestParams("ip=" + ip + ", deviceId=" + deviceId + ", deviceSource=" + deviceSource
+                + ", limit=" + limit + ", usedBefore=" + usedBefore + ", usedAfter=" + usedAfter);
         row.setResponseResult(message);
         userApiQueryRecordService.insertUserApiQueryRecord(row);
     }
@@ -324,13 +351,16 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         List<SysDictData> dicts = dictTypeService.selectDictDataByType(DICT_TYPE_FREE_QUERY_CONFIG);
         if (dicts == null) {
             return new DictConfig(DEFAULT_DAILY_LIMIT, DEFAULT_OVER_LIMIT_MSG, DEFAULT_DAILY_ALL_LIMIT,
-                    DEFAULT_DAILY_LIMIT, DEFAULT_DEVICE_OVER_LIMIT_MSG);
+                    DEFAULT_DAILY_LIMIT, DEFAULT_DEVICE_OVER_LIMIT_MSG, DEFAULT_REQUIRE_DEVICE_ID,
+                    DEFAULT_REQUIRE_DEVICE_ID_MSG);
         }
         String dailyLimitRaw = findDictValue(dicts, DICT_KEY_DAILY_LIMIT);
         String dailyAllLimitRaw = findDictValue(dicts, DICT_KEY_DAILY_ALL_LIMIT);
         String dailyDeviceLimitRaw = findDictValue(dicts, DICT_KEY_DAILY_DEVICE_LIMIT);
         String overLimitMsg = findDictValue(dicts, DICT_KEY_OVER_LIMIT_MSG);
         String deviceOverLimitMsg = findDictValue(dicts, DICT_KEY_DEVICE_OVER_LIMIT_MSG);
+        String requireDeviceIdRaw = findDictValue(dicts, DICT_KEY_REQUIRE_DEVICE_ID);
+        String requireDeviceIdMsg = findDictValue(dicts, DICT_KEY_REQUIRE_DEVICE_ID_MSG);
         int dailyLimit = DEFAULT_DAILY_LIMIT;
         try {
             if (StringUtils.isNotEmpty(dailyLimitRaw)) {
@@ -367,7 +397,12 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (StringUtils.isEmpty(deviceOverLimitMsg)) {
             deviceOverLimitMsg = DEFAULT_DEVICE_OVER_LIMIT_MSG;
         }
-        return new DictConfig(dailyLimit, overLimitMsg, dailyAllLimit, dailyDeviceLimit, deviceOverLimitMsg);
+        if (StringUtils.isEmpty(requireDeviceIdMsg)) {
+            requireDeviceIdMsg = DEFAULT_REQUIRE_DEVICE_ID_MSG;
+        }
+        boolean requireDeviceId = parseDictBoolean(requireDeviceIdRaw, DEFAULT_REQUIRE_DEVICE_ID);
+        return new DictConfig(dailyLimit, overLimitMsg, dailyAllLimit, dailyDeviceLimit, deviceOverLimitMsg,
+                requireDeviceId, requireDeviceIdMsg);
     }
 
     private String findDictValue(List<SysDictData> dicts, String key) {
@@ -380,6 +415,22 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 .map(SysDictData::getDictValue)
                 .findFirst()
                 .orElse(null);
+    }
+
+    private boolean parseDictBoolean(String raw, boolean defaultValue) {
+        if (StringUtils.isEmpty(raw)) {
+            return defaultValue;
+        }
+        String normalized = raw.trim().toLowerCase();
+        if ("1".equals(normalized) || "true".equals(normalized) || "yes".equals(normalized)
+                || "y".equals(normalized) || "on".equals(normalized)) {
+            return true;
+        }
+        if ("0".equals(normalized) || "false".equals(normalized) || "no".equals(normalized)
+                || "n".equals(normalized) || "off".equals(normalized)) {
+            return false;
+        }
+        return defaultValue;
     }
 
     /**
@@ -471,6 +522,13 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         return new QuotaCounter(used, remaining);
     }
 
+    private QuotaCounter currentDeviceCounter(String deviceId, int limit) {
+        String key = buildDailyDeviceCounterKey(deviceId);
+        int used = getCounter(key);
+        int remaining = Math.max(0, limit - used);
+        return new QuotaCounter(used, remaining);
+    }
+
     private int getCounter(String key) {
         Integer count = CacheUtils.get(CacheConstants.RATE_LIMIT_KEY, key, Integer.class);
         return count == null ? 0 : count;
@@ -517,8 +575,19 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         return quota;
     }
 
+    private Map<String, Object> withDisabledPlatformsQuota(String ip, int limit, int used,
+                                                           List<String> disabledPlatformNames, DictConfig config) {
+        Map<String, Object> quota = withDisabledPlatformsQuota(ip, limit, used, disabledPlatformNames);
+        quota.put("deviceLimit", config.dailyDeviceLimit());
+        quota.put("deviceRequired", config.requireDeviceId());
+        return quota;
+    }
+
     private record DictConfig(int dailyLimit, String overLimitMsg, int dailyAllLimit,
-                              int dailyDeviceLimit, String deviceOverLimitMsg) {}
+                              int dailyDeviceLimit, String deviceOverLimitMsg,
+                              boolean requireDeviceId, String requireDeviceIdMsg) {}
+
+    private record NormalizedDeviceId(String value, boolean usedIpFallback, String deviceSource) {}
 
     private record CounterDecision(boolean allowed, int usedBefore, int usedAfter) {}
 

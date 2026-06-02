@@ -355,6 +355,15 @@ async function doQuery() {
       await loadQuota()
       return
     }
+    if (res?.code === 42903) {
+      window.alert(res?.msg || '当前设备标识缺失，请刷新页面后重试。')
+      setMsg(res?.msg || '查询失败', 'err')
+      lastQueryResults.value = []
+      hadSuccessfulFreeQuery.value = false
+      renderRows(buildPlatformMap([]))
+      await loadQuota()
+      return
+    }
     const okCode = Number(res?.code)
     if (okCode !== 200 && okCode !== 0) {
       setMsg(res?.msg || '查询失败', 'err')

@@ -338,10 +338,12 @@ import { listTemplate } from "@/api/server/template";
 import { listPlatformConfig } from "@/api/server/platformConfig";
 
 const router = useRouter();
+const route = useRoute();
 const { proxy } = getCurrentInstance();
 const { sys_normal_disable, sys_user_sex } = proxy.useDict("sys_normal_disable", "sys_user_sex");
 const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
 const isAgent = computed(() => proxy.$auth.hasRole('agent'));
+const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
 
 const userList = ref([]);
 const open = ref(false);
@@ -433,7 +435,9 @@ const data = reactive({
       userName: undefined,
       phonenumber: undefined,
       status: undefined,
-      deptId: undefined
+      deptId: undefined,
+      roleKey: undefined,
+      excludeRoleKey: undefined
    },
    rules: {
       userName: [{ required: true, message: "用户名称不能为空", trigger: "blur" }, { min: 2, max: 20, message: "用户名称长度必须介于 2 和 20 之间", trigger: "blur" }],
@@ -449,6 +453,31 @@ const data = reactive({
 });
 
 const { queryParams, form, rules } = toRefs(data);
+
+function applyAccountScope() {
+   if (isAgentAccountPage.value) {
+      queryParams.value.roleKey = "user,agent";
+      queryParams.value.excludeRoleKey = undefined;
+      return;
+   }
+   queryParams.value.roleKey = undefined;
+   queryParams.value.excludeRoleKey = "agent";
+}
+
+function getDefaultAgentDownstreamRoleIds() {
+   if (!(isAgentAccountPage.value && isAgent.value)) {
+      return [];
+   }
+   const userRole = roleOptions.value.find(item => item.roleKey === "user" && item.status === "0");
+   if (userRole && userRole.roleId !== undefined && userRole.roleId !== null) {
+      return [userRole.roleId];
+   }
+   const commonRole = roleOptions.value.find(item => item.roleKey === "common" && item.status === "0");
+   if (commonRole && commonRole.roleId !== undefined && commonRole.roleId !== null) {
+      return [commonRole.roleId];
+   }
+   return [];
+}
 
 /** 通过条件过滤节点  */
 const filterNode = (value, data) => {
@@ -468,6 +497,7 @@ function getDeptTree() {
 /** 查询用户列表 */
 function getList() {
    loading.value = true;
+   applyAccountScope();
    listUser(proxy.addDateRange(queryParams.value, dateRange.value)).then(res => {
       loading.value = false;
       userList.value = res.rows;
@@ -504,6 +534,7 @@ function handleDelete(row) {
 };
 /** 导出按钮操作 */
 function handleExport() {
+   applyAccountScope();
    proxy.download("system/user/export", {
       ...queryParams.value,
    }, `user_${new Date().getTime()}.xlsx`);
@@ -789,6 +820,10 @@ function handleAdd() {
    getUser().then(response => {
       postOptions.value = response.posts;
       roleOptions.value = response.roles;
+      const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
+      if (defaultRoleIds.length > 0) {
+         form.value.roleIds = defaultRoleIds;
+      }
       open.value = true;
       title.value = "添加用户";
       form.value.password = initPassword.value;
@@ -813,6 +848,12 @@ function handleUpdate(row) {
 function submitForm() {
    proxy.$refs["userRef"].validate(valid => {
       if (valid) {
+         if (form.value.userId == undefined && isAgentAccountPage.value && isAgent.value && (!Array.isArray(form.value.roleIds) || form.value.roleIds.length === 0)) {
+            const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
+            if (defaultRoleIds.length > 0) {
+               form.value.roleIds = defaultRoleIds;
+            }
+         }
          if (form.value.userId != undefined) {
             updateUser(form.value).then(response => {
                proxy.$modal.msgSuccess("修改成功");

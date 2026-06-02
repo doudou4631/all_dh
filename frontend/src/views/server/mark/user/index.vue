@@ -4,14 +4,28 @@
     <el-card shadow="never" class="platform-card">
 
       <el-empty v-if="platformOptions.length === 0" description="当前未配置可用平台" />
+      <div v-else class="platform-layout">
+        <el-tabs
+          v-model="activePlatformCode"
+          tab-position="left"
+          class="platform-nav-tabs"
+          @tab-change="handlePlatformTabChange"
+        >
+          <el-tab-pane
+            v-for="item in platformOptions"
+            :key="item.platformCode"
+            :label="item.platformName"
+            :name="item.platformCode"
+          />
+        </el-tabs>
 
-      <el-tabs
-        v-else
-        v-model="activeSubTab"
-        class="sub-tabs"
-      >
-        <el-tab-pane :label="`${activePlatformName} - 提交号码`" name="submit">
-          <div class="submit-pane">
+        <div class="platform-main">
+          <el-tabs
+            v-model="activeSubTab"
+            class="sub-tabs"
+          >
+            <el-tab-pane :label="`${activePlatformName} - 提交号码`" name="submit">
+              <div class="submit-pane">
             <h3 class="submit-title">{{ activePlatformName }} - 提交号码</h3>
 
             <div class="submit-tip">
@@ -117,10 +131,10 @@
               </div>
             </div>
           </div>
-        </el-tab-pane>
+            </el-tab-pane>
 
-        <el-tab-pane :label="`${activePlatformName} - 任务记录`" name="record">
-          <el-card shadow="never" body-class="search-card" class="record-search-card">
+            <el-tab-pane :label="`${activePlatformName} - 任务记录`" name="record">
+              <el-card shadow="never" body-class="search-card" class="record-search-card">
             <el-form ref="queryRef" :model="queryParams" :inline="true" v-show="showSearch" label-width="84px">
               <el-form-item label="订单号" prop="orderNo">
                 <el-input v-model="queryParams.orderNo" placeholder="请输入订单号" clearable @keyup.enter="handleQuery" />
@@ -199,8 +213,10 @@
             v-model:limit="queryParams.pageSize"
             @pagination="getList"
           />
-        </el-tab-pane>
-      </el-tabs>
+            </el-tab-pane>
+          </el-tabs>
+        </div>
+      </div>
     </el-card>
     <el-dialog
       v-model="precheckDialogVisible"
@@ -741,6 +757,42 @@ onMounted(async () => {
 .mb10 {
   margin-bottom: 10px;
 }
+.platform-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.platform-nav-tabs {
+  flex: 0 0 220px;
+  max-width: 220px;
+}
+
+.platform-nav-tabs :deep(.el-tabs__header) {
+  margin: 0;
+}
+
+.platform-nav-tabs :deep(.el-tabs__content) {
+  display: none;
+}
+
+.platform-nav-tabs :deep(.el-tabs__nav-wrap::after) {
+  display: none;
+}
+
+.platform-nav-tabs :deep(.el-tabs__item) {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  line-height: 20px;
+  height: auto;
+  padding: 10px 12px;
+}
+
+.platform-main {
+  flex: 1;
+  min-width: 0;
+}
 
 
 .sub-tabs {
@@ -826,6 +878,18 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .platform-layout {
+    display: block;
+  }
+
+  .platform-nav-tabs {
+    max-width: none;
+    margin-bottom: 12px;
+  }
+
+  .platform-nav-tabs :deep(.el-tabs__header) {
+    margin-bottom: 0;
+  }
   .submit-actions,
   .result-toolbar {
     flex-wrap: wrap;

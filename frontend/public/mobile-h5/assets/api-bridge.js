@@ -15,6 +15,46 @@
 
   var APPEAL_TEXT =
     '泰迪熊：普通标记申诉后6小时生效（30天内二次处理会驳回）；提示10个工作日要暂停拨号；腾讯管家：审核1-3个工作日（期间暂停外呼）；360卫士：三个月内只能处理一次';
+  var FREE_QUERY_DEVICE_ID_STORAGE_KEY = 'free_query_device_id';
+
+  function createRandomDeviceId() {
+    var byCrypto = '';
+    try {
+      if (typeof crypto !== 'undefined' && crypto && typeof crypto.randomUUID === 'function') {
+        byCrypto = crypto.randomUUID();
+      }
+    } catch (error) {
+      byCrypto = '';
+    }
+    if (byCrypto) {
+      return 'fq_' + byCrypto.replace(/-/g, '');
+    }
+    return 'fq_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 12);
+  }
+
+  function getOrCreateDeviceId() {
+    if (typeof window === 'undefined') {
+      return createRandomDeviceId();
+    }
+    try {
+      var exists = window.localStorage.getItem(FREE_QUERY_DEVICE_ID_STORAGE_KEY);
+      if (exists && exists.trim()) {
+        return exists.trim();
+      }
+      var created = createRandomDeviceId();
+      window.localStorage.setItem(FREE_QUERY_DEVICE_ID_STORAGE_KEY, created);
+      return created;
+    } catch (error) {
+      return createRandomDeviceId();
+    }
+  }
+
+  function buildSingleQueryPayload(phone) {
+    return {
+      phone: String(phone || '').trim(),
+      deviceId: getOrCreateDeviceId()
+    };
+  }
 
   function parseStatus(item) {
     if (item && typeof item.error === 'string' && item.error.trim()) {
@@ -46,7 +86,7 @@
   }
 
   function transformSearchResponse(resp) {
-    if (resp.code === 42901 || resp.code === 42902) {
+    if (resp.code === 42901 || resp.code === 42902 || resp.code === 42903) {
       return { code: 1, msg: resp.msg || '查询失败' };
     }
     if (resp.code !== 200 && resp.code !== 0) {
@@ -114,9 +154,9 @@
       requestJson(
         API_BASE + 'server/freeQuery/single',
         'POST',
-        { phone: String(phone || '').trim() },
+        buildSingleQueryPayload(phone),
         function (resp) {
-          if (resp.code === 42901 || resp.code === 42902) {
+          if (resp.code === 42901 || resp.code === 42902 || resp.code === 42903) {
             callback(resp.msg || '查询次数已达上限');
             return;
           }
@@ -176,7 +216,7 @@
         requestJson(
           base + 'server/freeQuery/single',
           'POST',
-          { phone: String(data.phone || '').trim() },
+          buildSingleQueryPayload(data.phone),
           function (resp) {
             success && success(transformSearchResponse(resp));
           },

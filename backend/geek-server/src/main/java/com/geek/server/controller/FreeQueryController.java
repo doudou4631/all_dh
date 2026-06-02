@@ -66,6 +66,11 @@ public class FreeQueryController extends BaseController {
                 rsp.put("quota", result.get("quota"));
                 return rsp;
             }
+            if (code != null && code == 42903) {
+                AjaxResult rsp = AjaxResult.error(42903, String.valueOf(result.get("message")));
+                rsp.put("quota", result.get("quota"));
+                return rsp;
+            }
             if (code != null && code != 0) {
                 AjaxResult rsp = AjaxResult.error(String.valueOf(result.get("message")));
                 rsp.put("quota", result.get("quota"));

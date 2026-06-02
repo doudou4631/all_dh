@@ -195,7 +195,7 @@ sudo tail -n 120 /var/log/nginx/error.log
 ```
 ### 5.4 菜单与权限验收（涉及菜单/权限 SQL 时必做）
 ```bash
-# 一级菜单名称是否正确（当前应为“代理管理”）
+# 一级菜单名称是否正确（当前应为“标记业务管理”）
 sudo mysql -N -D verifynum -e "SELECT menu_id,menu_name FROM sys_menu WHERE menu_id=900100000001;"
 
 # admin 角色菜单数量是否异常偏少（若只剩十几条通常说明被误删）

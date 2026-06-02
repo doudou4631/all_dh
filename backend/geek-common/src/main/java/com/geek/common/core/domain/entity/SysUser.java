@@ -150,6 +150,16 @@ public class SysUser extends BaseEntity {
     @Column(ignore = true)
     private Long roleId;
 
+    /** 角色标识（查询用） */
+    @Schema(title = "角色标识（查询用）")
+    @Column(ignore = true)
+    private String roleKey;
+
+    /** 排除角色标识（查询用） */
+    @Schema(title = "排除角色标识（查询用）")
+    @Column(ignore = true)
+    private String excludeRoleKey;
+
     public boolean isAdmin() {
         return SecurityUtils.isAdmin(this.userId);
     }
