@@ -10,6 +10,7 @@ import { constantRoutes } from '@/router/routes/staticRoutes'
 import { dynamicRoutes } from '@/router/routes/asyncRoutes'
 import { deepClone } from '@/utils'
 import { getRouters } from '@/api/login'
+import { listMarkUserPlatformPrice } from '@/api/server/markUser'
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob(['../../**/views/**/*.vue', '../../**/view/**/*.vue'])
@@ -21,6 +22,127 @@ interface PermissionState {
   defaultRoutes: RouteItem[]
   topbarRouters: RouteItem[]
   sidebarRouters: RouteItem[]
+}
+
+interface MarkPlatformOption {
+  platformCode: string
+  platformName: string
+}
+
+function parseRouteQuery(query: unknown): Record<string, any> {
+  if (!query) return {}
+  if (typeof query === 'string') {
+    try {
+      return JSON.parse(query)
+    } catch (e) {
+      return {}
+    }
+  }
+  if (typeof query === 'object') {
+    return query as Record<string, any>
+  }
+  return {}
+}
+
+function normalizeMarkPlatformOptions(rawList: unknown): MarkPlatformOption[] {
+  if (!Array.isArray(rawList)) return []
+  const seen = new Set<string>()
+  const result: MarkPlatformOption[] = []
+  rawList.forEach((item: any) => {
+    const platformCode = String(item?.platformCode || '').trim()
+    if (!platformCode || seen.has(platformCode)) return
+    seen.add(platformCode)
+    const platformName = String(item?.platformName || platformCode).trim() || platformCode
+    result.push({ platformCode, platformName })
+  })
+  return result
+}
+
+function isMarkUserPlatformRoute(route: RouteItem): boolean {
+  return typeof route.component === 'string' && route.component === 'server/mark/user/index'
+}
+
+function getPlatformCodeFromRoute(route: RouteItem): string {
+  const query = parseRouteQuery(route.query)
+  return String(query?.platformCode || '').trim()
+}
+
+function buildMarkUserPath(index: number, fallbackPath = 'markUser'): string {
+  if (index === 0 && fallbackPath) return String(fallbackPath)
+  return `markUser${index + 1}`
+}
+
+function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatformOption[]): RouteItem[] {
+  if (!Array.isArray(children) || children.length === 0) return children
+  const markChildren = children.filter(item => isMarkUserPlatformRoute(item))
+  if (markChildren.length === 0) {
+    return children.map(item => ({
+      ...item,
+      children: item.children ? rewriteMarkUserChildren(item.children, platformList) : item.children
+    }))
+  }
+  const baseRoute = markChildren[0]
+  const existingByCode = new Map<string, RouteItem>()
+  const existingPaths = new Set<string>()
+  markChildren.forEach(item => {
+    const code = getPlatformCodeFromRoute(item)
+    if (code) existingByCode.set(code, item)
+    if (item.path) existingPaths.add(String(item.path))
+  })
+
+  const rewrittenMarkChildren: RouteItem[] = platformList.map((platform, index) => {
+    const source = existingByCode.get(platform.platformCode) || baseRoute
+    const existing = existingByCode.get(platform.platformCode)
+    const cloned = deepClone(source)
+    const pathFallback = typeof source.path === 'string' && source.path ? source.path : 'markUser'
+    const basePath = buildMarkUserPath(index, pathFallback)
+    let newPath = existing?.path || basePath
+    let suffix = 1
+    while (existingPaths.has(String(newPath)) && !existing) {
+      newPath = `${basePath}-${suffix}`
+      suffix += 1
+    }
+    existingPaths.add(String(newPath))
+    cloned.path = String(newPath)
+    cloned.query = JSON.stringify({
+      platformCode: platform.platformCode,
+      platformName: platform.platformName
+    })
+    cloned.meta = {
+      ...(cloned.meta || {}),
+      title: platform.platformName
+    }
+    return cloned
+  })
+
+  const rewrittenChildren: RouteItem[] = []
+  let injected = false
+  children.forEach(item => {
+    if (isMarkUserPlatformRoute(item)) {
+      if (!injected) {
+        rewrittenChildren.push(...rewrittenMarkChildren)
+        injected = true
+      }
+      return
+    }
+    rewrittenChildren.push({
+      ...item,
+      children: item.children ? rewriteMarkUserChildren(item.children, platformList) : item.children
+    })
+  })
+  return rewrittenChildren
+}
+
+async function rewriteMarkUserRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
+  if (!Array.isArray(routes) || routes.length === 0) return routes
+  try {
+    const resp: any = await listMarkUserPlatformPrice()
+    const platformList = normalizeMarkPlatformOptions(resp?.data)
+    if (platformList.length === 0) return routes
+    return rewriteMarkUserChildren(routes, platformList)
+  } catch (e) {
+    return routes
+  }
 }
 
 /**
@@ -64,9 +186,10 @@ const usePermissionStore = defineStore(
       generateRoutes(): Promise<RouteItem[]> {
         return new Promise(resolve => {
           // 向后端请求路由数据
-          getRouters().then(res => {
-            const sidebarRoutes = constantRoutes.concat(filterAsyncRouter(deepClone(res.data)))
-            const rewriteRoutes = filterAsyncRouter(deepClone(res.data), true)
+          getRouters().then(async res => {
+            const routeData = await rewriteMarkUserRoutesByTemplate(deepClone(res.data))
+            const sidebarRoutes = constantRoutes.concat(filterAsyncRouter(deepClone(routeData)))
+            const rewriteRoutes = filterAsyncRouter(deepClone(routeData), true)
             const asyncRoutes = filterDynamicRoutes(dynamicRoutes)
             asyncRoutes.forEach(route => { router.addRoute(route) })
             this.setRoutes(rewriteRoutes)

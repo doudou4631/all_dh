@@ -35,10 +35,25 @@
         <el-table-column type="selection" width="55" align="center" />
         <el-table-column label="ID" prop="id" width="80" align="center" />
         <el-table-column label="模板名称" prop="templateName" min-width="180" show-overflow-tooltip />
+        <el-table-column label="默认模板" width="130" align="center">
+          <template #default="scope">
+            <el-tag v-if="isDefaultFlag(scope.row.isDefault)" type="success" size="small">默认</el-tag>
+            <el-button
+              v-else-if="canEditTemplate"
+              link
+              type="primary"
+              :loading="defaultUpdatingId === scope.row.id"
+              @click="handleSetDefault(scope.row)"
+            >
+              设为默认
+            </el-button>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column label="平台范围" min-width="300" show-overflow-tooltip>
           <template #default="scope">
             <el-tag v-for="item in parseTemplatePlatforms(scope.row.templateInfo)" :key="item.code" size="small" style="margin-right: 6px; margin-bottom: 4px;">
-              {{ item.name || platformNameMap[item.code] || item.code }}
+              {{ item.name || platformNameMap[item.code] || item.code }}（{{ item.unitPrice }}分）
             </el-tag>
             <span v-if="parseTemplatePlatforms(scope.row.templateInfo).length === 0">-</span>
           </template>
@@ -105,9 +120,43 @@
               clearable
               @keyup.enter="handleAddCustomPlatform"
             />
+            <el-input-number
+              v-model="customPlatformForm.unitPrice"
+              :min="1"
+              :step="1"
+              :precision="0"
+              controls-position="right"
+            />
             <el-button type="primary" plain icon="Plus" @click="handleAddCustomPlatform">新增平台</el-button>
           </div>
-          <div class="platform-custom-tip">新增平台会加入当前模板候选并自动勾选。</div>
+          <div class="platform-custom-tip">新增平台会加入当前模板候选并自动勾选，且可设置每号码扣积分。</div>
+          <div v-if="selectedPlatformCodes.length > 0" class="platform-unit-editor">
+            <div v-for="code in selectedPlatformCodes" :key="`unit-${code}`" class="platform-unit-row">
+              <el-input
+                v-model="platformDisplayNameMap[code]"
+                class="platform-unit-name-input"
+                placeholder="平台展示名称"
+                maxlength="64"
+              />
+              <el-input-number
+                v-model="platformUnitPriceMap[code]"
+                :min="1"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+              />
+              <span class="platform-unit-suffix">积分/号码</span>
+              <el-button
+                v-if="canRemoveCustomOption(code)"
+                link
+                type="danger"
+                class="platform-unit-remove"
+                @click.stop.prevent="handleRemoveCustomPlatform(code)"
+              >
+                移除
+              </el-button>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item label="状态" prop="status">
           <el-radio-group v-model="form.status">
@@ -133,15 +182,18 @@ import { addMarkTemplate, delMarkTemplate, getMarkTemplate, listMarkPlatformOpti
 
 const { proxy } = getCurrentInstance()
 const { sys_normal_disable } = proxy.useDict('sys_normal_disable')
+const canEditTemplate = computed(() => proxy.$auth.hasPermi('server:markTemplate:edit'))
 
 const platformOptions = ref([])
 const platformNameMap = ref({})
-const systemPlatformCodes = ref([])
+const platformSystemMap = ref({})
 const customPlatformForm = reactive({
   code: '',
-  name: ''
+  name: '',
+  unitPrice: 1
 })
-const customAddedPlatformCodes = ref([])
+const platformUnitPriceMap = reactive({})
+const platformDisplayNameMap = reactive({})
 
 const showSearch = ref(true)
 const loading = ref(false)
@@ -153,6 +205,7 @@ const multiple = ref(true)
 const open = ref(false)
 const title = ref('')
 const selectedPlatformCodes = ref([])
+const defaultUpdatingId = ref(null)
 
 const data = reactive({
   queryParams: {
@@ -165,6 +218,7 @@ const data = reactive({
     id: null,
     templateName: '',
     templateInfo: '',
+    isDefault: '0',
     status: '0',
     remark: ''
   },
@@ -175,6 +229,15 @@ const data = reactive({
 })
 
 const { queryParams, form, rules } = toRefs(data)
+function normalizeUnitPrice(value, fallback = 1) {
+  const num = Number(value)
+  if (!Number.isFinite(num) || num <= 0) return fallback
+  return Math.max(1, Math.floor(num))
+}
+function isDefaultFlag(value) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  return normalized === '1' || normalized === 'true'
+}
 
 function parseTemplatePlatforms(templateInfo) {
   if (!templateInfo) return []
@@ -185,13 +248,18 @@ function parseTemplatePlatforms(templateInfo) {
     arr.forEach((item) => {
       const code = String(typeof item === 'string' ? item : item?.platformCode || item?.code || item?.value || '').trim()
       const name = String(typeof item === 'object' ? item?.platformName || item?.name || item?.label || '' : '').trim()
+      const unitPrice = normalizeUnitPrice(typeof item === 'object' ? item?.unitPrice : 1, 1)
       if (!code) return
       if (!seen.has(code)) {
-        seen.set(code, { code, name })
+        seen.set(code, { code, name, unitPrice })
         return
       }
-      if (!seen.get(code).name && name) {
-        seen.set(code, { code, name })
+      const current = seen.get(code)
+      if (!current.name && name) {
+        current.name = name
+      }
+      if (!current.unitPrice || current.unitPrice <= 0) {
+        current.unitPrice = unitPrice
       }
     })
     return Array.from(seen.values())
@@ -199,14 +267,54 @@ function parseTemplatePlatforms(templateInfo) {
     return []
   }
 }
+function isSystemCode(code) {
+  return !!platformSystemMap.value[String(code || '').trim()]
+}
 
 function parseTemplateCodes(templateInfo) {
   return parseTemplatePlatforms(templateInfo).map((item) => item.code)
 }
+function resetPlatformUnitPriceMap() {
+  Object.keys(platformUnitPriceMap).forEach((key) => {
+    delete platformUnitPriceMap[key]
+  })
+}
+function resetPlatformDisplayNameMap() {
+  Object.keys(platformDisplayNameMap).forEach((key) => {
+    delete platformDisplayNameMap[key]
+  })
+}
 
-function rebuildPlatformNameMap() {
+function syncSelectedPlatformMeta() {
+  const selectedSet = new Set((selectedPlatformCodes.value || []).map((item) => String(item)))
+  selectedSet.forEach((code) => {
+    platformUnitPriceMap[code] = normalizeUnitPrice(platformUnitPriceMap[code], 1)
+    const fallbackName = String(platformDisplayNameMap[code] || platformNameMap.value[code] || code).trim() || code
+    platformDisplayNameMap[code] = fallbackName
+  })
+  Object.keys(platformUnitPriceMap).forEach((code) => {
+    if (!selectedSet.has(code)) {
+      delete platformUnitPriceMap[code]
+    }
+  })
+  Object.keys(platformDisplayNameMap).forEach((code) => {
+    if (!selectedSet.has(code)) {
+      delete platformDisplayNameMap[code]
+    }
+  })
+}
+
+watch(selectedPlatformCodes, () => {
+  syncSelectedPlatformMeta()
+}, { deep: true })
+
+function rebuildPlatformMeta() {
   platformNameMap.value = platformOptions.value.reduce((acc, item) => {
     acc[item.code] = item.name
+    return acc
+  }, {})
+  platformSystemMap.value = platformOptions.value.reduce((acc, item) => {
+    acc[item.code] = !!item.isSystem
     return acc
   }, {})
 }
@@ -215,33 +323,53 @@ function mergePlatformOptions(extraOptions = []) {
   const merged = new Map()
   platformOptions.value.forEach((item) => {
     if (!item?.code) return
-    merged.set(item.code, item.name || item.code)
+    const code = String(item.code).trim()
+    if (!code) return
+    merged.set(code, {
+      code,
+      name: item.name || code,
+      isSystem: !!item.isSystem
+    })
   })
   extraOptions.forEach((item) => {
     const code = String(item?.code || '').trim()
     if (!code) return
     const name = String(item?.name || '').trim() || code
+    const isSystem = !!item?.isSystem
     if (!merged.has(code)) {
-      merged.set(code, name)
+      merged.set(code, { code, name, isSystem })
       return
     }
-    const currentName = merged.get(code)
+    const current = merged.get(code)
+    const currentName = current?.name || code
     if ((!currentName || currentName === code) && name) {
-      merged.set(code, name)
+      current.name = name
     }
+    current.isSystem = !!current.isSystem || isSystem
+    merged.set(code, current)
   })
-  platformOptions.value = Array.from(merged.entries()).map(([code, name]) => ({ code, name }))
-  rebuildPlatformNameMap()
+  platformOptions.value = Array.from(merged.values())
+  rebuildPlatformMeta()
 }
 
 function ensureTemplateOptions(templateInfo) {
   const extraOptions = parseTemplatePlatforms(templateInfo).map((item) => ({
     code: item.code,
-    name: item.name || platformNameMap.value[item.code] || item.code
+    name: item.name || platformNameMap.value[item.code] || item.code,
+    isSystem: isSystemCode(item.code)
   }))
   if (extraOptions.length > 0) {
     mergePlatformOptions(extraOptions)
   }
+}
+function applyTemplateUnitPrice(templateInfo) {
+  resetPlatformUnitPriceMap()
+  resetPlatformDisplayNameMap()
+  parseTemplatePlatforms(templateInfo).forEach((item) => {
+    platformUnitPriceMap[item.code] = normalizeUnitPrice(item.unitPrice, 1)
+    platformDisplayNameMap[item.code] = String(item.name || platformNameMap.value[item.code] || item.code).trim() || item.code
+  })
+  syncSelectedPlatformMeta()
 }
 
 function handleAddCustomPlatform() {
@@ -255,19 +383,20 @@ function handleAddCustomPlatform() {
     return
   }
   const name = String(customPlatformForm.name || '').trim() || code
+  const unitPrice = normalizeUnitPrice(customPlatformForm.unitPrice, 1)
   const existed = platformOptions.value.some((item) => item.code === code)
-  mergePlatformOptions([{ code, name }])
-  if (!existed) {
-    customAddedPlatformCodes.value = Array.from(new Set([...(customAddedPlatformCodes.value || []), code]))
-  }
+  mergePlatformOptions([{ code, name, isSystem: false }])
   selectedPlatformCodes.value = Array.from(new Set([...(selectedPlatformCodes.value || []), code]))
+  platformDisplayNameMap[code] = name
+  platformUnitPriceMap[code] = unitPrice
   customPlatformForm.code = ''
   customPlatformForm.name = ''
+  customPlatformForm.unitPrice = 1
   proxy.$modal.msgSuccess(existed ? '平台已存在，已自动勾选' : '新增平台成功并已勾选')
 }
 
 function canRemoveCustomOption(code) {
-  return customAddedPlatformCodes.value.includes(code)
+  return !isSystemCode(code)
 }
 
 function handleRemoveCustomPlatform(code) {
@@ -275,12 +404,18 @@ function handleRemoveCustomPlatform(code) {
   if (!targetCode || !canRemoveCustomOption(targetCode)) return
   platformOptions.value = platformOptions.value.filter((item) => item.code !== targetCode)
   selectedPlatformCodes.value = (selectedPlatformCodes.value || []).filter((item) => item !== targetCode)
-  customAddedPlatformCodes.value = customAddedPlatformCodes.value.filter((item) => item !== targetCode)
+  delete platformUnitPriceMap[targetCode]
+  delete platformDisplayNameMap[targetCode]
   if (customPlatformForm.code === targetCode) {
     customPlatformForm.code = ''
   }
-  rebuildPlatformNameMap()
+  rebuildPlatformMeta()
+  syncSelectedPlatformMeta()
   proxy.$modal.msgSuccess('已删除自定义平台')
+}
+function parseOptionIsSystem(value) {
+  if (value === true || value === 1 || value === '1' || value === 'true') return true
+  return false
 }
 
 function loadPlatformOptions() {
@@ -290,29 +425,28 @@ function loadPlatformOptions() {
       .map((item) => {
         const code = typeof item?.code === 'string' ? item.code.trim() : ''
         const name = typeof item?.name === 'string' && item.name.trim() ? item.name.trim() : code
-        return { code, name }
+        const isSystem = parseOptionIsSystem(item?.isSystem)
+        return { code, name, isSystem }
       })
       .filter((item) => item.code)
-    systemPlatformCodes.value = platformOptions.value.map((item) => item.code)
-    rebuildPlatformNameMap()
+    rebuildPlatformMeta()
   }).catch(() => {
     platformOptions.value = []
-    systemPlatformCodes.value = []
     platformNameMap.value = {}
+    platformSystemMap.value = {}
+    resetPlatformUnitPriceMap()
+    resetPlatformDisplayNameMap()
   })
 }
 function buildTemplateInfoPayload(selectedCodes) {
-  const systemSet = new Set(systemPlatformCodes.value || [])
   return (selectedCodes || [])
     .map((code) => String(code || '').trim())
     .filter((code) => code.length > 0)
-    .map((code) => {
-      if (systemSet.has(code)) return code
-      return {
-        platformCode: code,
-        platformName: platformNameMap.value[code] || code
-      }
-    })
+    .map((code) => ({
+      platformCode: code,
+      platformName: String(platformDisplayNameMap[code] || platformNameMap.value[code] || code).trim() || code,
+      unitPrice: normalizeUnitPrice(platformUnitPriceMap[code], 1)
+    }))
 }
 function getList() {
   loading.value = true
@@ -345,19 +479,24 @@ function resetForm() {
     id: null,
     templateName: '',
     templateInfo: '',
+    isDefault: '0',
     status: '0',
     remark: ''
   }
   selectedPlatformCodes.value = []
   customPlatformForm.code = ''
   customPlatformForm.name = ''
-  customAddedPlatformCodes.value = []
+  customPlatformForm.unitPrice = 1
+  resetPlatformUnitPriceMap()
+  resetPlatformDisplayNameMap()
   proxy.resetForm('formRef')
 }
 
 function handleAdd() {
   resetForm()
   loadPlatformOptions().finally(() => {
+    selectedPlatformCodes.value = (platformOptions.value || []).map((item) => item.code)
+    syncSelectedPlatformMeta()
     title.value = '新增标记模板'
     open.value = true
   })
@@ -369,12 +508,34 @@ function handleUpdate(row) {
   if (!id) return
   loadPlatformOptions().finally(() => {
     getMarkTemplate(id).then((res) => {
-      form.value = { ...form.value, ...res.data, status: res.data?.status || '0' }
+      form.value = {
+        ...form.value,
+        ...res.data,
+        status: res.data?.status || '0',
+        isDefault: isDefaultFlag(res.data?.isDefault) ? '1' : '0'
+      }
       ensureTemplateOptions(form.value.templateInfo)
       selectedPlatformCodes.value = parseTemplateCodes(form.value.templateInfo)
+      applyTemplateUnitPrice(form.value.templateInfo)
       title.value = '修改标记模板'
       open.value = true
     })
+  })
+}
+function handleSetDefault(row) {
+  const id = row?.id
+  if (!id || isDefaultFlag(row?.isDefault)) return
+  const templateName = String(row?.templateName || '').trim() || `#${id}`
+  proxy.$modal.confirm(`确认将模板「${templateName}」设为默认吗？`).then(() => {
+    defaultUpdatingId.value = id
+    return updateMarkTemplate({ id, isDefault: '1' })
+  }).then(() => {
+    proxy.$modal.msgSuccess('已设为默认模板')
+    getList()
+  }).catch(() => {}).finally(() => {
+    if (defaultUpdatingId.value === id) {
+      defaultUpdatingId.value = null
+    }
   })
 }
 
@@ -382,6 +543,7 @@ function submitForm() {
   const selectedCodes = selectedPlatformCodes.value || []
   const payload = buildTemplateInfoPayload(selectedCodes)
   form.value.templateInfo = payload.length > 0 ? JSON.stringify(payload) : ''
+  form.value.isDefault = isDefaultFlag(form.value.isDefault) ? '1' : '0'
   proxy.$refs.formRef.validate((valid) => {
     if (!valid) return
     const req = form.value.id ? updateMarkTemplate(form.value) : addMarkTemplate(form.value)
@@ -423,6 +585,7 @@ onMounted(() => {
   margin-top: 10px;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -432,11 +595,43 @@ onMounted(() => {
   font-size: 12px;
 }
 
+.platform-unit-editor {
+  margin-top: 10px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-lighter);
+}
+
+.platform-unit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.platform-unit-row:last-child {
+  margin-bottom: 0;
+}
+
+.platform-unit-name-input {
+  width: 220px;
+}
+
+.platform-unit-suffix {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
 .platform-option-label {
   margin-right: 6px;
 }
 
 .platform-option-remove {
+  padding: 0;
+  min-height: auto;
+}
+.platform-unit-remove {
   padding: 0;
   min-height: auto;
 }

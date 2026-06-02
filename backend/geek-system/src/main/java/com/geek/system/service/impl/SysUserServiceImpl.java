@@ -109,8 +109,11 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 queryChain.notIn(SysUser::getUserId, excludedUserIds);
             }
         }
-        if (!SecurityUtils.isAdmin() && SecurityUtils.hasRole("agent")) {
-            queryChain.eq(SysUser::getCreateBy, SecurityUtils.getUsername());
+        if (!SecurityUtils.isAdmin() && (SecurityUtils.hasRole("agent") || SecurityUtils.hasRole("mark_agent"))) {
+            queryChain.and(
+                    SYS_USER.CREATE_BY.eq(SecurityUtils.getUsername())
+                            .or(SYS_USER.USER_ID.eq(SecurityUtils.getUserId()))
+            );
         }
         return queryChain;
     }

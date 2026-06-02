@@ -31,4 +31,10 @@ public class MarkPlatformTemplate extends BaseEntity {
     @Schema(title = "状态（0正常 1停用）")
     @Excel(name = "状态", readConverterExp = "0=正常,1=停用")
     private String status;
+    @Schema(title = "是否默认模板（0否 1是）")
+    @Excel(name = "默认模板", readConverterExp = "0=否,1=是")
+    private String isDefault;
+
+    @Schema(title = "模板归属用户ID")
+    private Long ownerUserId;
 }

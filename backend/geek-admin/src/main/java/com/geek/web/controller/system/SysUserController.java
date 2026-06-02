@@ -1,13 +1,17 @@
 package com.geek.web.controller.system;
 
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import com.mybatisflex.core.query.QueryChain;
 import org.apache.commons.lang3.ArrayUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.util.CollectionUtils;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +36,8 @@ import com.geek.common.enums.BusinessType;
 import com.geek.common.utils.SecurityUtils;
 import com.geek.common.utils.StringUtils;
 import com.geek.common.utils.poi.ExcelUtil;
+import com.geek.server.domain.MarkPlatformTemplate;
+import com.geek.server.service.IMarkPlatformTemplateService;
 import com.geek.system.service.ISysDeptService;
 import com.geek.system.service.ISysPostService;
 import com.geek.system.service.ISysRoleService;
@@ -51,6 +57,12 @@ import jakarta.servlet.http.HttpServletResponse;
 @RestController
 @RequestMapping("/system/user")
 public class SysUserController extends BaseController {
+    private static final String ROLE_KEY_AGENT = "agent";
+    private static final String ROLE_KEY_MARK_AGENT = "mark_agent";
+    private static final String ROLE_KEY_USER = "user";
+    private static final String ROLE_KEY_MARK_USER = "mark_user";
+    private static final List<String> AGENT_SELF_ROLE_KEYS = Arrays.asList(ROLE_KEY_AGENT, ROLE_KEY_MARK_AGENT);
+    private static final List<String> AGENT_DOWNSTREAM_ROLE_KEYS = Arrays.asList(ROLE_KEY_USER, ROLE_KEY_MARK_USER);
 
     @Autowired
     private ISysUserService userService;
@@ -63,6 +75,9 @@ public class SysUserController extends BaseController {
 
     @Autowired
     private ISysPostService postService;
+
+    @Autowired
+    private IMarkPlatformTemplateService markPlatformTemplateService;
 
     /**
      * 获取用户列表
@@ -107,7 +122,7 @@ public class SysUserController extends BaseController {
      * 根据用户编号获取详细信息
      */
     @Operation(summary = "根据用户编号获取详细信息")
-    @PreAuthorize("@ss.hasPermi('system:user:query')")
+    @PreAuthorize("@ss.hasPermi('system:user:query') or @ss.hasAnyRoles('agent,mark_agent')")
     @GetMapping(value = { "/", "/{userId}" })
     public AjaxResult getInfo(@PathVariable(value = "userId", required = false) Long userId) {
         AjaxResult ajax = AjaxResult.success();
@@ -118,17 +133,15 @@ public class SysUserController extends BaseController {
             ajax.put("postIds", postService.selectPostListByUserId(userId));
             ajax.put("roleIds", sysUser.getRoles().stream().map(SysRole::getRoleId).collect(Collectors.toList()));
         }
-        List<SysRole> roles = roleService.selectRoleAll();
+        List<SysRole> roles;
         if (SecurityUtils.isAdmin()) {
-            ajax.put("roles", roles);
-        } else if (SecurityUtils.hasRole("agent")) {
-            ajax.put("roles", QueryChain.of(SysRole.class)
-                    .in(SysRole::getRoleKey, Arrays.asList("common", "user"))
-                    .eq(SysRole::getStatus, "0")
-                    .list());
+            roles = roleService.selectRoleAll();
+        } else if (isAgentOperator()) {
+            roles = selectEnabledRolesByKeys(resolveAllowedRoleKeysForTarget(userId));
         } else {
-            ajax.put("roles", roles.stream().filter(r -> !r.isAdmin()).collect(Collectors.toList()));
+            roles = roleService.selectRoleAll().stream().filter(r -> !r.isAdmin()).collect(Collectors.toList());
         }
+        ajax.put("roles", roles);
         ajax.put("posts", postService.list());
         return ajax;
     }
@@ -142,6 +155,8 @@ public class SysUserController extends BaseController {
     @PostMapping
     public AjaxResult add(@Validated @RequestBody SysUser user) {
         try {
+            checkAssignableRoleKeys(null, user.getRoleIds());
+            applyAgentMarkTemplate(user, true);
             userService.checkUserAllowedBeforeUpdate(user);
         } catch (Exception e) {
             return error("新增用户'" + user.getUserName() + "'失败，" + e.getMessage());
@@ -155,19 +170,72 @@ public class SysUserController extends BaseController {
      * 修改用户
      */
     @Operation(summary = "修改用户")
-    @PreAuthorize("@ss.hasPermi('system:user:edit')")
+    @PreAuthorize("@ss.hasPermi('system:user:edit') or @ss.hasAnyRoles('agent,mark_agent')")
     @Log(title = "用户管理", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@Validated @RequestBody SysUser user) {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
         try {
+            checkAssignableRoleKeys(user.getUserId(), user.getRoleIds());
+            applyAgentMarkTemplate(user, false);
             userService.checkUserAllowedBeforeUpdate(user);
         } catch (Exception e) {
             return error("修改用户'" + user.getUserName() + "'失败，" + e.getMessage());
         }
         user.setUpdateBy(getUsername());
         return toAjax(userService.updateUser(user));
+    }
+
+    private void applyAgentMarkTemplate(SysUser user, boolean isCreate) {
+        if (user == null || !isAgentOperator()) {
+            return;
+        }
+        Long currentUserId = getUserId();
+        if (currentUserId == null) {
+            return;
+        }
+        boolean isSelf = !isCreate && currentUserId.equals(user.getUserId());
+        if (user.getRelMarkTemplate() == null && !isSelf) {
+            Long defaultTemplateId = resolveAgentDefaultMarkTemplateId(currentUserId);
+            if (defaultTemplateId != null) {
+                user.setRelMarkTemplate(defaultTemplateId);
+            }
+        }
+        if (user.getRelMarkTemplate() == null) {
+            if (!isSelf) {
+                throw new IllegalArgumentException("请选择标记模板");
+            }
+            return;
+        }
+        MarkPlatformTemplate template = markPlatformTemplateService.selectMarkPlatformTemplateById(user.getRelMarkTemplate());
+        if (template == null || !"0".equals(template.getStatus())) {
+            throw new IllegalArgumentException("所选标记模板不可用");
+        }
+    }
+
+    private Long resolveAgentDefaultMarkTemplateId(Long currentUserId) {
+        MarkPlatformTemplate ownerDefaultTemplate = markPlatformTemplateService.selectOwnerDefaultTemplate(currentUserId);
+        if (ownerDefaultTemplate != null) {
+            return ownerDefaultTemplate.getId();
+        }
+        SysUser currentUser = userService.selectUserById(currentUserId);
+        if (currentUser != null && currentUser.getRelMarkTemplate() != null) {
+            return currentUser.getRelMarkTemplate();
+        }
+        MarkPlatformTemplate query = new MarkPlatformTemplate();
+        query.setStatus("0");
+        query.setIsDefault("1");
+        List<MarkPlatformTemplate> ownTemplates = markPlatformTemplateService.selectMarkPlatformTemplateList(query);
+        if (!ownTemplates.isEmpty()) {
+            return ownTemplates.get(0).getId();
+        }
+        query.setIsDefault(null);
+        ownTemplates = markPlatformTemplateService.selectMarkPlatformTemplateList(query);
+        if (ownTemplates.size() == 1) {
+            return ownTemplates.get(0).getId();
+        }
+        return null;
     }
 
     /**
@@ -226,9 +294,19 @@ public class SysUserController extends BaseController {
         if (!SecurityUtils.isAdmin()) {
             userService.checkUserDataScope(userId);
         }
+        List<SysRole> visibleRoles;
+        if (SecurityUtils.isAdmin()) {
+            visibleRoles = roles;
+        } else if (isAgentOperator()) {
+            List<String> allowedRoleKeys = resolveAllowedRoleKeysForTarget(userId);
+            visibleRoles = roles.stream()
+                    .filter(r -> allowedRoleKeys.contains(r.getRoleKey()))
+                    .collect(Collectors.toList());
+        } else {
+            visibleRoles = roles.stream().filter(r -> !r.isAdmin()).collect(Collectors.toList());
+        }
         ajax.put("user", user);
-        ajax.put("roles", SecurityUtils.isAdmin() ? roles
-                : roles.stream().filter(r -> !r.isAdmin()).collect(Collectors.toList()));
+        ajax.put("roles", visibleRoles);
         return ajax;
     }
 
@@ -241,8 +319,62 @@ public class SysUserController extends BaseController {
     @PutMapping("/authRole")
     public AjaxResult insertAuthRole(Long userId, List<Long> roleIds) {
         userService.checkUserDataScope(userId);
+        checkAssignableRoleKeys(userId, roleIds);
         userService.insertUserAuth(userId, roleIds);
         return success();
+    }
+
+    private boolean isAgentOperator() {
+        return !SecurityUtils.isAdmin() && (SecurityUtils.hasRole(ROLE_KEY_AGENT) || SecurityUtils.hasRole(ROLE_KEY_MARK_AGENT));
+    }
+
+    private List<String> resolveAllowedRoleKeysForTarget(Long targetUserId) {
+        if (!isAgentOperator()) {
+            return List.of();
+        }
+        Long currentUserId = getUserId();
+        boolean targetIsSelf = targetUserId != null && currentUserId != null && currentUserId.equals(targetUserId);
+        return targetIsSelf ? AGENT_SELF_ROLE_KEYS : AGENT_DOWNSTREAM_ROLE_KEYS;
+    }
+
+    private List<SysRole> selectEnabledRolesByKeys(List<String> roleKeys) {
+        if (CollectionUtils.isEmpty(roleKeys)) {
+            return List.of();
+        }
+        return QueryChain.of(SysRole.class)
+                .in(SysRole::getRoleKey, roleKeys)
+                .eq(SysRole::getStatus, "0")
+                .list();
+    }
+
+    private void checkAssignableRoleKeys(Long targetUserId, List<Long> roleIds) {
+        if (!isAgentOperator()) {
+            return;
+        }
+        if (CollectionUtils.isEmpty(roleIds)) {
+            throw new IllegalArgumentException("请选择角色");
+        }
+        Set<Long> distinctRoleIds = roleIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (distinctRoleIds.isEmpty()) {
+            throw new IllegalArgumentException("请选择角色");
+        }
+        List<SysRole> selectedRoles = QueryChain.of(SysRole.class)
+                .in(SysRole::getRoleId, distinctRoleIds)
+                .eq(SysRole::getStatus, "0")
+                .list();
+        if (selectedRoles.size() != distinctRoleIds.size()) {
+            throw new IllegalArgumentException("包含不可用角色");
+        }
+        List<String> allowedRoleKeys = resolveAllowedRoleKeysForTarget(targetUserId);
+        boolean hasIllegalRole = selectedRoles.stream()
+                .map(SysRole::getRoleKey)
+                .anyMatch(roleKey -> !allowedRoleKeys.contains(roleKey));
+        if (hasIllegalRole) {
+            boolean targetIsSelf = targetUserId != null && targetUserId.equals(getUserId());
+            throw new IllegalArgumentException(targetIsSelf ? "仅允许分配标记代理角色" : "仅允许分配标记用户角色");
+        }
     }
 
     /**

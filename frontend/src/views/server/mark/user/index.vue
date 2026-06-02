@@ -63,6 +63,16 @@
               >
                 一键批量查询
               </el-button>
+              <el-button
+                type="warning"
+                icon="Promotion"
+                :loading="submitLoading"
+                :disabled="!canSubmit"
+                @click="submitDirectOrder"
+                v-hasPermi="['server:markUser:order:add']"
+              >
+                直接提交号码
+              </el-button>
               <el-button @click="clearSubmitPhones">清空</el-button>
             </div>
             <div class="submit-result-wrap">
@@ -663,6 +673,51 @@ async function submitBatchOrder() {
   }
 }
 
+async function submitDirectOrder() {
+  if (!activePlatform.value) {
+    proxy.$modal.msgError('当前未选择平台')
+    return
+  }
+  const phones = submitPhoneStats.value.validPhones
+  if (phones.length === 0) {
+    proxy.$modal.msgError('请输入有效号码')
+    return
+  }
+  const payload = {
+    platformCode: activePlatform.value.platformCode,
+    platformName: activePlatform.value.platformName,
+    requestNo: String(submitForm.requestNo || '').trim(),
+    phones,
+    remark: String(submitForm.remark || '').trim()
+  }
+  submitLoading.value = true
+  try {
+    const res = await createMarkUserOrder(payload)
+    await afterCreateOrderSuccess(res)
+  } catch (error) {
+    console.error('直接提交订单失败:', error)
+    proxy.$modal.msgError(error?.message || '提交失败')
+  } finally {
+    submitLoading.value = false
+  }
+}
+
+async function afterCreateOrderSuccess(res) {
+  proxy.$modal.msgSuccess(res?.msg || '下单成功')
+  const createdOrderId = res?.data?.order?.id
+  precheckDialogVisible.value = false
+  submitForm.phonesText = ''
+  submitForm.requestNo = ''
+  submitForm.remark = ''
+  await loadSummaryAndPrice()
+  await getList()
+  if (createdOrderId) {
+    selectedResultOrderId.value = createdOrderId
+    loadOrderDetail(createdOrderId)
+  }
+  activeSubTab.value = 'submit'
+}
+
 async function confirmSubmitAfterPrecheck() {
   const payload = pendingSubmitPayload.value
   const markedCount = precheckMarkedCount.value
@@ -674,19 +729,7 @@ async function confirmSubmitAfterPrecheck() {
   submitLoading.value = true
   try {
     const res = await createMarkUserOrder(payload)
-    proxy.$modal.msgSuccess(res.msg || '下单成功')
-    const createdOrderId = res?.data?.order?.id
-    precheckDialogVisible.value = false
-    submitForm.phonesText = ''
-    submitForm.requestNo = ''
-    submitForm.remark = ''
-    await loadSummaryAndPrice()
-    await getList()
-    if (createdOrderId) {
-      selectedResultOrderId.value = createdOrderId
-      loadOrderDetail(createdOrderId)
-    }
-    activeSubTab.value = 'submit'
+    await afterCreateOrderSuccess(res)
   } catch (error) {
     console.error('提交订单失败:', error)
     proxy.$modal.msgError(error?.message || '提交失败')

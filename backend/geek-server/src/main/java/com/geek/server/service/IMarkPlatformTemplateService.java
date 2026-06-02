@@ -11,9 +11,10 @@ import java.util.Map;
 public interface IMarkPlatformTemplateService {
 
     MarkPlatformTemplate selectMarkPlatformTemplateById(Long id);
+    MarkPlatformTemplate selectOwnerDefaultTemplate(Long ownerUserId);
 
     List<MarkPlatformTemplate> selectMarkPlatformTemplateList(MarkPlatformTemplate query);
-    List<Map<String, String>> selectPlatformOptions();
+    List<Map<String, Object>> selectPlatformOptions();
 
     int insertMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate);
 

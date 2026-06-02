@@ -533,7 +533,12 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private long getEffectiveUnitPrice(Long userId, String platformCode) {
         MarkUserPlatformPrice platformPrice = markUserPlatformPriceMapper.selectByUserAndPlatform(userId, platformCode);
         if (platformPrice == null || platformPrice.getUnitPrice() == null || platformPrice.getUnitPrice() <= 0) {
-            return 1L;
+            Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(userId);
+            TemplatePlatformConfig templateConfig = templateConfigMap.get(platformCode);
+            if (templateConfig == null || templateConfig.getUnitPrice() == null || templateConfig.getUnitPrice() <= 0) {
+                return 1L;
+            }
+            return templateConfig.getUnitPrice();
         }
         return platformPrice.getUnitPrice();
     }
@@ -548,95 +553,159 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         Set<String> explicitlyConfiguredCodes = new LinkedHashSet<>(savedMap.keySet());
         Map<String, String> dynamicPlatformNameMap = resolveMenuPlatformNameMap();
         Map<String, String> platformNameMap = resolvePlatformNameMap(dynamicPlatformNameMap);
-        Set<String> availableCodes = resolveAvailablePlatformCodes(userId, explicitlyConfiguredCodes, dynamicPlatformNameMap);
+        Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(userId);
+        Set<String> availableCodes = resolveAvailablePlatformCodes(explicitlyConfiguredCodes, dynamicPlatformNameMap, templateConfigMap);
         List<MarkUserPlatformPrice> result = new ArrayList<>();
         for (String platformCode : availableCodes) {
             if (StringUtils.isBlank(platformCode)) {
                 continue;
             }
             MarkUserPlatformPrice price = savedMap.get(platformCode);
+            TemplatePlatformConfig templateConfig = templateConfigMap.get(platformCode);
             String platformName = resolvePlatformNameByMap(platformNameMap, platformCode);
+            if (templateConfig != null && StringUtils.isNotBlank(templateConfig.getPlatformName())) {
+                platformName = templateConfig.getPlatformName();
+            }
+            long defaultUnitPrice = (templateConfig != null && templateConfig.getUnitPrice() != null && templateConfig.getUnitPrice() > 0)
+                    ? templateConfig.getUnitPrice()
+                    : 1L;
             if (price == null) {
                 price = new MarkUserPlatformPrice();
                 price.setUserId(userId);
                 price.setPlatformCode(platformCode);
                 price.setPlatformName(platformName);
-                price.setUnitPrice(1L);
+                price.setUnitPrice(defaultUnitPrice);
             } else if (StringUtils.isBlank(price.getPlatformName())) {
                 price.setPlatformName(platformName);
+            } else if (price.getUnitPrice() == null || price.getUnitPrice() <= 0) {
+                price.setUnitPrice(defaultUnitPrice);
             }
             result.add(price);
         }
         return result;
     }
 
-    private Set<String> resolveAvailablePlatformCodes(Long userId, Set<String> explicitlyConfiguredCodes,
-                                                      Map<String, String> dynamicPlatformNameMap) {
+    private Set<String> resolveAvailablePlatformCodes(Set<String> explicitlyConfiguredCodes,
+                                                      Map<String, String> dynamicPlatformNameMap,
+                                                      Map<String, TemplatePlatformConfig> templateConfigMap) {
         if (explicitlyConfiguredCodes != null && !explicitlyConfiguredCodes.isEmpty()) {
             return new LinkedHashSet<>(explicitlyConfiguredCodes);
         }
-        Set<String> templateCodes = resolveTemplatePlatformCodesByUser(userId);
-        if (!templateCodes.isEmpty()) {
-            return templateCodes;
+        if (templateConfigMap != null && !templateConfigMap.isEmpty()) {
+            return new LinkedHashSet<>(templateConfigMap.keySet());
         }
         if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
             return new LinkedHashSet<>(dynamicPlatformNameMap.keySet());
         }
         return new LinkedHashSet<>(LEGACY_PLATFORM_NAME_MAP.keySet());
     }
-
-    private Set<String> resolveTemplatePlatformCodesByUser(Long userId) {
-        Set<String> codes = new LinkedHashSet<>();
+    private Map<String, TemplatePlatformConfig> resolveTemplatePlatformConfigMapByUser(Long userId) {
+        Map<String, TemplatePlatformConfig> configMap = new LinkedHashMap<>();
         SysUser user = requireUser(userId);
         Long templateId = user.getRelMarkTemplate();
         if (templateId == null) {
-            return codes;
+            return configMap;
         }
         MarkPlatformTemplate template = markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId);
         if (template == null || !"0".equals(template.getStatus())) {
-            return codes;
+            return configMap;
         }
-        return parseTemplatePlatformCodes(template.getTemplateInfo());
+        if (!canUseTemplate(user, template)) {
+            return configMap;
+        }
+        return parseTemplatePlatformConfigs(template.getTemplateInfo());
     }
 
-    private Set<String> parseTemplatePlatformCodes(String templateInfo) {
-        Set<String> codes = new LinkedHashSet<>();
+    private boolean canUseTemplate(SysUser user, MarkPlatformTemplate template) {
+        if (user == null || template == null) {
+            return false;
+        }
+        Long ownerUserId = template.getOwnerUserId();
+        if (ownerUserId != null) {
+            if (user.getUserId() != null && ownerUserId.equals(user.getUserId())) {
+                return true;
+            }
+            Long creatorUserId = resolveUserIdByUserName(user.getCreateBy());
+            return creatorUserId != null && ownerUserId.equals(creatorUserId);
+        }
+        String userName = StringUtils.trimToNull(user.getUserName());
+        String creatorName = StringUtils.trimToNull(user.getCreateBy());
+        String templateCreatorName = StringUtils.trimToNull(template.getCreateBy());
+        if (templateCreatorName == null) {
+            return false;
+        }
+        return StringUtils.equals(templateCreatorName, userName) || StringUtils.equals(templateCreatorName, creatorName);
+    }
+
+    private Long resolveUserIdByUserName(String userName) {
+        String normalizedUserName = StringUtils.trimToNull(userName);
+        if (normalizedUserName == null) {
+            return null;
+        }
+        SysUser creator = com.mybatisflex.core.query.QueryChain.of(SysUser.class)
+                .select(SysUser::getUserId)
+                .eq(SysUser::getUserName, normalizedUserName)
+                .one();
+        return creator == null ? null : creator.getUserId();
+    }
+
+    private Map<String, TemplatePlatformConfig> parseTemplatePlatformConfigs(String templateInfo) {
+        Map<String, TemplatePlatformConfig> configMap = new LinkedHashMap<>();
         if (StringUtils.isBlank(templateInfo)) {
-            return codes;
+            return configMap;
         }
         try {
             List<Object> rawList = objectMapper.readValue(templateInfo, new TypeReference<List<Object>>() {});
             for (Object item : rawList) {
-                if (item instanceof String) {
-                    addTemplatePlatformCode(codes, (String) item);
-                    continue;
-                }
-                if (item instanceof Map<?, ?>) {
-                    Map<?, ?> map = (Map<?, ?>) item;
-                    Object code = map.get("platformCode");
-                    if (code == null) {
-                        code = map.get("code");
-                    }
-                    if (code == null) {
-                        code = map.get("value");
-                    }
-                    if (code != null) {
-                        addTemplatePlatformCode(codes, String.valueOf(code));
-                    }
-                }
+                addTemplatePlatformConfig(configMap, item);
             }
         } catch (Exception ignored) {
-            return new LinkedHashSet<>();
+            return new LinkedHashMap<>();
         }
-        return codes;
+        return configMap;
     }
 
-    private void addTemplatePlatformCode(Set<String> target, String code) {
-        String normalized = StringUtils.trimToEmpty(code);
-        if (StringUtils.isBlank(normalized)) {
+    private void addTemplatePlatformConfig(Map<String, TemplatePlatformConfig> target, Object item) {
+        if (item == null) {
             return;
         }
-        target.add(normalized);
+        String code = null;
+        String platformName = null;
+        Long unitPrice = null;
+        if (item instanceof String) {
+            code = StringUtils.trimToEmpty((String) item);
+        } else if (item instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) item;
+            code = firstNonBlank(
+                    asString(map.get("platformCode")),
+                    asString(map.get("code")),
+                    asString(map.get("value"))
+            );
+            platformName = firstNonBlank(
+                    asString(map.get("platformName")),
+                    asString(map.get("name")),
+                    asString(map.get("label"))
+            );
+            unitPrice = parseLong(map.get("unitPrice"));
+        }
+        String normalizedCode = StringUtils.trimToEmpty(code);
+        if (StringUtils.isBlank(normalizedCode)) {
+            return;
+        }
+        if (unitPrice == null || unitPrice <= 0) {
+            unitPrice = 1L;
+        }
+        TemplatePlatformConfig existing = target.get(normalizedCode);
+        if (existing == null) {
+            target.put(normalizedCode, new TemplatePlatformConfig(normalizedCode, StringUtils.trimToNull(platformName), unitPrice));
+            return;
+        }
+        if (StringUtils.isBlank(existing.getPlatformName()) && StringUtils.isNotBlank(platformName)) {
+            existing.setPlatformName(StringUtils.trimToNull(platformName));
+        }
+        if (existing.getUnitPrice() == null || existing.getUnitPrice() <= 0) {
+            existing.setUnitPrice(unitPrice);
+        }
     }
 
     private boolean isPlatformAvailableForUser(Long userId, String platformCode) {
@@ -650,6 +719,14 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private String resolvePlatformName(String platformCode, String requestPlatformName) {
         if (StringUtils.isNotBlank(requestPlatformName)) {
             return requestPlatformName.trim();
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId != null) {
+            Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(currentUserId);
+            TemplatePlatformConfig templateConfig = templateConfigMap.get(platformCode);
+            if (templateConfig != null && StringUtils.isNotBlank(templateConfig.getPlatformName())) {
+                return templateConfig.getPlatformName();
+            }
         }
         Map<String, String> platformNameMap = resolvePlatformNameMap(resolveMenuPlatformNameMap());
         return resolvePlatformNameByMap(platformNameMap, platformCode);
@@ -945,6 +1022,38 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             this.marked = marked;
             this.status = status;
             this.detail = detail;
+        }
+    }
+
+    private static class TemplatePlatformConfig {
+        private final String platformCode;
+        private String platformName;
+        private Long unitPrice;
+
+        private TemplatePlatformConfig(String platformCode, String platformName, Long unitPrice) {
+            this.platformCode = platformCode;
+            this.platformName = platformName;
+            this.unitPrice = unitPrice;
+        }
+
+        private String getPlatformCode() {
+            return platformCode;
+        }
+
+        private String getPlatformName() {
+            return platformName;
+        }
+
+        private void setPlatformName(String platformName) {
+            this.platformName = platformName;
+        }
+
+        private Long getUnitPrice() {
+            return unitPrice;
+        }
+
+        private void setUnitPrice(Long unitPrice) {
+            this.unitPrice = unitPrice;
         }
     }
 

@@ -89,3 +89,17 @@ frontend/
 ## 9. 相关文档
 - 部署流程：`../docs/DEPLOY_UPDATE_GUIDE.md`
 - 数据库备份：`../docs/DB_BACKUP_TO_PROJECT_GUIDE.md`
+- 角色矩阵：`../docs/MARK_ROLE_MATRIX.md`
+
+## 10. 代理账户页角色约束（2026-06 更新）
+`src/views/system/user/index.vue` 在代理账户场景新增了角色与模板收敛逻辑，避免前端继续暴露越权选项：
+
+- 代理身份兼容判断：`agent` 与 `mark_agent` 都视为代理操作者。
+- 代理账户页用户加载兼容角色键：`user`、`mark_user`、`agent`、`mark_agent`。
+- 新增用户默认角色只会从 `user/mark_user` 中选择，不再回退到 `common`。
+- 角色下拉会根据当前编辑目标收敛：
+  - 下游账号：仅展示 `user/mark_user`
+  - 代理本人账号：仅展示 `agent/mark_agent`
+- 代理账户页新增/修改时要求标记模板（`relMarkTemplate`）有效。
+
+注意：前端限制仅用于减少误操作，最终权限边界仍以后端接口校验为准。

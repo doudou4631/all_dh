@@ -87,6 +87,14 @@
                   </el-table-column>
                   <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber"
                      v-if="columns[4].visible" width="120" />
+                  <el-table-column v-if="isAgentAccountPage" label="标记模板" align="center" min-width="140" show-overflow-tooltip>
+                     <template #default="scope">
+                        <el-tag v-if="scope.row.relMarkTemplate" type="warning" effect="plain">
+                           {{ resolveMarkTemplateName(scope.row.relMarkTemplate) }}
+                        </el-tag>
+                        <span v-else>-</span>
+                     </template>
+                  </el-table-column>
                   <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" >
                      <template #default="scope">
                         <el-switch v-model="scope.row.status" active-value="0" inactive-value="1"
@@ -104,9 +112,12 @@
                      fixed="right">
 
                      <template #default="scope">
-                        <el-tooltip content="修改" placement="top" v-if="scope.row.userId !== 1">
+                        <el-tooltip content="修改" placement="top" v-if="!isAgentAccountPage && scope.row.userId !== 1">
                            <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)"
                               v-hasPermi="['system:user:edit']" />
+                        </el-tooltip>
+                        <el-tooltip content="编辑账号" placement="top" v-if="isAgentAccountPage && scope.row.userId !== 1">
+                           <el-button link type="primary" icon="Edit" @click="handleUpdate(scope.row)" />
                         </el-tooltip>
                         <el-tooltip content="删除" placement="top" v-if="scope.row.userId !== 1">
                            <el-button link type="primary" icon="Delete" @click="handleDelete(scope.row)"
@@ -355,7 +366,7 @@ const { proxy } = getCurrentInstance();
 const userStore = useUserStore();
 const { sys_normal_disable, sys_user_sex } = proxy.useDict("sys_normal_disable", "sys_user_sex");
 const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
-const isAgent = computed(() => proxy.$auth.hasRole('agent'));
+const isAgent = computed(() => proxy.$auth.hasRoleOr(['agent', 'mark_agent']));
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
 
 const userList = ref([]);
@@ -398,7 +409,27 @@ let platformNameLoadingPromise = null;
 
 function loadMarkTemplateList() {
    return listMarkTemplateOptions().then(response => {
-      markTemplateList.value = Array.isArray(response?.data) ? response.data : [];
+      const list = Array.isArray(response?.data) ? response.data : [];
+      const normalizedList = list.map(item => {
+         const normalizedId = normalizeMarkTemplateId(item?.id);
+         const normalizedName = String(item?.templateName || item?.template_name || "").trim();
+         return {
+            ...item,
+            id: normalizedId,
+            templateName: normalizedName || (normalizedId ? `模板#${normalizedId}` : "未命名模板")
+         };
+      }).filter(item => item.id !== null);
+      markTemplateList.value = normalizedList.sort((a, b) => {
+         const aDefault = isMarkTemplateDefault(a) ? 1 : 0;
+         const bDefault = isMarkTemplateDefault(b) ? 1 : 0;
+         if (aDefault !== bDefault) return bDefault - aDefault;
+         const aNum = Number(a?.id);
+         const bNum = Number(b?.id);
+         if (!Number.isNaN(aNum) && !Number.isNaN(bNum)) {
+            return bNum - aNum;
+         }
+         return String(b?.id || "").localeCompare(String(a?.id || ""));
+      });
    }).catch(() => {
       markTemplateList.value = [];
    });
@@ -470,11 +501,83 @@ const data = reactive({
          { pattern: /^[^<>"'|\\]+$/, message: "不能包含非法字符：< > \" ' \\\ |", trigger: "blur" }
       ],
       email: [{ type: "email", message: "请输入正确的邮箱地址", trigger: ["blur", "change"] }],
-      phonenumber: [{ pattern: /^1[3|4|5|6|7|8|9][0-9]\d{8}$/, message: "请输入正确的手机号码", trigger: "blur" }]
+      phonenumber: [{ pattern: /^1[3|4|5|6|7|8|9][0-9]\d{8}$/, message: "请输入正确的手机号码", trigger: "blur" }],
+      relMarkTemplate: [{
+         validator: (_rule, value, callback) => {
+            if (!(isAgentAccountPage.value && isAgent.value)) {
+               callback();
+               return;
+            }
+            if (value === undefined || value === null || String(value).trim() === "") {
+               callback(new Error("请选择标记模板"));
+               return;
+            }
+            callback();
+         },
+         trigger: "change"
+      }]
    }
 });
 
 const { queryParams, form, rules } = toRefs(data);
+function normalizeMarkTemplateId(value) {
+   if (value === undefined || value === null || String(value).trim() === "") {
+      return null;
+   }
+   return String(value).trim();
+}
+
+function resolveMarkTemplateName(templateId) {
+   const normalized = normalizeMarkTemplateId(templateId);
+   if (normalized === null) {
+      return "-";
+   }
+   const target = markTemplateList.value.find(item => String(item?.id) === String(normalized));
+   if (target && target.templateName) {
+      return target.templateName;
+   }
+   return `#${normalized}`;
+}
+
+function pickAgentDefaultMarkTemplateId() {
+   const options = Array.isArray(markTemplateList.value) ? markTemplateList.value : [];
+   if (options.length === 0) {
+      return null;
+   }
+   const defaultItem = options.find(item => isMarkTemplateDefault(item));
+   if (defaultItem && defaultItem.id !== undefined && defaultItem.id !== null) {
+      return normalizeMarkTemplateId(defaultItem.id);
+   }
+   if (options.length === 1) {
+      return normalizeMarkTemplateId(options[0].id);
+   }
+   return null;
+}
+
+function isMarkTemplateDefault(item) {
+   const flag = String(item?.isDefault ?? '').trim();
+   return flag === '1' || flag.toLowerCase() === 'true';
+}
+
+function ensureAgentDefaultMarkTemplateSelected() {
+   if (!(isAgentAccountPage.value && isAgent.value)) {
+      return;
+   }
+   const current = normalizeMarkTemplateId(form.value.relMarkTemplate);
+   if (current !== null) {
+      form.value.relMarkTemplate = current;
+      return;
+   }
+   const fromSelf = normalizeMarkTemplateId(userStore.relMarkTemplate);
+   if (fromSelf !== null) {
+      form.value.relMarkTemplate = fromSelf;
+      return;
+   }
+   const fallback = pickAgentDefaultMarkTemplateId();
+   if (fallback !== null) {
+      form.value.relMarkTemplate = fallback;
+   }
+}
 
 function applyAccountScope() {
    if (isAgentAccountPage.value) {
@@ -499,12 +602,19 @@ async function loadAgentAccountUsers() {
       roleKey: undefined,
       excludeRoleKey: undefined
    }, dateRange.value);
-   const [markUserRes, markAgentRes] = await Promise.all([
+   const [markUserRes, markUserV2Res, markAgentRes, markAgentV2Res] = await Promise.all([
       listUser({ ...scopeParams, roleKey: "user" }),
-      listUser({ ...scopeParams, roleKey: "agent" })
+      listUser({ ...scopeParams, roleKey: "mark_user" }),
+      listUser({ ...scopeParams, roleKey: "agent" }),
+      listUser({ ...scopeParams, roleKey: "mark_agent" })
    ]);
    const mergedMap = new Map();
-   [...(markUserRes?.rows || []), ...(markAgentRes?.rows || [])].forEach(item => {
+   [
+      ...(markUserRes?.rows || []),
+      ...(markUserV2Res?.rows || []),
+      ...(markAgentRes?.rows || []),
+      ...(markAgentV2Res?.rows || [])
+   ].forEach(item => {
       if (item && item.userId !== undefined && item.userId !== null) {
          mergedMap.set(item.userId, item);
       }
@@ -520,15 +630,26 @@ function getDefaultAgentDownstreamRoleIds() {
    if (!(isAgentAccountPage.value && isAgent.value)) {
       return [];
    }
-   const userRole = roleOptions.value.find(item => item.roleKey === "user" && item.status === "0");
+   const userRole = roleOptions.value.find(item => ["user", "mark_user"].includes(item.roleKey) && item.status === "0");
    if (userRole && userRole.roleId !== undefined && userRole.roleId !== null) {
       return [userRole.roleId];
    }
-   const commonRole = roleOptions.value.find(item => item.roleKey === "common" && item.status === "0");
-   if (commonRole && commonRole.roleId !== undefined && commonRole.roleId !== null) {
-      return [commonRole.roleId];
-   }
    return [];
+}
+
+function filterAgentRoleOptions(roles, selectedRoleIds = []) {
+   const roleList = Array.isArray(roles) ? roles : [];
+   if (!(isAgentAccountPage.value && isAgent.value)) {
+      return roleList;
+   }
+   const selectedSet = new Set((selectedRoleIds || []).map(item => String(item)));
+   const hasAgentRoleSelected = roleList.some(item =>
+      selectedSet.has(String(item?.roleId)) && ["agent", "mark_agent"].includes(String(item?.roleKey || "").trim())
+   );
+   const allowedRoleKeys = hasAgentRoleSelected ? ["agent", "mark_agent"] : ["user", "mark_user"];
+   return roleList.filter(item =>
+      allowedRoleKeys.includes(String(item?.roleKey || "").trim()) && String(item?.status) === "0"
+   );
 }
 
 /** 通过条件过滤节点  */
@@ -885,15 +1006,12 @@ function handleAdd() {
    const markTemplatePromise = isAgentAccountPage.value ? loadMarkTemplateList() : Promise.resolve();
    Promise.all([getUser(), markTemplatePromise]).then(([response]) => {
       postOptions.value = response.posts;
-      roleOptions.value = response.roles;
+      roleOptions.value = filterAgentRoleOptions(response.roles, form.value.roleIds);
       const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
       if (defaultRoleIds.length > 0) {
          form.value.roleIds = defaultRoleIds;
       }
-      if (isAgentAccountPage.value && isAgent.value && userStore.relMarkTemplate !== null && userStore.relMarkTemplate !== undefined && String(userStore.relMarkTemplate) !== "") {
-         const templateId = Number(userStore.relMarkTemplate);
-         form.value.relMarkTemplate = Number.isNaN(templateId) ? userStore.relMarkTemplate : templateId;
-      }
+      ensureAgentDefaultMarkTemplateSelected();
       open.value = true;
       title.value = "添加用户";
       form.value.password = initPassword.value;
@@ -907,9 +1025,10 @@ function handleUpdate(row) {
    Promise.all([getUser(userId), markTemplatePromise]).then(([response]) => {
       form.value = response.data;
       postOptions.value = response.posts;
-      roleOptions.value = response.roles;
       form.value.postIds = response.postIds;
       form.value.roleIds = response.roleIds;
+      roleOptions.value = filterAgentRoleOptions(response.roles, form.value.roleIds);
+      ensureAgentDefaultMarkTemplateSelected();
       open.value = true;
       title.value = "修改用户";
       form.value.password = "";
@@ -919,9 +1038,10 @@ function handleUpdate(row) {
 function submitForm() {
    proxy.$refs["userRef"].validate(valid => {
       if (valid) {
+         const normalizedRelMarkTemplate = normalizeMarkTemplateId(form.value.relMarkTemplate);
          const payload = {
             ...form.value,
-            relMarkTemplate: form.value.relMarkTemplate === undefined || form.value.relMarkTemplate === null || String(form.value.relMarkTemplate) === "" ? null : form.value.relMarkTemplate
+            relMarkTemplate: normalizedRelMarkTemplate
          };
          if (form.value.userId == undefined && isAgentAccountPage.value && isAgent.value && (!Array.isArray(form.value.roleIds) || form.value.roleIds.length === 0)) {
             const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
