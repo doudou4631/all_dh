@@ -4,8 +4,9 @@
     <el-card shadow="never" class="platform-card">
 
       <el-empty v-if="platformOptions.length === 0" description="当前未配置可用平台" />
-      <div v-else class="platform-layout">
+      <div v-else :class="['platform-layout', { 'platform-layout--single': !showPlatformSwitcher }]">
         <el-tabs
+          v-if="showPlatformSwitcher"
           v-model="activePlatformCode"
           tab-position="left"
           class="platform-nav-tabs"
@@ -384,6 +385,7 @@ const activePlatformHint = computed(() => {
   return platformHintMap[activePlatform.value.platformCode] || `${activePlatformName.value}支持号码标记处理，请按行输入号码。`
 })
 const routePlatformCode = computed(() => String(route.query?.platformCode || '').trim())
+const showPlatformSwitcher = computed(() => !routePlatformCode.value)
 
 function parsePhonesWithStats(text) {
   const source = String(text || '')
@@ -761,6 +763,10 @@ onMounted(async () => {
   display: flex;
   align-items: flex-start;
   gap: 16px;
+}
+
+.platform-layout--single {
+  display: block;
 }
 
 .platform-nav-tabs {

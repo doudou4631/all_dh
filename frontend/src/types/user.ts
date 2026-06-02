@@ -72,5 +72,6 @@ export interface UserInfo {
     status?: string;
     remark?: string;
     relTemplate?: string;
+    relMarkTemplate?: number | string;
     points?: String;
 }

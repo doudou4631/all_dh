@@ -216,6 +216,16 @@
                   </el-form-item>
                </el-col>
             </el-row>
+            <el-row v-if="isAgentAccountPage">
+               <el-col :span="12">
+                  <el-form-item label="标记模板" prop="relMarkTemplate">
+                     <el-select v-model="form.relMarkTemplate" clearable filterable placeholder="请选择标记模板">
+                        <el-option v-for="item in markTemplateList" :key="item.id" :label="item.templateName"
+                           :value="item.id" />
+                     </el-select>
+                  </el-form-item>
+               </el-col>
+            </el-row>
             <el-row>
                <el-col :span="24">
                   <el-form-item label="备注">
@@ -335,11 +345,14 @@ import { getToken } from "@/utils/auth";
 import { changeUserStatus, listUser, resetUserPwd, delUser, getUser, updateUser, addUser, deptTreeSelect } from "@/api/system/user";
 import { adjustPointRecord } from "@/api/server/pointRecord";
 import { listTemplate } from "@/api/server/template";
+import { listMarkTemplateOptions } from "@/api/server/markTemplate";
 import { listPlatformConfig } from "@/api/server/platformConfig";
+import useUserStore from "@/store/modules/user";
 
 const router = useRouter();
 const route = useRoute();
 const { proxy } = getCurrentInstance();
+const userStore = useUserStore();
 const { sys_normal_disable, sys_user_sex } = proxy.useDict("sys_normal_disable", "sys_user_sex");
 const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
 const isAgent = computed(() => proxy.$auth.hasRole('agent'));
@@ -377,10 +390,19 @@ const serviceRules = {
 };
 const serviceRef = ref(null);
 const templateList = ref([]);
+const markTemplateList = ref([]);
 const selectedTemplate = ref(null);
 const apiNames = ref([]);
 const platformNameMap = ref(new Map());
 let platformNameLoadingPromise = null;
+
+function loadMarkTemplateList() {
+   return listMarkTemplateOptions().then(response => {
+      markTemplateList.value = Array.isArray(response?.data) ? response.data : [];
+   }).catch(() => {
+      markTemplateList.value = [];
+   });
+}
 
 // 积分操作相关状态
 const pointDialog = reactive({
@@ -456,12 +478,42 @@ const { queryParams, form, rules } = toRefs(data);
 
 function applyAccountScope() {
    if (isAgentAccountPage.value) {
-      queryParams.value.roleKey = "user,agent";
-      queryParams.value.excludeRoleKey = undefined;
+      if (isAgent.value) {
+         queryParams.value.roleKey = undefined;
+         queryParams.value.excludeRoleKey = "agent";
+      } else {
+         queryParams.value.roleKey = "agent";
+         queryParams.value.excludeRoleKey = undefined;
+      }
       return;
    }
    queryParams.value.roleKey = undefined;
    queryParams.value.excludeRoleKey = "agent";
+}
+
+async function loadAgentAccountUsers() {
+   const scopeParams = proxy.addDateRange({
+      ...queryParams.value,
+      pageNum: 1,
+      pageSize: 5000,
+      roleKey: undefined,
+      excludeRoleKey: undefined
+   }, dateRange.value);
+   const [markUserRes, markAgentRes] = await Promise.all([
+      listUser({ ...scopeParams, roleKey: "user" }),
+      listUser({ ...scopeParams, roleKey: "agent" })
+   ]);
+   const mergedMap = new Map();
+   [...(markUserRes?.rows || []), ...(markAgentRes?.rows || [])].forEach(item => {
+      if (item && item.userId !== undefined && item.userId !== null) {
+         mergedMap.set(item.userId, item);
+      }
+   });
+   const mergedRows = Array.from(mergedMap.values()).sort((a, b) => Number(a.userId) - Number(b.userId));
+   total.value = mergedRows.length;
+   const start = (queryParams.value.pageNum - 1) * queryParams.value.pageSize;
+   const end = start + queryParams.value.pageSize;
+   userList.value = mergedRows.slice(start, end);
 }
 
 function getDefaultAgentDownstreamRoleIds() {
@@ -497,6 +549,18 @@ function getDeptTree() {
 /** 查询用户列表 */
 function getList() {
    loading.value = true;
+   if (isAgentAccountPage.value) {
+      loadAgentAccountUsers()
+         .catch(() => {
+            userList.value = [];
+            total.value = 0;
+            proxy.$modal.msgError("加载代理账户列表失败");
+         })
+         .finally(() => {
+            loading.value = false;
+         });
+      return;
+   }
    applyAccountScope();
    listUser(proxy.addDateRange(queryParams.value, dateRange.value)).then(res => {
       loading.value = false;
@@ -805,7 +869,8 @@ function reset() {
       points: undefined,
       remark: undefined,
       postIds: [],
-      roleIds: []
+      roleIds: [],
+      relMarkTemplate: undefined
    };
    proxy.resetForm("userRef");
 };
@@ -817,12 +882,17 @@ function cancel() {
 /** 新增按钮操作 */
 function handleAdd() {
    reset();
-   getUser().then(response => {
+   const markTemplatePromise = isAgentAccountPage.value ? loadMarkTemplateList() : Promise.resolve();
+   Promise.all([getUser(), markTemplatePromise]).then(([response]) => {
       postOptions.value = response.posts;
       roleOptions.value = response.roles;
       const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
       if (defaultRoleIds.length > 0) {
          form.value.roleIds = defaultRoleIds;
+      }
+      if (isAgentAccountPage.value && isAgent.value && userStore.relMarkTemplate !== null && userStore.relMarkTemplate !== undefined && String(userStore.relMarkTemplate) !== "") {
+         const templateId = Number(userStore.relMarkTemplate);
+         form.value.relMarkTemplate = Number.isNaN(templateId) ? userStore.relMarkTemplate : templateId;
       }
       open.value = true;
       title.value = "添加用户";
@@ -833,7 +903,8 @@ function handleAdd() {
 function handleUpdate(row) {
    reset();
    const userId = row.userId || ids.value;
-   getUser(userId).then(response => {
+   const markTemplatePromise = isAgentAccountPage.value ? loadMarkTemplateList() : Promise.resolve();
+   Promise.all([getUser(userId), markTemplatePromise]).then(([response]) => {
       form.value = response.data;
       postOptions.value = response.posts;
       roleOptions.value = response.roles;
@@ -841,27 +912,31 @@ function handleUpdate(row) {
       form.value.roleIds = response.roleIds;
       open.value = true;
       title.value = "修改用户";
-      form.password = "";
+      form.value.password = "";
    });
 };
 /** 提交按钮 */
 function submitForm() {
    proxy.$refs["userRef"].validate(valid => {
       if (valid) {
+         const payload = {
+            ...form.value,
+            relMarkTemplate: form.value.relMarkTemplate === undefined || form.value.relMarkTemplate === null || String(form.value.relMarkTemplate) === "" ? null : form.value.relMarkTemplate
+         };
          if (form.value.userId == undefined && isAgentAccountPage.value && isAgent.value && (!Array.isArray(form.value.roleIds) || form.value.roleIds.length === 0)) {
             const defaultRoleIds = getDefaultAgentDownstreamRoleIds();
             if (defaultRoleIds.length > 0) {
-               form.value.roleIds = defaultRoleIds;
+               payload.roleIds = defaultRoleIds;
             }
          }
          if (form.value.userId != undefined) {
-            updateUser(form.value).then(response => {
+            updateUser(payload).then(response => {
                proxy.$modal.msgSuccess("修改成功");
                open.value = false;
                getList();
             });
          } else {
-            addUser(form.value).then(response => {
+            addUser(payload).then(response => {
                proxy.$modal.msgSuccess("新增成功");
                open.value = false;
                getList();
@@ -872,6 +947,9 @@ function submitForm() {
 };
 
 getDeptTree();
+if (isAgentAccountPage.value) {
+   loadMarkTemplateList();
+}
 getList();
 </script>
 

@@ -1,0 +1,212 @@
+package com.geek.server.service.impl;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geek.common.core.domain.entity.SysMenu;
+
+import com.geek.common.utils.DateUtils;
+import com.geek.common.utils.SecurityUtils;
+import com.geek.server.domain.MarkPlatformTemplate;
+import com.geek.server.mapper.MarkPlatformTemplateMapper;
+import com.geek.server.service.IMarkPlatformTemplateService;
+import com.mybatisflex.core.query.QueryChain;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 标记平台模板服务实现
+ */
+@Service
+public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateService {
+    private static final Long MARK_ROOT_MENU_ID = 900100000001L;
+    private static final String MARK_USER_MENU_COMPONENT = "server/mark/user/index";
+    private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
+
+    static {
+        LEGACY_PLATFORM_NAME_MAP.put("mobile_gaopin", "高频拦截");
+        LEGACY_PLATFORM_NAME_MAP.put("td_gaopin", "泰迪高频");
+        LEGACY_PLATFORM_NAME_MAP.put("td_second", "泰迪二次");
+        LEGACY_PLATFORM_NAME_MAP.put("qihu_first", "360首次");
+        LEGACY_PLATFORM_NAME_MAP.put("qihu_second", "360二次");
+        LEGACY_PLATFORM_NAME_MAP.put("dianhuabang", "电话邦");
+        LEGACY_PLATFORM_NAME_MAP.put("tencent_mark", "腾讯");
+    }
+
+    @Autowired
+    private MarkPlatformTemplateMapper markPlatformTemplateMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Override
+    public MarkPlatformTemplate selectMarkPlatformTemplateById(Long id) {
+        return markPlatformTemplateMapper.selectMarkPlatformTemplateById(id);
+    }
+
+    @Override
+    public List<MarkPlatformTemplate> selectMarkPlatformTemplateList(MarkPlatformTemplate query) {
+        return markPlatformTemplateMapper.selectMarkPlatformTemplateList(query);
+    }
+
+    @Override
+    public List<Map<String, String>> selectPlatformOptions() {
+        Map<String, String> dynamicPlatformMap = resolveMenuPlatformNameMap();
+        Map<String, String> sourceMap = new LinkedHashMap<>();
+        if (dynamicPlatformMap.isEmpty()) {
+            sourceMap.putAll(LEGACY_PLATFORM_NAME_MAP);
+        } else {
+            sourceMap.putAll(dynamicPlatformMap);
+        }
+        Map<String, String> templatePlatformMap = resolveTemplatePlatformNameMap();
+        for (Map.Entry<String, String> entry : templatePlatformMap.entrySet()) {
+            sourceMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        List<Map<String, String>> options = new ArrayList<>();
+        for (Map.Entry<String, String> entry : sourceMap.entrySet()) {
+            Map<String, String> option = new LinkedHashMap<>();
+            option.put("code", entry.getKey());
+            option.put("name", StringUtils.defaultIfBlank(entry.getValue(), entry.getKey()));
+            options.add(option);
+        }
+        return options;
+    }
+
+    @Override
+    public int insertMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate) {
+        markPlatformTemplate.setStatus(StringUtils.defaultIfBlank(markPlatformTemplate.getStatus(), "0"));
+        markPlatformTemplate.setCreateBy(SecurityUtils.getUsername());
+        markPlatformTemplate.setCreateTime(DateUtils.getNowDate());
+        return markPlatformTemplateMapper.insertMarkPlatformTemplate(markPlatformTemplate);
+    }
+
+    @Override
+    public int updateMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate) {
+        markPlatformTemplate.setUpdateBy(SecurityUtils.getUsername());
+        markPlatformTemplate.setUpdateTime(DateUtils.getNowDate());
+        return markPlatformTemplateMapper.updateMarkPlatformTemplate(markPlatformTemplate);
+    }
+
+    @Override
+    public int deleteMarkPlatformTemplateByIds(Long[] ids) {
+        return markPlatformTemplateMapper.deleteMarkPlatformTemplateByIds(ids);
+    }
+
+    private Map<String, String> resolveMenuPlatformNameMap() {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        List<SysMenu> menus = QueryChain.of(SysMenu.class)
+                .eq(SysMenu::getParentId, MARK_ROOT_MENU_ID)
+                .eq(SysMenu::getMenuType, "C")
+                .eq(SysMenu::getStatus, "0")
+                .eq(SysMenu::getComponent, MARK_USER_MENU_COMPONENT)
+                .orderBy(SysMenu::getOrderNum, true)
+                .list();
+        for (SysMenu menu : menus) {
+            Map<String, Object> queryMap = parseJsonMap(menu.getQuery());
+            String platformCode = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformCode")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("code")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("value"))
+            );
+            if (StringUtils.isBlank(platformCode)) {
+                continue;
+            }
+            String platformName = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformName")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("name")),
+                    StringUtils.trimToNull(menu.getMenuName()),
+                    platformCode
+            );
+            platformNameMap.putIfAbsent(platformCode, platformName);
+        }
+        return platformNameMap;
+    }
+
+    private Map<String, String> resolveTemplatePlatformNameMap() {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        List<MarkPlatformTemplate> templateList = markPlatformTemplateMapper.selectMarkPlatformTemplateList(new MarkPlatformTemplate());
+        for (MarkPlatformTemplate template : templateList) {
+            String templateInfo = template.getTemplateInfo();
+            if (StringUtils.isBlank(templateInfo)) {
+                continue;
+            }
+            try {
+                List<Object> rawList = objectMapper.readValue(templateInfo, new TypeReference<List<Object>>() {});
+                for (Object item : rawList) {
+                    addTemplatePlatformEntry(platformNameMap, item);
+                }
+            } catch (Exception ignored) {
+                // ignore malformed template info and continue collecting from others
+            }
+        }
+        return platformNameMap;
+    }
+
+    private void addTemplatePlatformEntry(Map<String, String> target, Object item) {
+        if (item == null) {
+            return;
+        }
+        String code = null;
+        String name = null;
+        if (item instanceof String) {
+            code = StringUtils.trimToNull((String) item);
+        } else if (item instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) item;
+            code = firstNonBlank(
+                    getStringOrNull(map.get("platformCode")),
+                    getStringOrNull(map.get("code")),
+                    getStringOrNull(map.get("value"))
+            );
+            name = firstNonBlank(
+                    getStringOrNull(map.get("platformName")),
+                    getStringOrNull(map.get("name")),
+                    getStringOrNull(map.get("label"))
+            );
+        }
+        if (StringUtils.isBlank(code)) {
+            return;
+        }
+        String normalizedName = StringUtils.defaultIfBlank(name, code);
+        if (!target.containsKey(code)) {
+            target.put(code, normalizedName);
+            return;
+        }
+        String currentName = target.get(code);
+        if (StringUtils.equals(currentName, code) && StringUtils.isNotBlank(normalizedName)) {
+            target.put(code, normalizedName);
+        }
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String getStringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return StringUtils.trimToNull(String.valueOf(value));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.isNotBlank(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+}

@@ -1,4 +1,7 @@
 package com.geek.server.service.impl;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geek.common.core.domain.entity.SysMenu;
 
 import com.geek.common.exception.ServiceException;
 import com.geek.common.utils.DateUtils;
@@ -7,6 +10,7 @@ import com.geek.common.utils.ip.IpUtils;
 import com.geek.common.core.domain.entity.SysUser;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkOrderItem;
+import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.entity.BatchTask;
@@ -19,6 +23,7 @@ import com.geek.server.domain.vo.MarkPhoneCheckItemVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
 import com.geek.server.mapper.MarkOrderItemMapper;
 import com.geek.server.mapper.MarkOrderMapper;
+import com.geek.server.mapper.MarkPlatformTemplateMapper;
 import com.geek.server.mapper.MarkUserPlatformPriceMapper;
 import com.geek.server.mapper.MarkWalletLogMapper;
 import com.geek.server.service.IFreeQueryService;
@@ -46,16 +51,18 @@ import java.util.stream.Collectors;
 @Service
 public class MarkOrderServiceImpl implements IMarkOrderService {
 
-    private static final Map<String, String> PLATFORM_NAME_MAP = new LinkedHashMap<>();
+    private static final Long MARK_ROOT_MENU_ID = 900100000001L;
+    private static final String MARK_USER_MENU_COMPONENT = "server/mark/user/index";
+    private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
 
     static {
-        PLATFORM_NAME_MAP.put("mobile_gaopin", "高频拦截");
-        PLATFORM_NAME_MAP.put("td_gaopin", "泰迪高频");
-        PLATFORM_NAME_MAP.put("td_second", "泰迪二次");
-        PLATFORM_NAME_MAP.put("qihu_first", "360首次");
-        PLATFORM_NAME_MAP.put("qihu_second", "360二次");
-        PLATFORM_NAME_MAP.put("dianhuabang", "电话邦");
-        PLATFORM_NAME_MAP.put("tencent_mark", "腾讯");
+        LEGACY_PLATFORM_NAME_MAP.put("mobile_gaopin", "高频拦截");
+        LEGACY_PLATFORM_NAME_MAP.put("td_gaopin", "泰迪高频");
+        LEGACY_PLATFORM_NAME_MAP.put("td_second", "泰迪二次");
+        LEGACY_PLATFORM_NAME_MAP.put("qihu_first", "360首次");
+        LEGACY_PLATFORM_NAME_MAP.put("qihu_second", "360二次");
+        LEGACY_PLATFORM_NAME_MAP.put("dianhuabang", "电话邦");
+        LEGACY_PLATFORM_NAME_MAP.put("tencent_mark", "腾讯");
     }
 
     @Autowired
@@ -69,12 +76,17 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Autowired
     private MarkUserPlatformPriceMapper markUserPlatformPriceMapper;
+    @Autowired
+    private MarkPlatformTemplateMapper markPlatformTemplateMapper;
 
     @Autowired
     private SysUserMapper sysUserMapper;
 
     @Autowired
     private IFreeQueryService freeQueryService;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -83,6 +95,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         String currentUserName = SecurityUtils.getUsername();
         if (request == null || StringUtils.isBlank(request.getPlatformCode())) {
             throw new ServiceException("平台编码不能为空");
+        }
+        if (!isPlatformAvailableForUser(currentUserId, request.getPlatformCode())) {
+            throw new ServiceException("当前账号未开通该平台");
         }
 
         List<String> normalizedPhones = normalizePhones(request.getPhones());
@@ -164,6 +179,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         Long currentUserId = SecurityUtils.getUserId();
         if (request == null || StringUtils.isBlank(request.getPlatformCode())) {
             throw new ServiceException("平台编码不能为空");
+        }
+        if (!isPlatformAvailableForUser(currentUserId, request.getPlatformCode())) {
+            throw new ServiceException("当前账号未开通该平台");
         }
         List<String> normalizedPhones = normalizePhones(request.getPhones());
         if (normalizedPhones.isEmpty()) {
@@ -525,33 +543,195 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         query.setUserId(userId);
         List<MarkUserPlatformPrice> savedPrices = markUserPlatformPriceMapper.selectMarkUserPlatformPriceList(query);
         Map<String, MarkUserPlatformPrice> savedMap = savedPrices.stream()
+                .filter(item -> StringUtils.isNotBlank(item.getPlatformCode()))
                 .collect(Collectors.toMap(MarkUserPlatformPrice::getPlatformCode, item -> item, (a, b) -> a, LinkedHashMap::new));
+        Set<String> explicitlyConfiguredCodes = new LinkedHashSet<>(savedMap.keySet());
+        Map<String, String> dynamicPlatformNameMap = resolveMenuPlatformNameMap();
+        Map<String, String> platformNameMap = resolvePlatformNameMap(dynamicPlatformNameMap);
+        Set<String> availableCodes = resolveAvailablePlatformCodes(userId, explicitlyConfiguredCodes, dynamicPlatformNameMap);
         List<MarkUserPlatformPrice> result = new ArrayList<>();
-        for (Map.Entry<String, String> entry : PLATFORM_NAME_MAP.entrySet()) {
-            MarkUserPlatformPrice price = savedMap.get(entry.getKey());
+        for (String platformCode : availableCodes) {
+            if (StringUtils.isBlank(platformCode)) {
+                continue;
+            }
+            MarkUserPlatformPrice price = savedMap.get(platformCode);
+            String platformName = resolvePlatformNameByMap(platformNameMap, platformCode);
             if (price == null) {
                 price = new MarkUserPlatformPrice();
                 price.setUserId(userId);
-                price.setPlatformCode(entry.getKey());
-                price.setPlatformName(entry.getValue());
+                price.setPlatformCode(platformCode);
+                price.setPlatformName(platformName);
                 price.setUnitPrice(1L);
+            } else if (StringUtils.isBlank(price.getPlatformName())) {
+                price.setPlatformName(platformName);
             }
             result.add(price);
         }
-        for (MarkUserPlatformPrice extra : savedPrices) {
-            if (!PLATFORM_NAME_MAP.containsKey(extra.getPlatformCode())) {
-                result.add(extra);
-            }
-        }
         return result;
+    }
+
+    private Set<String> resolveAvailablePlatformCodes(Long userId, Set<String> explicitlyConfiguredCodes,
+                                                      Map<String, String> dynamicPlatformNameMap) {
+        if (explicitlyConfiguredCodes != null && !explicitlyConfiguredCodes.isEmpty()) {
+            return new LinkedHashSet<>(explicitlyConfiguredCodes);
+        }
+        Set<String> templateCodes = resolveTemplatePlatformCodesByUser(userId);
+        if (!templateCodes.isEmpty()) {
+            return templateCodes;
+        }
+        if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
+            return new LinkedHashSet<>(dynamicPlatformNameMap.keySet());
+        }
+        return new LinkedHashSet<>(LEGACY_PLATFORM_NAME_MAP.keySet());
+    }
+
+    private Set<String> resolveTemplatePlatformCodesByUser(Long userId) {
+        Set<String> codes = new LinkedHashSet<>();
+        SysUser user = requireUser(userId);
+        Long templateId = user.getRelMarkTemplate();
+        if (templateId == null) {
+            return codes;
+        }
+        MarkPlatformTemplate template = markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId);
+        if (template == null || !"0".equals(template.getStatus())) {
+            return codes;
+        }
+        return parseTemplatePlatformCodes(template.getTemplateInfo());
+    }
+
+    private Set<String> parseTemplatePlatformCodes(String templateInfo) {
+        Set<String> codes = new LinkedHashSet<>();
+        if (StringUtils.isBlank(templateInfo)) {
+            return codes;
+        }
+        try {
+            List<Object> rawList = objectMapper.readValue(templateInfo, new TypeReference<List<Object>>() {});
+            for (Object item : rawList) {
+                if (item instanceof String) {
+                    addTemplatePlatformCode(codes, (String) item);
+                    continue;
+                }
+                if (item instanceof Map<?, ?>) {
+                    Map<?, ?> map = (Map<?, ?>) item;
+                    Object code = map.get("platformCode");
+                    if (code == null) {
+                        code = map.get("code");
+                    }
+                    if (code == null) {
+                        code = map.get("value");
+                    }
+                    if (code != null) {
+                        addTemplatePlatformCode(codes, String.valueOf(code));
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            return new LinkedHashSet<>();
+        }
+        return codes;
+    }
+
+    private void addTemplatePlatformCode(Set<String> target, String code) {
+        String normalized = StringUtils.trimToEmpty(code);
+        if (StringUtils.isBlank(normalized)) {
+            return;
+        }
+        target.add(normalized);
+    }
+
+    private boolean isPlatformAvailableForUser(Long userId, String platformCode) {
+        if (StringUtils.isBlank(platformCode)) {
+            return false;
+        }
+        List<MarkUserPlatformPrice> prices = buildPlatformPriceListByUser(userId);
+        return prices.stream().anyMatch(item -> StringUtils.equals(platformCode, item.getPlatformCode()));
     }
 
     private String resolvePlatformName(String platformCode, String requestPlatformName) {
         if (StringUtils.isNotBlank(requestPlatformName)) {
             return requestPlatformName.trim();
         }
-        String name = PLATFORM_NAME_MAP.get(platformCode);
+        Map<String, String> platformNameMap = resolvePlatformNameMap(resolveMenuPlatformNameMap());
+        return resolvePlatformNameByMap(platformNameMap, platformCode);
+    }
+
+    private Map<String, String> resolveMenuPlatformNameMap() {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        List<SysMenu> menus = com.mybatisflex.core.query.QueryChain.of(SysMenu.class)
+                .eq(SysMenu::getParentId, MARK_ROOT_MENU_ID)
+                .eq(SysMenu::getMenuType, "C")
+                .eq(SysMenu::getStatus, "0")
+                .eq(SysMenu::getComponent, MARK_USER_MENU_COMPONENT)
+                .orderBy(SysMenu::getOrderNum, true)
+                .list();
+        for (SysMenu menu : menus) {
+            Map<String, Object> queryMap = parseJsonMap(menu.getQuery());
+            String platformCode = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformCode")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("code")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("value"))
+            );
+            if (StringUtils.isBlank(platformCode)) {
+                continue;
+            }
+            String platformName = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformName")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("name")),
+                    StringUtils.trimToNull(menu.getMenuName()),
+                    platformCode
+            );
+            platformNameMap.putIfAbsent(platformCode, platformName);
+        }
+        return platformNameMap;
+    }
+
+    private Map<String, String> resolvePlatformNameMap(Map<String, String> dynamicPlatformNameMap) {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
+            platformNameMap.putAll(dynamicPlatformNameMap);
+        }
+        for (Map.Entry<String, String> entry : LEGACY_PLATFORM_NAME_MAP.entrySet()) {
+            platformNameMap.putIfAbsent(entry.getKey(), entry.getValue());
+        }
+        return platformNameMap;
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String resolvePlatformNameByMap(Map<String, String> platformNameMap, String platformCode) {
+        if (StringUtils.isBlank(platformCode)) {
+            return platformCode;
+        }
+        String name = platformNameMap == null ? null : platformNameMap.get(platformCode);
         return StringUtils.isBlank(name) ? platformCode : name;
+    }
+
+    private String getStringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return StringUtils.trimToNull(String.valueOf(value));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.isNotBlank(value)) {
+                return value;
+            }
+        }
+        return null;
     }
 
     private void fillPrecheckItemFromData(MarkPhoneCheckItemVO item, Object dataObj) {

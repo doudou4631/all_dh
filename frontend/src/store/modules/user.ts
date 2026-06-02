@@ -18,6 +18,7 @@ const useUserStore = defineStore(
       deptName: '',
       loginDate: '',
       relTemplate: '',
+      relMarkTemplate: '',
       points: '',
       roles: [] as string[],
       permissions: [] as string[],
@@ -56,7 +57,6 @@ const useUserStore = defineStore(
         return new Promise<{ user: UserInfo, roles: RoleInfo[], permissions: string[] }>((resolve, reject) => {
           getInfo().then((res: any) => {
             const user = res.user
-            console.log('初始化',user.relTemplate)
             if (res.roles && res.roles.length > 0) { // 验证返回的roles是否是一个非空数组
               this.roles = res.roles
               this.permissions = res.permissions
@@ -69,9 +69,8 @@ const useUserStore = defineStore(
             this.deptName = user.dept ? user.dept.deptName : '暂无部门'
             this.loginDate = user.loginDate
             this.relTemplate = user.relTemplate
+            this.relMarkTemplate = user.relMarkTemplate
             this.points = user.points
-            
-            console.log('赋值',this.relTemplate)
 
             if (user.avatar == "" || user.avatar == null) {
               this.avatar = defAva

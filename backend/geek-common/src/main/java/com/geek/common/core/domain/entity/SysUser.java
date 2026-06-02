@@ -97,6 +97,9 @@ public class SysUser extends BaseEntity {
     /** 可用模板 */
     private String relTemplate;
 
+    /** 标记模板ID */
+    private Long relMarkTemplate;
+
     /** 账号状态（0正常 1停用） */
     @Schema(title = "账号状态", description = "0正常 1停用")
     @Excel(name = "账号状态", readConverterExp = "0=正常,1=停用")
