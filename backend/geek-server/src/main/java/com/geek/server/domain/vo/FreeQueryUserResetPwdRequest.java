@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@Schema(description = "免费查询用户重置密码请求")
+@Schema(description = "手机端用户重置密码请求")
 public class FreeQueryUserResetPwdRequest {
 
     @Schema(title = "用户ID")

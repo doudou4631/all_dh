@@ -253,7 +253,7 @@ function handleSelectionChange(selection) {
 function handleAdd() {
   reset()
   open.value = true
-  title.value = '新增免费查询用户'
+  title.value = '新增手机端用户'
 }
 
 function handleUpdate(row) {
@@ -268,7 +268,7 @@ function handleUpdate(row) {
       points: response.data?.points ?? 0
     }
     open.value = true
-    title.value = '修改免费查询用户'
+    title.value = '修改手机端用户'
   })
 }
 
@@ -294,7 +294,7 @@ function submitForm() {
 function handleDelete(row) {
   const _ids = row?.id ? [row.id] : ids.value
   if (!_ids || _ids.length === 0) return
-  proxy.$modal.confirm(`是否确认删除免费查询用户编号为"${_ids.join(',')}"的数据项？`).then(() => {
+  proxy.$modal.confirm(`是否确认删除手机端用户编号为\"${_ids.join(',')}\"的数据项？`).then(() => {
     return delFreeQueryUser(_ids.join(','))
   }).then(() => {
     proxy.$modal.msgSuccess('删除成功')

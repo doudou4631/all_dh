@@ -15,6 +15,7 @@
     <div id="record-list" class="profile-record-list"></div>
   </div>
 
+  <script src="../assets/runtime-config.js"></script>
   <script src="../assets/bottom-nav.js"></script>
   <script src="../assets/profile-page.js"></script>
   <script>
@@ -23,7 +24,10 @@
         window.AppBottomNav.notify('请先登录');
       }
       setTimeout(function () {
-        location.replace('index.html');
+        var target = (window.MobileRuntimeConfig && window.MobileRuntimeConfig.resolveHref)
+          ? window.MobileRuntimeConfig.resolveHref('/profile/')
+          : 'index.html';
+        location.replace(target);
       }, 400);
     } else {
       var list = ProfilePage.getRechargeRecords();

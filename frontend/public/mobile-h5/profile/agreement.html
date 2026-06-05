@@ -34,5 +34,14 @@
       <p>我们有权根据需要更新本协议，更新后的协议将在平台公布，继续使用服务即视为接受更新内容。</p>
     </div>
   </div>
+  <script src="../assets/runtime-config.js"></script>
+  <script>
+    (function () {
+      var runtime = window.MobileRuntimeConfig;
+      if (!runtime || typeof runtime.resolveHref !== 'function') return;
+      var back = document.querySelector('.sub-back');
+      if (back) back.href = runtime.resolveHref('/profile/');
+    })();
+  </script>
 </body>
 </html>

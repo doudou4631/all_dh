@@ -308,10 +308,11 @@ import {
   getMarkUserOrderDetail,
   listMarkUserPlatformPrice
 } from '@/api/server/markUser'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
+const router = useRouter()
 
 const showSearch = ref(true)
 const loading = ref(false)
@@ -562,7 +563,25 @@ function loadSummaryAndPrice() {
     const menuPreferredPlatformCode = routePlatformCode.value
     if (menuPreferredPlatformCode) {
       const matched = allList.find((item) => item.platformCode === menuPreferredPlatformCode)
-      platformOptions.value = matched ? [matched] : []
+      if (matched) {
+        platformOptions.value = [matched]
+      } else if (allList.length > 0) {
+        const fallback = allList[0]
+        platformOptions.value = [fallback]
+        const nextQuery = {
+          ...route.query,
+          platformCode: fallback.platformCode,
+          platformName: fallback.platformName
+        }
+        const routeCode = String(route.query?.platformCode || '')
+        const routeName = String(route.query?.platformName || '')
+        if (routeCode !== fallback.platformCode || routeName !== fallback.platformName) {
+          router.replace({ path: route.path, query: nextQuery }).catch(() => {})
+          proxy?.$modal?.msgWarning('当前平台已变更，已自动切换到可用平台')
+        }
+      } else {
+        platformOptions.value = []
+      }
     } else {
       platformOptions.value = allList
     }

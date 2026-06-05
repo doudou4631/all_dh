@@ -87,14 +87,6 @@
                   </el-table-column>
                   <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber"
                      v-if="columns[4].visible" width="120" />
-                  <el-table-column v-if="isAgentAccountPage" label="标记模板" align="center" min-width="140" show-overflow-tooltip>
-                     <template #default="scope">
-                        <el-tag v-if="scope.row.relMarkTemplate" type="warning" effect="plain">
-                           {{ resolveMarkTemplateName(scope.row.relMarkTemplate) }}
-                        </el-tag>
-                        <span v-else>-</span>
-                     </template>
-                  </el-table-column>
                   <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" >
                      <template #default="scope">
                         <el-switch v-model="scope.row.status" active-value="0" inactive-value="1"

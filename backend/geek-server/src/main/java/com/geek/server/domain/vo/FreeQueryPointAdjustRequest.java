@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.Data;
 
 @Data
-@Schema(description = "免费查询用户积分调整请求")
+@Schema(description = "手机端用户积分调整请求")
 public class FreeQueryPointAdjustRequest {
 
     @Schema(title = "用户ID")

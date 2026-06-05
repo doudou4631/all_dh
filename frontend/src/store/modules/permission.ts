@@ -71,6 +71,12 @@ function buildMarkUserPath(index: number, fallbackPath = 'markUser'): string {
   if (index === 0 && fallbackPath) return String(fallbackPath)
   return `markUser${index + 1}`
 }
+function buildMarkUserQuery(platform: MarkPlatformOption): string {
+  return JSON.stringify({
+    platformCode: platform.platformCode,
+    platformName: platform.platformName
+  })
+}
 
 function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatformOption[]): RouteItem[] {
   if (!Array.isArray(children) || children.length === 0) return children
@@ -104,16 +110,39 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
     }
     existingPaths.add(String(newPath))
     cloned.path = String(newPath)
-    cloned.query = JSON.stringify({
-      platformCode: platform.platformCode,
-      platformName: platform.platformName
-    })
+    cloned.query = buildMarkUserQuery(platform)
     cloned.meta = {
       ...(cloned.meta || {}),
       title: platform.platformName
     }
     return cloned
   })
+  const rewrittenPathSet = new Set(
+    rewrittenMarkChildren
+      .map(item => String(item.path || '').trim())
+      .filter(path => path.length > 0)
+  )
+  const fallbackPlatform = platformList[0]
+  const fallbackRoutes: RouteItem[] = []
+  if (fallbackPlatform) {
+    markChildren.forEach((item, index) => {
+      const itemPath = String(item.path || '').trim()
+      if (!itemPath || rewrittenPathSet.has(itemPath)) return
+      const fallbackRoute = deepClone(item)
+      fallbackRoute.hidden = true
+      fallbackRoute.query = buildMarkUserQuery(fallbackPlatform)
+      fallbackRoute.meta = {
+        ...(fallbackRoute.meta || {}),
+        title: fallbackPlatform.platformName
+      }
+      if (typeof fallbackRoute.name === 'string' && fallbackRoute.name.length > 0) {
+        fallbackRoute.name = `${fallbackRoute.name}__fallback`
+      } else {
+        fallbackRoute.name = `markUserFallback${index + 1}`
+      }
+      fallbackRoutes.push(fallbackRoute)
+    })
+  }
 
   const rewrittenChildren: RouteItem[] = []
   let injected = false
@@ -121,6 +150,7 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
     if (isMarkUserPlatformRoute(item)) {
       if (!injected) {
         rewrittenChildren.push(...rewrittenMarkChildren)
+        rewrittenChildren.push(...fallbackRoutes)
         injected = true
       }
       return
@@ -135,6 +165,7 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
 
 async function rewriteMarkUserRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
   if (!Array.isArray(routes) || routes.length === 0) return routes
+  if (!auth.hasPermi('server:markUser:price:list')) return routes
   try {
     const resp: any = await listMarkUserPlatformPrice()
     const platformList = normalizeMarkPlatformOptions(resp?.data)

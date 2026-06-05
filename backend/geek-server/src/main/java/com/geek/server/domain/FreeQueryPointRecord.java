@@ -6,9 +6,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 免费查询积分流水对象 free_query_point_record
+ * 手机端用户积分流水对象 free_query_point_record
  */
-@Schema(description = "免费查询积分流水对象")
+@Schema(description = "手机端用户积分流水对象")
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class FreeQueryPointRecord extends BaseEntity {
@@ -18,7 +18,7 @@ public class FreeQueryPointRecord extends BaseEntity {
     @Schema(title = "主键ID")
     private Long id;
 
-    @Schema(title = "免费查询用户ID")
+    @Schema(title = "手机端用户ID")
     private Long freeUserId;
 
     @Schema(title = "积分变动值")

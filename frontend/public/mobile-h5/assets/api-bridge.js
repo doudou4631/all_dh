@@ -313,8 +313,7 @@
           callback && callback((err && err.msg) || '网络错误，请重试');
         },
         {
-          'X-Free-Token': authToken,
-          Authorization: 'Bearer ' + authToken
+          'X-Free-Token': authToken
         }
       );
     }

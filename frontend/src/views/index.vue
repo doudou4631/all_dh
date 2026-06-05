@@ -137,6 +137,7 @@ import useUserStore from '@/store/modules/user'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { GeekResponseForList } from '@/types/request'
 import { getMarkUserWalletSummary } from '@/api/server/markUser'
+import auth from '@/plugins/auth'
 const router = useRouter()
 interface Feature {
   icon: string;
@@ -257,6 +258,10 @@ const viewMoreNotices = () => {
 }
 
 const getWalletSummary = async () => {
+  if (!auth.hasPermi('server:markUser:wallet:list')) {
+    walletSummaryVisible.value = false
+    return
+  }
   try {
     const res: any = await getMarkUserWalletSummary()
     const data = res?.data || {}

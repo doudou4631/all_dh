@@ -169,6 +169,9 @@
   }
 
   function getAppBase() {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.getAppBase === 'function') {
+      return window.MobileRuntimeConfig.getAppBase();
+    }
     var path = window.location.pathname || '/';
     if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
       return '/mobile-h5';
@@ -177,12 +180,35 @@
   }
 
   function resolveHref(href) {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.resolveHref === 'function') {
+      return window.MobileRuntimeConfig.resolveHref(href);
+    }
     if (!href || href.charAt(0) !== '/') return href;
     var base = getAppBase();
     if (!base) return href;
     if (href === '/') return base + '/';
     if (href.indexOf(base + '/') === 0) return href;
     return base + href;
+  }
+
+  function isAbsoluteUrl(url) {
+    var text = String(url || '').toLowerCase();
+    return text.indexOf('http://') === 0 || text.indexOf('https://') === 0;
+  }
+
+  function rewriteStaticLinks() {
+    var mapping = {
+      'about.html': '/profile/about.html',
+      'agreement.html': '/profile/agreement.html',
+      'privacy.html': '/profile/privacy.html',
+      'index.html': '/profile/'
+    };
+    var links = document.querySelectorAll('a[href]');
+    links.forEach(function (link) {
+      var href = String(link.getAttribute('href') || '').trim();
+      if (!href || !Object.prototype.hasOwnProperty.call(mapping, href)) return;
+      link.setAttribute('href', resolveHref(mapping[href]));
+    });
   }
 
   function getPostLoginRedirectPath() {
@@ -351,12 +377,11 @@
   }
 
   function getQueryRecords() {
-    var list = readJson(QUERY_RECORDS_KEY, null);
-    if (list && list.length) return list;
-    return [
-      { phone: '138****8000', type: '单号查询', marked: 2, time: '2026-05-30 14:20' },
-      { phone: '185****4371', type: '批量查询', marked: 1, time: '2026-05-29 10:15' }
-    ];
+    if (window.QueryRecords && typeof window.QueryRecords.getRecords === 'function') {
+      return window.QueryRecords.getRecords(getAccount());
+    }
+    var list = readJson(QUERY_RECORDS_KEY, []);
+    return Array.isArray(list) ? list : [];
   }
 
   function getRechargeRecords() {
@@ -485,7 +510,7 @@
     if (pointsBtn) {
       pointsBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = 'recharge-records.html';
+        window.location.href = resolveHref('/profile/recharge-records.html');
       });
     }
 
@@ -493,7 +518,7 @@
     if (todayQueryBtn) {
       todayQueryBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = 'query-records.html';
+        window.location.href = resolveHref('/profile/query-records.html');
       });
     }
 
@@ -514,7 +539,7 @@
     if (batchBtn) {
       batchBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = '../batch/';
+        window.location.href = resolveHref('/batch/');
       });
     }
 
@@ -522,7 +547,7 @@
     if (queryBtn) {
       queryBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = 'query-records.html';
+        window.location.href = resolveHref('/profile/query-records.html');
       });
     }
 
@@ -530,7 +555,7 @@
     if (rechargeBtn) {
       rechargeBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = 'recharge-records.html';
+        window.location.href = resolveHref('/profile/recharge-records.html');
       });
     }
 
@@ -553,7 +578,8 @@
     if (inviteBtn) {
       inviteBtn.addEventListener('click', function () {
         var text = '取消号码标记，提升号码接听效率~';
-        var shareUrl = location.origin + '/';
+        var sharePath = resolveHref('/');
+        var shareUrl = isAbsoluteUrl(sharePath) ? sharePath : (location.origin + sharePath);
         if (navigator.share) {
           navigator.share({ title: '取消号码标记', text: text, url: shareUrl }).catch(function () {});
           return;
@@ -588,6 +614,7 @@
     getTodayQueryCount: getTodayQueryCount,
     clearLogin: clearLogin
   };
+  rewriteStaticLinks();
 
   renderUserHeader();
   if (isLoggedIn() && redirectAfterLoginIfNeeded()) return;

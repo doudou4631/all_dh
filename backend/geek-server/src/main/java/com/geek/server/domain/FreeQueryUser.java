@@ -7,9 +7,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * 免费查询独立用户对象 free_query_user
+ * 手机端用户对象 free_query_user
  */
-@Schema(description = "免费查询独立用户对象")
+@Schema(description = "手机端用户对象")
 @Data
 @EqualsAndHashCode(callSuper = true)
 public class FreeQueryUser extends BaseEntity {

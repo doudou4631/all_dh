@@ -12,7 +12,6 @@ import com.geek.server.mapper.FreeQueryUserMapper;
 import com.geek.server.service.IFreeQueryUserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,7 +80,7 @@ public class FreeQueryUserServiceImpl implements IFreeQueryUserService {
         int rows;
         try {
             rows = freeQueryUserMapper.insertFreeQueryUser(user);
-        } catch (DuplicateKeyException | DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             throw convertPersistenceException(e);
         }
         if (rows > 0 && user.getPoints() != null && user.getPoints() > 0) {
@@ -125,7 +124,7 @@ public class FreeQueryUserServiceImpl implements IFreeQueryUserService {
         user.setUpdateTime(DateUtils.getNowDate());
         try {
             return freeQueryUserMapper.updateFreeQueryUser(user);
-        } catch (DuplicateKeyException | DataIntegrityViolationException e) {
+        } catch (DataIntegrityViolationException e) {
             throw convertPersistenceException(e);
         }
     }

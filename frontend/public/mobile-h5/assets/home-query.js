@@ -43,20 +43,15 @@
       toast.hidden = true;
     }, 1800);
   }
-  function getAppBase() {
-    var path = window.location.pathname || '/';
-    if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
-      return '/mobile-h5';
+  function resolveHref(href) {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.resolveHref === 'function') {
+      return window.MobileRuntimeConfig.resolveHref(href);
     }
-    return '';
+    return href;
   }
 
   function goResult(phone) {
-    var base = getAppBase();
-    var url =
-      window.location.origin +
-      (base ? base + '/result/?phone=' : '/result/?phone=') +
-      encodeURIComponent(phone);
+    var url = resolveHref('/result/?phone=' + encodeURIComponent(phone));
     window.location.assign(url);
   }
 

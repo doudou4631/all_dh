@@ -46,9 +46,9 @@ public class BatchApiController {
     }
 
     /**
-     * 提交异步批量查询任务（免费用户兼容入口）
+     * 提交异步批量查询任务（手机端用户兼容入口）
      */
-    @Operation(summary = "提交异步批量查询任务（免费用户兼容入口）")
+    @Operation(summary = "提交异步批量查询任务（手机端用户兼容入口）")
     @Anonymous
     @PostMapping(value = "/asyncBatchOpt", headers = "X-Free-Token")
     public AjaxResult submitBatchQueryOptimizedForFree(@RequestBody FreeBatchQueryRequest request,

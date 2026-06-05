@@ -4,6 +4,9 @@
   var PROFILE_POINTS_KEY = 'profile_user_points';
 
   function getAppBase() {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.getAppBase === 'function') {
+      return window.MobileRuntimeConfig.getAppBase();
+    }
     var path = window.location.pathname || '/';
     if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
       return '/mobile-h5';
@@ -12,12 +15,22 @@
   }
 
   function resolveHref(href) {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.resolveHref === 'function') {
+      return window.MobileRuntimeConfig.resolveHref(href);
+    }
     if (!href || href.charAt(0) !== '/') return href;
     var base = getAppBase();
     if (!base) return href;
     if (href === '/') return base + '/';
     if (href.indexOf(base + '/') === 0) return href;
     return base + href;
+  }
+
+  function toPath(url) {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.toPath === 'function') {
+      return window.MobileRuntimeConfig.toPath(url);
+    }
+    return url;
   }
 
   function getProfileAccount() {
@@ -37,7 +50,8 @@
   }
 
   function getBatchLoginRedirectUrl() {
-    var redirect = encodeURIComponent('/batch/');
+    var redirectTarget = toPath(resolveHref('/batch/'));
+    var redirect = encodeURIComponent(redirectTarget || '/batch/');
     return resolveHref('/profile/?redirect=' + redirect);
   }
 
@@ -513,6 +527,9 @@
       remainingPoints: Number(data && data.remainingPoints)
     };
     currentResults = normalizeBatchResults(data && data.results, phones);
+    if (window.QueryRecords && typeof window.QueryRecords.addBatchRecords === 'function') {
+      window.QueryRecords.addBatchRecords(currentResults);
+    }
     renderProgress(currentResults.length, phones.length, true);
     if (window.QueryStats && typeof window.QueryStats.recordQueryForCurrentUser === 'function') {
       window.QueryStats.recordQueryForCurrentUser(currentResults.length || phones.length);

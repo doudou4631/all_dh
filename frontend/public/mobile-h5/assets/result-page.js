@@ -20,22 +20,57 @@
     var params = new URLSearchParams(window.location.search);
     return (params.get('phone') || '').trim();
   }
-
-  function getAppBase() {
-    var path = window.location.pathname || '/';
-    if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
-      return '/mobile-h5';
+  function getRuntimeConfig() {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.getConfig === 'function') {
+      return window.MobileRuntimeConfig.getConfig() || {};
     }
-    return '';
+    return {};
+  }
+
+  function getServicePhone() {
+    var cfg = getRuntimeConfig();
+    return String(cfg.servicePhone || SERVICE_PHONE);
+  }
+
+  function getWechatQr() {
+    var cfg = getRuntimeConfig();
+    return String(cfg.wechatQrUrl || '/assets/icons/customer-wechat.png');
+  }
+
+  function getResultBackUrl() {
+    var cfg = getRuntimeConfig();
+    return String(cfg.resultBackUrl || '/');
   }
 
   function resolveHref(href) {
-    if (!href || href.charAt(0) !== '/') return href;
-    var base = getAppBase();
-    if (!base) return href;
-    if (href === '/') return base + '/';
-    if (href.indexOf(base + '/') === 0) return href;
-    return base + href;
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.resolveHref === 'function') {
+      return window.MobileRuntimeConfig.resolveHref(href);
+    }
+    return href;
+  }
+
+  function applyRuntimeUiConfig() {
+    var phone = getServicePhone();
+    var btnCall = document.getElementById('btn-call');
+    if (btnCall) btnCall.href = 'tel:' + phone;
+
+    var contactLink = document.querySelector('.result-contact a');
+    if (contactLink) {
+      contactLink.href = 'tel:' + phone;
+      contactLink.textContent = phone;
+    }
+
+    var qrPath = getWechatQr();
+    var footerQr = document.getElementById('wechat-qr');
+    if (footerQr) footerQr.src = qrPath;
+
+    var modalQr = document.getElementById('wechat-modal-qr');
+    if (modalQr) {
+      modalQr.dataset.src = qrPath;
+      if (!modalQr.src || modalQr.src === window.location.href) {
+        modalQr.src = qrPath;
+      }
+    }
   }
 
   function isMarked(item) {
@@ -108,8 +143,8 @@
   }
 
   function runQuery(phone) {
+    applyRuntimeUiConfig();
     document.getElementById('hero-phone').textContent = phone;
-    document.getElementById('btn-call').href = 'tel:' + SERVICE_PHONE;
 
     if (!phone) {
       showError('未提供手机号码');
@@ -132,6 +167,9 @@
 
       var all = data.results || [];
       var marked = all.filter(isMarked);
+      if (window.QueryRecords && typeof window.QueryRecords.addSingleRecord === 'function') {
+        window.QueryRecords.addSingleRecord(phone, marked.length);
+      }
 
       document.getElementById('hero-count').textContent = String(marked.length);
 
@@ -148,7 +186,7 @@
   }
 
   document.getElementById('btn-back').addEventListener('click', function () {
-    window.location.assign(resolveHref('/'));
+    window.location.assign(resolveHref(getResultBackUrl()));
   });
 
   document.getElementById('btn-wechat').addEventListener('click', function () {
@@ -174,6 +212,12 @@
   wechatModal.addEventListener('click', function (e) {
     if (e.target === wechatModal) closeWechatModal();
   });
+
+  if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.ready === 'function') {
+    window.MobileRuntimeConfig.ready(function () {
+      applyRuntimeUiConfig();
+    });
+  }
 
   runQuery(getQueryPhone());
 })();

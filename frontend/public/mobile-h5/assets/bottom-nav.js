@@ -1,5 +1,5 @@
 (function () {
-  var WECHAT_QR = '/assets/icons/customer-wechat.png';
+  var WECHAT_QR = '/mobile-h5/assets/icons/customer-wechat.png';
   var SERVICE_PHONE = '13027616171';
   var PROFILE_ACCOUNT_KEY = 'profile_user_account';
   var PROFILE_TOKEN_KEY = 'profile_user_token';
@@ -17,7 +17,7 @@
       '<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle class="nav-icon-stroke" cx="12" cy="8" r="3.5" stroke="currentColor" stroke-width="1.8"/><path class="nav-icon-stroke" d="M5.5 19.5c1.2-3 3.4-4.5 6.5-4.5s5.3 1.5 6.5 4.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>'
   };
 
-  var NAV_ITEMS = [
+  var DEFAULT_NAV_ITEMS = [
     { id: 'home', label: '首页', href: '/' },
     { id: 'free-query', label: '免费查询', href: '/?tab=query' },
     { id: 'batch', label: '批量查询', href: '/batch/' },
@@ -26,7 +26,38 @@
   ];
   var toastTimer = null;
 
+  function getRuntimeConfig() {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.getConfig === 'function') {
+      return window.MobileRuntimeConfig.getConfig() || {};
+    }
+    return {};
+  }
+
+  function getServicePhone() {
+    var cfg = getRuntimeConfig();
+    return String(cfg.servicePhone || SERVICE_PHONE);
+  }
+
+  function getWechatQr() {
+    var cfg = getRuntimeConfig();
+    return String(cfg.wechatQrUrl || WECHAT_QR);
+  }
+
+  function getNavItems() {
+    var cfg = getRuntimeConfig();
+    return [
+      { id: 'home', label: '首页', href: cfg.navHomeUrl || DEFAULT_NAV_ITEMS[0].href },
+      { id: 'free-query', label: '免费查询', href: cfg.navQueryUrl || DEFAULT_NAV_ITEMS[1].href },
+      { id: 'batch', label: '批量查询', href: cfg.navBatchUrl || DEFAULT_NAV_ITEMS[2].href },
+      { id: 'contact', label: '联系客服', action: 'contact' },
+      { id: 'profile', label: '个人中心', href: cfg.navProfileUrl || DEFAULT_NAV_ITEMS[4].href }
+    ];
+  }
+
   function getAppBase() {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.getAppBase === 'function') {
+      return window.MobileRuntimeConfig.getAppBase();
+    }
     var path = location.pathname || '/';
     if (path === '/mobile-h5' || path.indexOf('/mobile-h5/') === 0) {
       return '/mobile-h5';
@@ -64,7 +95,11 @@
   }
 
   function getBatchLoginRedirectHref() {
-    var redirect = encodeURIComponent('/batch/');
+    var batchPath = resolveHref('/batch/');
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.toPath === 'function') {
+      batchPath = window.MobileRuntimeConfig.toPath(batchPath);
+    }
+    var redirect = encodeURIComponent(batchPath || '/batch/');
     return resolveHref('/profile/?redirect=' + redirect);
   }
 
@@ -79,6 +114,9 @@
   }
 
   function resolveHref(href) {
+    if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.resolveHref === 'function') {
+      return window.MobileRuntimeConfig.resolveHref(href);
+    }
     if (!href || href.charAt(0) !== '/') return href;
     var base = getAppBase();
     if (!base) return href;
@@ -102,6 +140,7 @@
   }
 
   function openWechatModal() {
+    refreshModalContent();
     var modal = document.getElementById('bn-wechat-modal');
     if (modal) {
       modal.hidden = false;
@@ -233,6 +272,7 @@
 
   function buildModal() {
     if (document.getElementById('bn-wechat-modal')) return;
+    var phone = getServicePhone();
     var wrap = document.createElement('div');
     wrap.id = 'bn-wechat-modal';
     wrap.className = 'bn-wechat-modal';
@@ -241,13 +281,13 @@
       '<div class="bn-wechat-modal-mask" id="bn-wechat-modal-mask"></div>' +
       '<div class="bn-wechat-modal-panel" role="dialog" aria-label="联系客服">' +
       '<img class="bn-wechat-modal-qr" src="' +
-      WECHAT_QR +
+      getWechatQr() +
       '" alt="客服微信二维码" />' +
       '<p class="bn-wechat-modal-tip">长按识别二维码添加客服微信</p>' +
       '<p class="bn-wechat-modal-tip" style="margin-top:8px">或拨打 <a href="tel:' +
-      SERVICE_PHONE +
-      '">' +
-      SERVICE_PHONE +
+      phone +
+      '" class="bn-wechat-phone-link">' +
+      phone +
       '</a></p>' +
       '</div>';
     document.body.appendChild(wrap);
@@ -255,6 +295,19 @@
     wrap.addEventListener('click', function (e) {
       if (e.target === wrap) closeWechatModal();
     });
+  }
+
+  function refreshModalContent() {
+    var wrap = document.getElementById('bn-wechat-modal');
+    if (!wrap) return;
+    var phone = getServicePhone();
+    var qr = wrap.querySelector('.bn-wechat-modal-qr');
+    var phoneLink = wrap.querySelector('.bn-wechat-phone-link');
+    if (qr) qr.src = getWechatQr();
+    if (phoneLink) {
+      phoneLink.href = 'tel:' + phone;
+      phoneLink.textContent = phone;
+    }
   }
 
   function buildNav() {
@@ -265,7 +318,7 @@
     nav.className = 'app-bottom-nav';
     nav.setAttribute('aria-label', '底部导航');
 
-    NAV_ITEMS.forEach(function (item) {
+    getNavItems().forEach(function (item) {
       var isActive = item.id === active;
       var iconKey =
         item.id === 'free-query' ? 'search' : item.id === 'contact' ? 'service' : item.id;
@@ -323,6 +376,14 @@
     document.body.classList.add('has-bottom-nav');
   }
 
+  function rebuildNav() {
+    var nav = document.querySelector('.app-bottom-nav');
+    if (nav && nav.parentNode) {
+      nav.parentNode.removeChild(nav);
+    }
+    buildNav();
+  }
+
   function initQueryTab() {
     if (location.search.indexOf('tab=query') < 0) return;
     var tryScroll = function () {
@@ -344,6 +405,13 @@
     buildNav();
   }
   initQueryTab();
+
+  if (window.MobileRuntimeConfig && typeof window.MobileRuntimeConfig.ready === 'function') {
+    window.MobileRuntimeConfig.ready(function () {
+      refreshModalContent();
+      rebuildNav();
+    });
+  }
 
   window.AppBottomNav = {
     openWechatModal: openWechatModal,

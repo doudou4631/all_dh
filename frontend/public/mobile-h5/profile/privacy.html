@@ -35,5 +35,30 @@
       <p>如有隐私相关问题，请通过在线客服或服务电话 <a href="tel:13027616171" style="color:#3b71fe">13027616171</a> 联系我们。</p>
     </div>
   </div>
+  <script src="../assets/runtime-config.js"></script>
+  <script>
+    (function () {
+      var runtime = window.MobileRuntimeConfig;
+      if (!runtime) return;
+      if (typeof runtime.resolveHref === 'function') {
+        var back = document.querySelector('.sub-back');
+        if (back) back.href = runtime.resolveHref('/profile/');
+      }
+      function applyPhone(config) {
+        var phone = String((config && config.servicePhone) || '13027616171');
+        var links = document.querySelectorAll('a[href^="tel:"]');
+        links.forEach(function (link) {
+          link.href = 'tel:' + phone;
+          link.textContent = phone;
+        });
+      }
+      if (typeof runtime.getConfig === 'function') {
+        applyPhone(runtime.getConfig());
+      }
+      if (typeof runtime.ready === 'function') {
+        runtime.ready(applyPhone);
+      }
+    })();
+  </script>
 </body>
 </html>

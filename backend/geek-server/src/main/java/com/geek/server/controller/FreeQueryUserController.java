@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
-@Tag(name = "【免费查询用户】管理")
+@Tag(name = "【手机端用户】管理")
 @RestController
 @RequestMapping("/server/freeQueryUser")
 @RequiredArgsConstructor
@@ -32,7 +32,7 @@ public class FreeQueryUserController extends BaseController {
 
     private final IFreeQueryUserService freeQueryUserService;
 
-    @Operation(summary = "免费查询用户列表")
+    @Operation(summary = "手机端用户列表")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:list')")
     @GetMapping("/list")
     public TableDataInfo list(FreeQueryUser query) {
@@ -42,7 +42,7 @@ public class FreeQueryUserController extends BaseController {
         return getDataTable(list);
     }
 
-    @Operation(summary = "免费查询用户详情")
+    @Operation(summary = "手机端用户详情")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:query')")
     @GetMapping("/{id}")
     public AjaxResult getInfo(@PathVariable Long id) {
@@ -53,43 +53,43 @@ public class FreeQueryUserController extends BaseController {
         return success(user);
     }
 
-    @Operation(summary = "新增免费查询用户")
+    @Operation(summary = "新增手机端用户")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:add')")
-    @Log(title = "免费查询用户", businessType = BusinessType.INSERT)
+    @Log(title = "手机端用户", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@RequestBody FreeQueryUser user) {
         user.setCreateBy(getUsername());
         return toAjax(freeQueryUserService.insertFreeQueryUser(user));
     }
 
-    @Operation(summary = "修改免费查询用户")
+    @Operation(summary = "修改手机端用户")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:edit')")
-    @Log(title = "免费查询用户", businessType = BusinessType.UPDATE)
+    @Log(title = "手机端用户", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody FreeQueryUser user) {
         user.setUpdateBy(getUsername());
         return toAjax(freeQueryUserService.updateFreeQueryUser(user));
     }
 
-    @Operation(summary = "删除免费查询用户")
+    @Operation(summary = "删除手机端用户")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:remove')")
-    @Log(title = "免费查询用户", businessType = BusinessType.DELETE)
+    @Log(title = "手机端用户", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ids}")
     public AjaxResult remove(@PathVariable Long[] ids) {
         return toAjax(freeQueryUserService.deleteFreeQueryUserByIds(ids, getUsername()));
     }
 
-    @Operation(summary = "调整免费查询用户积分")
+    @Operation(summary = "调整手机端用户积分")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:adjust')")
-    @Log(title = "免费查询用户", businessType = BusinessType.UPDATE)
+    @Log(title = "手机端用户", businessType = BusinessType.UPDATE)
     @PostMapping("/adjustPoints")
     public AjaxResult adjustPoints(@RequestBody FreeQueryPointAdjustRequest request) {
         return toAjax(freeQueryUserService.adjustPoints(request, getUserId(), getUsername()));
     }
 
-    @Operation(summary = "重置免费查询用户密码")
+    @Operation(summary = "重置手机端用户密码")
     @PreAuthorize("@ss.hasPermi('server:freeQueryUser:resetPwd')")
-    @Log(title = "免费查询用户", businessType = BusinessType.UPDATE)
+    @Log(title = "手机端用户", businessType = BusinessType.UPDATE)
     @PutMapping("/resetPwd")
     public AjaxResult resetPwd(@RequestBody FreeQueryUserResetPwdRequest request) {
         if (request == null) {

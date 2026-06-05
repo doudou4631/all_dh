@@ -15,15 +15,20 @@
     <div id="record-list" class="profile-record-list"></div>
   </div>
 
+  <script src="../assets/runtime-config.js"></script>
   <script src="../assets/bottom-nav.js"></script>
-  <script src="../assets/profile-page.js"></script>
+  <script src="../assets/query-records.js?v=1"></script>
+  <script src="../assets/profile-page.js?v=2"></script>
   <script>
     if (!window.ProfilePage || !ProfilePage.isLoggedIn()) {
       if (window.AppBottomNav && typeof window.AppBottomNav.notify === 'function') {
         window.AppBottomNav.notify('请先登录');
       }
       setTimeout(function () {
-        location.replace('index.html');
+        var target = (window.MobileRuntimeConfig && window.MobileRuntimeConfig.resolveHref)
+          ? window.MobileRuntimeConfig.resolveHref('/profile/')
+          : 'index.html';
+        location.replace(target);
       }, 400);
     } else {
       var list = ProfilePage.getQueryRecords();

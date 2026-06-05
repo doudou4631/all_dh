@@ -29,6 +29,7 @@ import com.geek.server.mapper.MarkWalletLogMapper;
 import com.geek.server.service.IFreeQueryService;
 import com.geek.server.service.IMarkOrderService;
 import com.geek.system.mapper.SysUserMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ import java.util.stream.Collectors;
  * 迁移订单/钱包服务实现
  */
 @Service
+@Slf4j
 public class MarkOrderServiceImpl implements IMarkOrderService {
 
     private static final Long MARK_ROOT_MENU_ID = 900100000001L;
@@ -555,6 +557,12 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         Map<String, String> platformNameMap = resolvePlatformNameMap(dynamicPlatformNameMap);
         Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(userId);
         Set<String> availableCodes = resolveAvailablePlatformCodes(explicitlyConfiguredCodes, dynamicPlatformNameMap, templateConfigMap);
+        log.info("mark platform candidates resolved userId={}, menuCodes={}, templateCodes={}, explicitCodes={}, availableCodes={}",
+                userId,
+                dynamicPlatformNameMap.keySet(),
+                templateConfigMap.keySet(),
+                explicitlyConfiguredCodes,
+                availableCodes);
         List<MarkUserPlatformPrice> result = new ArrayList<>();
         for (String platformCode : availableCodes) {
             if (StringUtils.isBlank(platformCode)) {
@@ -588,14 +596,19 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private Set<String> resolveAvailablePlatformCodes(Set<String> explicitlyConfiguredCodes,
                                                       Map<String, String> dynamicPlatformNameMap,
                                                       Map<String, TemplatePlatformConfig> templateConfigMap) {
-        if (explicitlyConfiguredCodes != null && !explicitlyConfiguredCodes.isEmpty()) {
-            return new LinkedHashSet<>(explicitlyConfiguredCodes);
+        Set<String> availableCodes = new LinkedHashSet<>();
+        if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
+            availableCodes.addAll(dynamicPlatformNameMap.keySet());
         }
         if (templateConfigMap != null && !templateConfigMap.isEmpty()) {
-            return new LinkedHashSet<>(templateConfigMap.keySet());
+            availableCodes.addAll(templateConfigMap.keySet());
         }
-        if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
-            return new LinkedHashSet<>(dynamicPlatformNameMap.keySet());
+        if (explicitlyConfiguredCodes != null && !explicitlyConfiguredCodes.isEmpty()) {
+            availableCodes.addAll(explicitlyConfiguredCodes);
+        }
+        availableCodes.removeIf(StringUtils::isBlank);
+        if (!availableCodes.isEmpty()) {
+            return availableCodes;
         }
         return new LinkedHashSet<>(LEGACY_PLATFORM_NAME_MAP.keySet());
     }
@@ -604,16 +617,23 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         SysUser user = requireUser(userId);
         Long templateId = user.getRelMarkTemplate();
         if (templateId == null) {
+            log.info("mark template not bound, fallback to menu platforms. userId={}", userId);
             return configMap;
         }
         MarkPlatformTemplate template = markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId);
         if (template == null || !"0".equals(template.getStatus())) {
+            log.warn("mark template unavailable, fallback to menu platforms. userId={}, templateId={}", userId, templateId);
             return configMap;
         }
         if (!canUseTemplate(user, template)) {
+            log.warn("mark template inaccessible, fallback to menu platforms. userId={}, templateId={}, ownerUserId={}",
+                    userId, templateId, template.getOwnerUserId());
             return configMap;
         }
-        return parseTemplatePlatformConfigs(template.getTemplateInfo());
+        Map<String, TemplatePlatformConfig> parsedConfigMap = parseTemplatePlatformConfigs(template.getTemplateInfo());
+        log.info("mark template parsed for platform availability. userId={}, templateId={}, platformCodes={}",
+                userId, templateId, parsedConfigMap.keySet());
+        return parsedConfigMap;
     }
 
     private boolean canUseTemplate(SysUser user, MarkPlatformTemplate template) {
@@ -659,7 +679,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             for (Object item : rawList) {
                 addTemplatePlatformConfig(configMap, item);
             }
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            log.warn("mark template parse failed, fallback to menu platforms. templateInfoLength={}",
+                    templateInfo.length(), e);
             return new LinkedHashMap<>();
         }
         return configMap;
