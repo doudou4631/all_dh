@@ -1,6 +1,7 @@
 package com.geek.server.service.impl;
 
 import java.util.List;
+import java.util.Map;
 
 import com.geek.common.utils.DateUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -53,6 +54,12 @@ public class UserApiQueryRecordServiceImpl implements IUserApiQueryRecordService
             }
         }
         return list;
+    }
+
+    @Override
+    public List<Map<String, Object>> selectFreeQueryTrendBaseList(UserApiQueryRecord userApiQueryRecord)
+    {
+        return userApiQueryRecordMapper.selectFreeQueryTrendBaseList(userApiQueryRecord);
     }
 
     /**

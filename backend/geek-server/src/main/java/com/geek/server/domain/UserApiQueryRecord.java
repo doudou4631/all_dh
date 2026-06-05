@@ -56,6 +56,37 @@ public class UserApiQueryRecord extends BaseEntity
     @Schema(title = "查询号码")
     @Excel(name = "查询号码")
     private String phone;
+    /** 查询来源（FREE_SINGLE/FREE_BATCH） */
+    @Schema(title = "查询来源（FREE_SINGLE/FREE_BATCH）")
+    private String sourceType;
+
+    /** 设备ID */
+    @Schema(title = "设备ID")
+    private String deviceId;
+
+    /** 设备来源（client/ip-fallback） */
+    @Schema(title = "设备来源（client/ip-fallback）")
+    private String deviceSource;
+
+    /** 使用前次数 */
+    @Schema(title = "使用前次数")
+    private Integer usedBefore;
+
+    /** 使用后次数 */
+    @Schema(title = "使用后次数")
+    private Integer usedAfter;
+
+    /** 限额值 */
+    @Schema(title = "限额值")
+    private Integer limitValue;
+
+    /** 错误码（结构化） */
+    @Schema(title = "错误码（结构化）")
+    private String errorCode;
+
+    /** 来源IP */
+    @Schema(title = "来源IP")
+    private String ipAddr;
 
     /** 请求参数 */
     @Schema(title = "请求参数")
@@ -158,6 +189,69 @@ public class UserApiQueryRecord extends BaseEntity
     public void setPhone(String phone) {
         this.phone = phone;
     }
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
+    }
+
+    public String getDeviceId() {
+        return deviceId;
+    }
+
+    public void setDeviceId(String deviceId) {
+        this.deviceId = deviceId;
+    }
+
+    public String getDeviceSource() {
+        return deviceSource;
+    }
+
+    public void setDeviceSource(String deviceSource) {
+        this.deviceSource = deviceSource;
+    }
+
+    public Integer getUsedBefore() {
+        return usedBefore;
+    }
+
+    public void setUsedBefore(Integer usedBefore) {
+        this.usedBefore = usedBefore;
+    }
+
+    public Integer getUsedAfter() {
+        return usedAfter;
+    }
+
+    public void setUsedAfter(Integer usedAfter) {
+        this.usedAfter = usedAfter;
+    }
+
+    public Integer getLimitValue() {
+        return limitValue;
+    }
+
+    public void setLimitValue(Integer limitValue) {
+        this.limitValue = limitValue;
+    }
+
+    public String getErrorCode() {
+        return errorCode;
+    }
+
+    public void setErrorCode(String errorCode) {
+        this.errorCode = errorCode;
+    }
+
+    public String getIpAddr() {
+        return ipAddr;
+    }
+
+    public void setIpAddr(String ipAddr) {
+        this.ipAddr = ipAddr;
+    }
 
     public void setRequestParams(String requestParams)
     {
@@ -217,6 +311,14 @@ public class UserApiQueryRecord extends BaseEntity
             .append("requestTime", getRequestTime())
             .append("userId", getUserId())
             .append("phone", getPhone())
+            .append("sourceType", getSourceType())
+            .append("deviceId", getDeviceId())
+            .append("deviceSource", getDeviceSource())
+            .append("usedBefore", getUsedBefore())
+            .append("usedAfter", getUsedAfter())
+            .append("limitValue", getLimitValue())
+            .append("errorCode", getErrorCode())
+            .append("ipAddr", getIpAddr())
             .append("requestParams", getRequestParams())
             .append("responseResult", getResponseResult())
             .append("results", getResults())

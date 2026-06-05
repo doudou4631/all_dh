@@ -13,6 +13,12 @@ public interface IFreeQueryService {
 
     Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip);
 
-    List<UserApiQueryRecord> listIpLogs(String ip, String beginTime, String endTime);
+    List<UserApiQueryRecord> listIpLogs(String ip, String phone, String requestStatus, String taskId,
+                                        String deviceId, String deviceSource, String queryType,
+                                        String sourceType, String beginTime, String endTime);
+
+    Map<String, Object> logDashboard(String ip, String phone, String requestStatus, String taskId,
+                                     String deviceId, String deviceSource, String queryType,
+                                     String sourceType, String beginTime, String endTime);
 }
 

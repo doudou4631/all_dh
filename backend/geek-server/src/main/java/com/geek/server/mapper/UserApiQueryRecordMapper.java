@@ -1,6 +1,7 @@
 package com.geek.server.mapper;
 
 import java.util.List;
+import java.util.Map;
 
 import org.apache.ibatis.annotations.Param;
 
@@ -30,6 +31,14 @@ public interface UserApiQueryRecordMapper
      * @return 接口查询记录通用集合
      */
     public List<UserApiQueryRecord> selectUserApiQueryRecordList(UserApiQueryRecord userApiQueryRecord);
+
+    /**
+     * 查询日志聚合基础数据（按筛选条件返回轻量字段，供服务层做趋势聚合）。
+     *
+     * @param userApiQueryRecord 查询条件
+     * @return 轻量字段列表
+     */
+    List<Map<String, Object>> selectFreeQueryTrendBaseList(UserApiQueryRecord userApiQueryRecord);
 
     /**
      * 查询记录：按 phone + 批次分组（含单条/批量等），可选 queryType 筛选；配合 PageHelper 分页

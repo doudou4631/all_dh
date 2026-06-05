@@ -13,6 +13,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="requestTime" column="request_time" />
         <result property="userId" column="user_id" />
         <result property="phone" column="phone" />
+        <result property="sourceType" column="source_type" />
+        <result property="deviceId" column="device_id" />
+        <result property="deviceSource" column="device_source" />
+        <result property="usedBefore" column="used_before" />
+        <result property="usedAfter" column="used_after" />
+        <result property="limitValue" column="limit_value" />
+        <result property="errorCode" column="error_code" />
+        <result property="ipAddr" column="ip_addr" />
         <result property="requestParams" column="request_params" />
         <result property="responseResult" column="response_result" />
         <result property="results" column="results" />
@@ -34,6 +42,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             uaqr.request_time,
             uaqr.user_id,
             uaqr.phone,
+            uaqr.source_type,
+            uaqr.device_id,
+            uaqr.device_source,
+            uaqr.used_before,
+            uaqr.used_after,
+            uaqr.limit_value,
+            uaqr.error_code,
+            uaqr.ip_addr,
             uaqr.request_params,
             uaqr.response_result,
             uaqr.results,
@@ -142,9 +158,49 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="userId != null "> and uaqr.user_id = #{userId}</if>
             <if test="requestParams != null  and requestParams != ''"> and uaqr.request_params = #{requestParams}</if>
             <if test="responseResult != null  and responseResult != ''"> and uaqr.response_result = #{responseResult}</if>
+            <if test="ipAddr != null and ipAddr != ''">
+                and (
+                    uaqr.ip_addr = #{ipAddr}
+                    or ((uaqr.ip_addr is null or uaqr.ip_addr = '') and uaqr.create_by like concat('%free-ip-', #{ipAddr}, '%'))
+                )
+            </if>
             <if test="createBy != null and createBy != ''"> and uaqr.create_by like concat('%', #{createBy}, '%')</if>
             <if test="taskId != null and taskId != ''"> and uaqr.task_id = #{taskId}</if>
             <if test="phone != null and phone != ''"> and uaqr.phone = #{phone}</if>
+            <if test="deviceId != null and deviceId != ''">
+                and (
+                    uaqr.device_id = #{deviceId}
+                    or ((uaqr.device_id is null or uaqr.device_id = '') and uaqr.request_params like concat('%deviceId=', #{deviceId}, '%'))
+                )
+            </if>
+            <choose>
+                <when test="deviceSource != null and deviceSource == 'UNKNOWN'">
+                    and (
+                        (uaqr.device_source is null or uaqr.device_source = '' or uaqr.device_source = 'UNKNOWN')
+                        and uaqr.request_params not like '%deviceSource=%'
+                    )
+                </when>
+                <when test="deviceSource != null and deviceSource != ''">
+                    and (
+                        uaqr.device_source = #{deviceSource}
+                        or ((uaqr.device_source is null or uaqr.device_source = '') and uaqr.request_params like concat('%deviceSource=', #{deviceSource}, '%'))
+                    )
+                </when>
+            </choose>
+            <choose>
+                <when test="sourceType != null and sourceType == 'UNKNOWN'">
+                    and (
+                        (uaqr.source_type is null or uaqr.source_type = '' or uaqr.source_type = 'UNKNOWN')
+                        and uaqr.request_params not like '%sourceType=%'
+                    )
+                </when>
+                <when test="sourceType != null and sourceType != ''">
+                    and (
+                        uaqr.source_type = #{sourceType}
+                        or ((uaqr.source_type is null or uaqr.source_type = '') and uaqr.request_params like concat('%sourceType=', #{sourceType}, '%'))
+                    )
+                </when>
+            </choose>
             <if test="params != null and params.beginTime != null and params.beginTime != ''">
                 and uaqr.create_time &gt;= #{params.beginTime}
             </if>
@@ -153,6 +209,70 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
         </where>
         order by create_time desc
+    </select>
+
+    <select id="selectFreeQueryTrendBaseList" parameterType="UserApiQueryRecord" resultType="java.util.HashMap">
+        select
+            DATE_FORMAT(uaqr.create_time, '%Y-%m-%d') as statDate,
+            uaqr.request_status as requestStatus,
+            uaqr.request_time as requestTime,
+            COALESCE(NULLIF(uaqr.source_type, ''), 'UNKNOWN') as sourceType,
+            COALESCE(NULLIF(uaqr.error_code, ''), '') as errorCode
+        from user_api_query_record uaqr
+        <where>
+            <if test="queryType != null and queryType != ''"> and uaqr.query_type = #{queryType}</if>
+            <if test="platformName != null and platformName != ''"> and uaqr.platform_name = #{platformName}</if>
+            <if test="requestStatus != null and requestStatus != ''"> and uaqr.request_status = #{requestStatus}</if>
+            <if test="taskId != null and taskId != ''"> and uaqr.task_id = #{taskId}</if>
+            <if test="phone != null and phone != ''"> and uaqr.phone = #{phone}</if>
+            <if test="ipAddr != null and ipAddr != ''">
+                and (
+                    uaqr.ip_addr = #{ipAddr}
+                    or ((uaqr.ip_addr is null or uaqr.ip_addr = '') and uaqr.create_by like concat('%free-ip-', #{ipAddr}, '%'))
+                )
+            </if>
+            <if test="deviceId != null and deviceId != ''">
+                and (
+                    uaqr.device_id = #{deviceId}
+                    or ((uaqr.device_id is null or uaqr.device_id = '') and uaqr.request_params like concat('%deviceId=', #{deviceId}, '%'))
+                )
+            </if>
+            <choose>
+                <when test="deviceSource != null and deviceSource == 'UNKNOWN'">
+                    and (
+                        (uaqr.device_source is null or uaqr.device_source = '' or uaqr.device_source = 'UNKNOWN')
+                        and uaqr.request_params not like '%deviceSource=%'
+                    )
+                </when>
+                <when test="deviceSource != null and deviceSource != ''">
+                    and (
+                        uaqr.device_source = #{deviceSource}
+                        or ((uaqr.device_source is null or uaqr.device_source = '') and uaqr.request_params like concat('%deviceSource=', #{deviceSource}, '%'))
+                    )
+                </when>
+            </choose>
+            <choose>
+                <when test="sourceType != null and sourceType == 'UNKNOWN'">
+                    and (
+                        (uaqr.source_type is null or uaqr.source_type = '' or uaqr.source_type = 'UNKNOWN')
+                        and uaqr.request_params not like '%sourceType=%'
+                    )
+                </when>
+                <when test="sourceType != null and sourceType != ''">
+                    and (
+                        uaqr.source_type = #{sourceType}
+                        or ((uaqr.source_type is null or uaqr.source_type = '') and uaqr.request_params like concat('%sourceType=', #{sourceType}, '%'))
+                    )
+                </when>
+            </choose>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and uaqr.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and uaqr.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by uaqr.create_time asc
     </select>
     
     <select id="selectUserApiQueryRecordById" parameterType="Long" resultMap="UserApiQueryRecordResult">
@@ -170,6 +290,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="requestTime != null">request_time,</if>
             <if test="userId != null">user_id,</if>
             <if test="phone != null and phone != ''">phone,</if>
+            <if test="sourceType != null and sourceType != ''">source_type,</if>
+            <if test="deviceId != null and deviceId != ''">device_id,</if>
+            <if test="deviceSource != null and deviceSource != ''">device_source,</if>
+            <if test="usedBefore != null">used_before,</if>
+            <if test="usedAfter != null">used_after,</if>
+            <if test="limitValue != null">limit_value,</if>
+            <if test="errorCode != null and errorCode != ''">error_code,</if>
+            <if test="ipAddr != null and ipAddr != ''">ip_addr,</if>
             <if test="requestParams != null and requestParams != ''">request_params,</if>
             <if test="responseResult != null">response_result,</if>
             <if test="results != null and results != ''">results,</if>
@@ -188,6 +316,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="requestTime != null">#{requestTime},</if>
             <if test="userId != null">#{userId},</if>
             <if test="phone != null and phone != ''">#{phone},</if>
+            <if test="sourceType != null and sourceType != ''">#{sourceType},</if>
+            <if test="deviceId != null and deviceId != ''">#{deviceId},</if>
+            <if test="deviceSource != null and deviceSource != ''">#{deviceSource},</if>
+            <if test="usedBefore != null">#{usedBefore},</if>
+            <if test="usedAfter != null">#{usedAfter},</if>
+            <if test="limitValue != null">#{limitValue},</if>
+            <if test="errorCode != null and errorCode != ''">#{errorCode},</if>
+            <if test="ipAddr != null and ipAddr != ''">#{ipAddr},</if>
             <if test="requestParams != null and requestParams != ''">#{requestParams},</if>
             <if test="responseResult != null">#{responseResult},</if>
             <if test="results != null and results != ''">#{results},</if>
@@ -203,13 +339,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <insert id="insertUserApiQueryRecordBatch">
         insert into user_api_query_record (
             query_type, platform_id, platform_name, request_status, request_time,
-            user_id, phone, request_params, response_result, results, task_id,
+            user_id, phone, source_type, device_id, device_source, used_before, used_after, limit_value, error_code, ip_addr,
+            request_params, response_result, results, task_id,
             create_by, create_time
         ) values
         <foreach collection="list" item="item" separator=",">
             (
             #{item.queryType}, #{item.platformId}, #{item.platformName}, #{item.requestStatus}, #{item.requestTime},
-            #{item.userId}, #{item.phone}, #{item.requestParams}, #{item.responseResult}, #{item.results}, #{item.taskId},
+            #{item.userId}, #{item.phone}, #{item.sourceType}, #{item.deviceId}, #{item.deviceSource}, #{item.usedBefore}, #{item.usedAfter}, #{item.limitValue}, #{item.errorCode}, #{item.ipAddr},
+            #{item.requestParams}, #{item.responseResult}, #{item.results}, #{item.taskId},
             #{item.createBy}, #{item.createTime}
             )
         </foreach>
@@ -223,6 +361,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="requestTime != null">request_time = #{requestTime},</if>
             <if test="userId != null">user_id = #{userId},</if>
             <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="sourceType != null and sourceType != ''">source_type = #{sourceType},</if>
+            <if test="deviceId != null and deviceId != ''">device_id = #{deviceId},</if>
+            <if test="deviceSource != null and deviceSource != ''">device_source = #{deviceSource},</if>
+            <if test="usedBefore != null">used_before = #{usedBefore},</if>
+            <if test="usedAfter != null">used_after = #{usedAfter},</if>
+            <if test="limitValue != null">limit_value = #{limitValue},</if>
+            <if test="errorCode != null and errorCode != ''">error_code = #{errorCode},</if>
+            <if test="ipAddr != null and ipAddr != ''">ip_addr = #{ipAddr},</if>
             <if test="requestParams != null and requestParams != ''">request_params = #{requestParams},</if>
             <if test="responseResult != null">response_result = #{responseResult},</if>
             <if test="createBy != null">create_by = #{createBy},</if>

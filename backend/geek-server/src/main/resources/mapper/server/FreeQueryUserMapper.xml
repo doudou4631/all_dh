@@ -163,7 +163,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
 
     <update id="deleteFreeQueryUserByIds">
         update free_query_user
-        set del_flag = '2',
+        set account = concat(left(account, 37), '__del__', id),
+            del_flag = '2',
             update_by = #{updateBy},
             update_time = #{updateTime}
         where del_flag = '0'

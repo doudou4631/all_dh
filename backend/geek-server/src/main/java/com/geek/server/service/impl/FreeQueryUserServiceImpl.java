@@ -11,6 +11,8 @@ import com.geek.server.mapper.FreeQueryPointRecordMapper;
 import com.geek.server.mapper.FreeQueryUserMapper;
 import com.geek.server.service.IFreeQueryUserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,7 +78,12 @@ public class FreeQueryUserServiceImpl implements IFreeQueryUserService {
         Date now = DateUtils.getNowDate();
         user.setCreateTime(now);
         user.setUpdateTime(now);
-        int rows = freeQueryUserMapper.insertFreeQueryUser(user);
+        int rows;
+        try {
+            rows = freeQueryUserMapper.insertFreeQueryUser(user);
+        } catch (DuplicateKeyException | DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
         if (rows > 0 && user.getPoints() != null && user.getPoints() > 0) {
             insertPointRecord(user.getId(), user.getPoints(), POINT_TYPE_INCREASE, BIZ_TYPE_MANUAL, null,
                     "后台初始化积分", null, user.getPoints(), user.getCreateBy(), null);
@@ -116,7 +123,11 @@ public class FreeQueryUserServiceImpl implements IFreeQueryUserService {
         user.setPoints(null);
         user.setPassword(null);
         user.setUpdateTime(DateUtils.getNowDate());
-        return freeQueryUserMapper.updateFreeQueryUser(user);
+        try {
+            return freeQueryUserMapper.updateFreeQueryUser(user);
+        } catch (DuplicateKeyException | DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
     }
 
     @Override
@@ -317,5 +328,24 @@ public class FreeQueryUserServiceImpl implements IFreeQueryUserService {
             return 0;
         }
         return points;
+    }
+
+    private RuntimeException convertPersistenceException(RuntimeException exception) {
+        if (isDuplicateAccountException(exception)) {
+            return new ServiceException("账号已存在");
+        }
+        return exception;
+    }
+
+    private boolean isDuplicateAccountException(Throwable throwable) {
+        if (throwable == null) {
+            return false;
+        }
+        String message = StringUtils.defaultString(throwable.getMessage());
+        if (StringUtils.containsIgnoreCase(message, "uk_free_query_user_account")
+                || StringUtils.containsIgnoreCase(message, "duplicate entry")) {
+            return true;
+        }
+        return isDuplicateAccountException(throwable.getCause());
     }
 }

@@ -23,3 +23,11 @@ export function listFreeQueryLogs(params) {
   })
 }
 
+export function getFreeQueryLogsDashboard(params) {
+  return request({
+    url: '/server/freeQuery/logs/dashboard',
+    method: 'get',
+    params
+  })
+}
+

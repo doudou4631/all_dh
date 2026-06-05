@@ -1,6 +1,7 @@
 package com.geek.server.service;
 
 import java.util.List;
+import java.util.Map;
 
 import com.geek.server.domain.UserApiQueryBatchSummary;
 import com.geek.server.domain.UserApiQueryRecord;
@@ -28,6 +29,14 @@ public interface IUserApiQueryRecordService
      * @return 接口查询记录通用集合
      */
     public List<UserApiQueryRecord> selectUserApiQueryRecordList(UserApiQueryRecord userApiQueryRecord);
+
+    /**
+     * 查询日志聚合基础数据（轻量字段）。
+     *
+     * @param userApiQueryRecord 查询条件
+     * @return 轻量字段列表
+     */
+    List<Map<String, Object>> selectFreeQueryTrendBaseList(UserApiQueryRecord userApiQueryRecord);
 
     /**
      * 查询记录分组列表（phone + 批次，含单条/批量），分页由 Controller startPage 控制

@@ -51,6 +51,8 @@ public class FreeQueryController extends BaseController {
     private static final String FREE_TOKEN_HEADER = "X-Free-Token";
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
+    private static final String SOURCE_TYPE_FREE_SINGLE = "FREE_SINGLE";
+    private static final String SOURCE_TYPE_FREE_BATCH = "FREE_BATCH";
 
     private final IFreeQueryService freeQueryService;
     private final IFreeQueryUserService freeQueryUserService;
@@ -68,8 +70,10 @@ public class FreeQueryController extends BaseController {
     @PostMapping("/single")
     public AjaxResult single(@RequestBody FreeSingleQueryRequest body, HttpServletRequest request) {
         String ip = IpUtils.getIpAddr(request);
+        FreeSingleQueryRequest payload = body == null ? new FreeSingleQueryRequest() : body;
+        payload.setSourceType(SOURCE_TYPE_FREE_SINGLE);
         try {
-            Map<String, Object> result = freeQueryService.singleQuery(body, ip);
+            Map<String, Object> result = freeQueryService.singleQuery(payload, ip);
             Integer code = (Integer) result.get("code");
             if (code != null && code == 42901) {
                 AjaxResult rsp = AjaxResult.error(42901, String.valueOf(result.get("message")));
@@ -215,6 +219,7 @@ public class FreeQueryController extends BaseController {
                 FreeSingleQueryRequest req = new FreeSingleQueryRequest();
                 req.setPhone(phone);
                 req.setDeviceId(buildBatchDeviceId(loginUser));
+                req.setSourceType(SOURCE_TYPE_FREE_BATCH);
 
                 try {
                     Map<String, Object> result = freeQueryService.singleQuery(req, ip);
@@ -287,11 +292,35 @@ public class FreeQueryController extends BaseController {
     @Operation(summary = "查询操作IP的查询记录")
     @GetMapping("/logs")
     public TableDataInfo<UserApiQueryRecord> logs(@RequestParam(required = false) String ip,
+                                                  @RequestParam(required = false) String phone,
+                                                  @RequestParam(required = false) String requestStatus,
+                                                  @RequestParam(required = false) String taskId,
+                                                  @RequestParam(required = false) String deviceId,
+                                                  @RequestParam(required = false) String deviceSource,
+                                                  @RequestParam(required = false) String queryType,
+                                                  @RequestParam(required = false) String sourceType,
                                                   @RequestParam(required = false) String beginTime,
                                                   @RequestParam(required = false) String endTime) {
         startPage();
-        List<UserApiQueryRecord> list = freeQueryService.listIpLogs(ip, beginTime, endTime);
+        List<UserApiQueryRecord> list = freeQueryService.listIpLogs(ip, phone, requestStatus, taskId,
+                deviceId, deviceSource, queryType, sourceType, beginTime, endTime);
         return getDataTable(list);
+    }
+
+    @Operation(summary = "查询日志看板聚合")
+    @GetMapping("/logs/dashboard")
+    public AjaxResult logsDashboard(@RequestParam(required = false) String ip,
+                                    @RequestParam(required = false) String phone,
+                                    @RequestParam(required = false) String requestStatus,
+                                    @RequestParam(required = false) String taskId,
+                                    @RequestParam(required = false) String deviceId,
+                                    @RequestParam(required = false) String deviceSource,
+                                    @RequestParam(required = false) String queryType,
+                                    @RequestParam(required = false) String sourceType,
+                                    @RequestParam(required = false) String beginTime,
+                                    @RequestParam(required = false) String endTime) {
+        return AjaxResult.success(freeQueryService.logDashboard(ip, phone, requestStatus, taskId,
+                deviceId, deviceSource, queryType, sourceType, beginTime, endTime));
     }
 
     private void safeRefund(Long userId, String bizNo, int chargedPoints, int refundedPoints, String reason) {

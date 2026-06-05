@@ -4,6 +4,7 @@ public class FreeSingleQueryRequest {
 
     private String phone;
     private String deviceId;
+    private String sourceType;
 
     public String getPhone() {
         return phone;
@@ -19,6 +20,14 @@ public class FreeSingleQueryRequest {
 
     public void setDeviceId(String deviceId) {
         this.deviceId = deviceId;
+    }
+
+    public String getSourceType() {
+        return sourceType;
+    }
+
+    public void setSourceType(String sourceType) {
+        this.sourceType = sourceType;
     }
 }
 

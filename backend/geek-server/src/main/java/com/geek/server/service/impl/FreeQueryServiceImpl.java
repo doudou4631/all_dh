@@ -27,6 +27,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -35,6 +36,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -71,6 +73,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     private static final int MAX_DEVICE_ID_LENGTH = 128;
     /** \u672a\u914d\u7f6e daily_all_limit \u6216\u975e\u6b63\u6570\u65f6\u4e0d\u9650\u5236\u5168\u5c40\u6b21\u6570 */
     private static final String FREE_LOG_PLATFORM_NAME = "FREE_QUERY";
+    private static final String SOURCE_TYPE_FREE_SINGLE = "FREE_SINGLE";
+    private static final String SOURCE_TYPE_FREE_BATCH = "FREE_BATCH";
     private static final DateTimeFormatter DATE_KEY_FORMAT = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter DATETIME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final ConcurrentHashMap<String, Object> COUNTER_LOCKS = new ConcurrentHashMap<>();
@@ -125,6 +129,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         String phone = normalizePhone(request != null ? request.getPhone() : null);
         NormalizedDeviceId normalizedDeviceId = normalizeDeviceId(request != null ? request.getDeviceId() : null, ip);
         String deviceId = normalizedDeviceId.value();
+        String sourceType = normalizeSourceType(request != null ? request.getSourceType() : null);
         validatePhone(phone);
         List<String> disabledPlatformNames = loadFreeQueryDisabledPlatformNames();
         if (normalizedDeviceId.usedIpFallback()) {
@@ -134,7 +139,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (config.requireDeviceId() && normalizedDeviceId.usedIpFallback()) {
             QuotaCounter deviceCounter = currentDeviceCounter(deviceId, config.dailyDeviceLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceCounter.used(), deviceCounter.used(),
-                    config.requireDeviceIdMsg(), deviceId, null, normalizedDeviceId.deviceSource());
+                    config.requireDeviceIdMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42903);
             fail.put("message", config.requireDeviceIdMsg());
@@ -146,7 +151,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         CounterDecision globalDecision = reserveGlobalSlotIfNeeded(config.dailyAllLimit());
         if (!globalDecision.allowed()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyAllLimit(), globalDecision.usedBefore(),
-                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null, normalizedDeviceId.deviceSource());
+                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42902);
             fail.put("message", ALL_LIMIT_MSG);
@@ -159,7 +164,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (!decision.allowed()) {
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    config.overLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource());
+                    config.overLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.overLimitMsg());
@@ -172,7 +177,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             rollbackIpOne(ip);
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceDecision.usedBefore(), deviceDecision.usedAfter(),
-                    config.deviceOverLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource());
+                    config.deviceOverLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.deviceOverLimitMsg());
@@ -200,7 +205,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 .toList();
         if (enabledPlatforms.isEmpty()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    "\u6682\u65e0\u53ef\u7528\u5e73\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource());
+                    "\u6682\u65e0\u53ef\u7528\u5e73\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 500);
             fail.put("message", "\u6682\u65e0\u53ef\u7528\u5e73\u53f0");
@@ -227,6 +232,11 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 row.setCreateBy("free-ip-" + ip);
                 row.setUserId(FREE_QUERY_USER_ID);
                 row.setRequestParams(appendIpToRequestParams(row.getRequestParams(), ip));
+                row.setSourceType(sourceType);
+                row.setDeviceId(deviceId);
+                row.setDeviceSource(normalizedDeviceId.deviceSource());
+                row.setIpAddr(ip);
+                row.setErrorCode(resolveErrorCode(row.getRequestStatus(), row.getResponseResult(), row.getResults()));
                 records.add(row);
             }
         }
@@ -237,7 +247,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
         long costMs = System.currentTimeMillis() - start;
         saveIpLog(ip, phone, "0", costMs, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                "\u67e5\u8be2\u6210\u529f", deviceId, taskId, normalizedDeviceId.deviceSource());
+                "\u67e5\u8be2\u6210\u529f", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", taskId);
@@ -254,22 +264,128 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     }
 
     @Override
-    public List<UserApiQueryRecord> listIpLogs(String ip, String beginTime, String endTime) {
-        UserApiQueryRecord q = new UserApiQueryRecord();
-        q.setPlatformName(FREE_LOG_PLATFORM_NAME);
-        if (StringUtils.isNotEmpty(ip)) {
-            q.setCreateBy("free-ip-" + ip.trim());
-        }
-        if (StringUtils.isNotEmpty(beginTime) || StringUtils.isNotEmpty(endTime)) {
-            Map<String, Object> params = q.getParams();
-            if (StringUtils.isNotEmpty(beginTime)) {
-                params.put("beginTime", beginTime);
-            }
-            if (StringUtils.isNotEmpty(endTime)) {
-                params.put("endTime", endTime);
-            }
-        }
+    public List<UserApiQueryRecord> listIpLogs(String ip, String phone, String requestStatus, String taskId,
+                                               String deviceId, String deviceSource, String queryType,
+                                               String sourceType, String beginTime, String endTime) {
+        UserApiQueryRecord q = buildLogQueryCondition(ip, phone, requestStatus, taskId,
+                deviceId, deviceSource, queryType, sourceType, beginTime, endTime);
         return userApiQueryRecordService.selectUserApiQueryRecordList(q);
+    }
+
+    @Override
+    public Map<String, Object> logDashboard(String ip, String phone, String requestStatus, String taskId,
+                                            String deviceId, String deviceSource, String queryType,
+                                            String sourceType, String beginTime, String endTime) {
+        UserApiQueryRecord q = buildLogQueryCondition(ip, phone, requestStatus, taskId,
+                deviceId, deviceSource, queryType, sourceType, beginTime, endTime);
+        List<Map<String, Object>> rows = userApiQueryRecordService.selectFreeQueryTrendBaseList(q);
+
+        Map<String, DailyBucket> daily = new TreeMap<>();
+        List<Long> allRequestTimes = new ArrayList<>();
+        int total = 0;
+        int success = 0;
+        int failed = 0;
+        int todayQuery = 0;
+        String todayStr = LocalDate.now().toString();
+
+        for (Map<String, Object> row : rows) {
+            String statDate = asString(row.get("statDate"));
+            if (StringUtils.isEmpty(statDate)) {
+                continue;
+            }
+            DailyBucket bucket = daily.computeIfAbsent(statDate, k -> new DailyBucket());
+            bucket.total++;
+            total++;
+
+            String status = asString(row.get("requestStatus"));
+            if ("0".equals(status)) {
+                bucket.success++;
+                success++;
+            } else {
+                bucket.failed++;
+                failed++;
+                accumulateFailureReason(bucket, asString(row.get("errorCode")));
+            }
+
+            String srcType = normalizeSourceTypeForStat(asString(row.get("sourceType")));
+            if (SOURCE_TYPE_FREE_BATCH.equals(srcType)) {
+                bucket.freeBatch++;
+            } else if (SOURCE_TYPE_FREE_SINGLE.equals(srcType)) {
+                bucket.freeSingle++;
+            } else {
+                bucket.unknownSource++;
+            }
+
+            Long reqTime = asLong(row.get("requestTime"));
+            if (reqTime != null && reqTime > 0) {
+                bucket.requestTimes.add(reqTime);
+                allRequestTimes.add(reqTime);
+            }
+
+            if (todayStr.equals(statDate)) {
+                todayQuery++;
+            }
+        }
+
+        List<Map<String, Object>> volumeTrend = new ArrayList<>();
+        List<Map<String, Object>> successTrend = new ArrayList<>();
+        List<Map<String, Object>> failReasonTrend = new ArrayList<>();
+        List<Map<String, Object>> latencyTrend = new ArrayList<>();
+
+        for (Map.Entry<String, DailyBucket> entry : daily.entrySet()) {
+            String date = entry.getKey();
+            DailyBucket b = entry.getValue();
+
+            Map<String, Object> volumeRow = new LinkedHashMap<>();
+            volumeRow.put("date", date);
+            volumeRow.put("total", b.total);
+            volumeRow.put("freeSingle", b.freeSingle);
+            volumeRow.put("freeBatch", b.freeBatch);
+            volumeRow.put("unknown", b.unknownSource);
+            volumeTrend.add(volumeRow);
+
+            Map<String, Object> successRow = new LinkedHashMap<>();
+            successRow.put("date", date);
+            successRow.put("total", b.total);
+            successRow.put("success", b.success);
+            successRow.put("failed", b.failed);
+            successRow.put("successRate", percent(b.success, b.total));
+            successTrend.add(successRow);
+
+            Map<String, Object> failRow = new LinkedHashMap<>();
+            failRow.put("date", date);
+            failRow.put("ipLimit", b.ipLimitFailed);
+            failRow.put("deviceLimit", b.deviceLimitFailed);
+            failRow.put("allLimit", b.allLimitFailed);
+            failRow.put("other", b.otherFailed);
+            failRow.put("totalFailed", b.failed);
+            failReasonTrend.add(failRow);
+
+            Map<String, Object> latencyRow = new LinkedHashMap<>();
+            latencyRow.put("date", date);
+            latencyRow.put("avgMs", avg(b.requestTimes));
+            latencyRow.put("p95Ms", p95(b.requestTimes));
+            latencyTrend.add(latencyRow);
+        }
+
+        Map<String, Object> overview = new LinkedHashMap<>();
+        overview.put("totalQuery", total);
+        overview.put("successCount", success);
+        overview.put("failedCount", failed);
+        overview.put("successRate", percent(success, total));
+        overview.put("p95Ms", p95(allRequestTimes));
+        overview.put("todayQuery", todayQuery);
+
+        Map<String, Object> trends = new LinkedHashMap<>();
+        trends.put("volume", volumeTrend);
+        trends.put("success", successTrend);
+        trends.put("failReason", failReasonTrend);
+        trends.put("latency", latencyTrend);
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("overview", overview);
+        data.put("trends", trends);
+        return data;
     }
 
     private ApiRequestVO buildApiRequest(com.geek.server.domain.UserPlatformUrlConfig platform, String phone) {
@@ -325,7 +441,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     }
 
     private void saveIpLog(String ip, String phone, String requestStatus, Long requestTime, int limit, int usedBefore,
-                           int usedAfter, String message, String deviceId, String taskId, String deviceSource) {
+                           int usedAfter, String message, String deviceId, String taskId, String deviceSource,
+                           String sourceType) {
         UserApiQueryRecord row = new UserApiQueryRecord();
         row.setQueryType("9");
         row.setPlatformId(0L);
@@ -338,10 +455,158 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         row.setCreateTime(new Date());
         row.setTaskId(taskId);
         row.setResults(message);
+        row.setSourceType(sourceType);
+        row.setDeviceId(deviceId);
+        row.setDeviceSource(deviceSource);
+        row.setUsedBefore(usedBefore);
+        row.setUsedAfter(usedAfter);
+        row.setLimitValue(limit);
+        row.setIpAddr(ip);
+        row.setErrorCode(resolveErrorCode(requestStatus, message, message));
         row.setRequestParams("ip=" + ip + ", deviceId=" + deviceId + ", deviceSource=" + deviceSource
-                + ", limit=" + limit + ", usedBefore=" + usedBefore + ", usedAfter=" + usedAfter);
+                + ", sourceType=" + sourceType + ", limit=" + limit + ", usedBefore=" + usedBefore + ", usedAfter=" + usedAfter);
         row.setResponseResult(message);
         userApiQueryRecordService.insertUserApiQueryRecord(row);
+    }
+
+    private String normalizeSourceType(String raw) {
+        if (StringUtils.isEmpty(raw)) {
+            return SOURCE_TYPE_FREE_SINGLE;
+        }
+        String val = raw.trim().toUpperCase();
+        return SOURCE_TYPE_FREE_BATCH.equals(val) ? SOURCE_TYPE_FREE_BATCH : SOURCE_TYPE_FREE_SINGLE;
+    }
+
+    private UserApiQueryRecord buildLogQueryCondition(String ip, String phone, String requestStatus, String taskId,
+                                                      String deviceId, String deviceSource, String queryType,
+                                                      String sourceType, String beginTime, String endTime) {
+        UserApiQueryRecord q = new UserApiQueryRecord();
+        q.setPlatformName(FREE_LOG_PLATFORM_NAME);
+        if (StringUtils.isNotEmpty(ip)) {
+            q.setIpAddr(ip.trim());
+        }
+        if (StringUtils.isNotEmpty(phone)) {
+            q.setPhone(phone.trim());
+        }
+        if (StringUtils.isNotEmpty(requestStatus)) {
+            q.setRequestStatus(requestStatus.trim());
+        }
+        if (StringUtils.isNotEmpty(taskId)) {
+            q.setTaskId(taskId.trim());
+        }
+        if (StringUtils.isNotEmpty(queryType)) {
+            q.setQueryType(queryType.trim());
+        }
+        if (StringUtils.isNotEmpty(deviceId)) {
+            q.setDeviceId(deviceId.trim());
+        }
+        if (StringUtils.isNotEmpty(deviceSource)) {
+            q.setDeviceSource(deviceSource.trim());
+        }
+        if (StringUtils.isNotEmpty(sourceType)) {
+            q.setSourceType(sourceType.trim().toUpperCase());
+        }
+        Map<String, Object> params = q.getParams();
+        if (StringUtils.isNotEmpty(beginTime)) {
+            params.put("beginTime", beginTime.trim());
+        }
+        if (StringUtils.isNotEmpty(endTime)) {
+            params.put("endTime", endTime.trim());
+        }
+        return q;
+    }
+
+    private void accumulateFailureReason(DailyBucket bucket, String errorCode) {
+        String code = StringUtils.defaultString(errorCode).trim().toUpperCase();
+        switch (code) {
+            case "FREE_IP_LIMIT" -> bucket.ipLimitFailed++;
+            case "FREE_DEVICE_LIMIT" -> bucket.deviceLimitFailed++;
+            case "FREE_ALL_LIMIT" -> bucket.allLimitFailed++;
+            default -> bucket.otherFailed++;
+        }
+    }
+
+    private String normalizeSourceTypeForStat(String raw) {
+        if (StringUtils.isEmpty(raw)) {
+            return "UNKNOWN";
+        }
+        String val = raw.trim().toUpperCase();
+        if (SOURCE_TYPE_FREE_BATCH.equals(val) || SOURCE_TYPE_FREE_SINGLE.equals(val)) {
+            return val;
+        }
+        return "UNKNOWN";
+    }
+
+    private Long asLong(Object val) {
+        if (val == null) {
+            return null;
+        }
+        if (val instanceof Number n) {
+            return n.longValue();
+        }
+        try {
+            return Long.parseLong(String.valueOf(val));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String asString(Object val) {
+        return val == null ? "" : String.valueOf(val);
+    }
+
+    private double percent(int numerator, int denominator) {
+        if (denominator <= 0) {
+            return 0D;
+        }
+        double pct = (numerator * 100.0D) / denominator;
+        return Math.round(pct * 100.0D) / 100.0D;
+    }
+
+    private long avg(List<Long> values) {
+        if (values == null || values.isEmpty()) {
+            return 0L;
+        }
+        long sum = 0L;
+        for (Long value : values) {
+            if (value != null && value > 0) {
+                sum += value;
+            }
+        }
+        return Math.round(sum * 1.0D / values.size());
+    }
+
+    private long p95(List<Long> values) {
+        if (values == null || values.isEmpty()) {
+            return 0L;
+        }
+        List<Long> sorted = new ArrayList<>(values);
+        Collections.sort(sorted);
+        int index = (int) Math.ceil(sorted.size() * 0.95D) - 1;
+        if (index < 0) {
+            index = 0;
+        }
+        if (index >= sorted.size()) {
+            index = sorted.size() - 1;
+        }
+        return sorted.get(index);
+    }
+
+    private String resolveErrorCode(String requestStatus, String responseResult, String resultText) {
+        if (!"1".equals(requestStatus)) {
+            return null;
+        }
+        String merged = (StringUtils.defaultString(responseResult) + " " + StringUtils.defaultString(resultText)).toUpperCase();
+        if (merged.contains("平台当日免费额度") || merged.contains("全局")) {
+            return "FREE_ALL_LIMIT";
+        }
+        if (merged.contains("设备")) {
+            return "FREE_DEVICE_LIMIT";
+        }
+        if (merged.contains("IP")) {
+            return "FREE_IP_LIMIT";
+        }
+        return "FREE_REQUEST_FAIL";
     }
 
     /**
@@ -610,5 +875,19 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     private record CounterDecision(boolean allowed, int usedBefore, int usedAfter) {}
 
     private record QuotaCounter(int used, int remaining) {}
+
+    private static class DailyBucket {
+        int total;
+        int success;
+        int failed;
+        int freeSingle;
+        int freeBatch;
+        int unknownSource;
+        int ipLimitFailed;
+        int deviceLimitFailed;
+        int allLimitFailed;
+        int otherFailed;
+        List<Long> requestTimes = new ArrayList<>();
+    }
 }
 
