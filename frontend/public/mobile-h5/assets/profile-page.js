@@ -4,6 +4,7 @@
   var QUERY_RECORDS_KEY = 'profile_query_records';
   var RECHARGE_RECORDS_KEY = 'profile_recharge_records';
   var POINTS_KEY = 'profile_user_points';
+  var TOKEN_KEY = 'profile_user_token';
   var DEFAULT_POINTS = 100;
   var profileToastTimer = null;
 
@@ -34,12 +35,30 @@
       return '';
     }
   }
+  function getToken() {
+    try {
+      return (localStorage.getItem(TOKEN_KEY) || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
 
   function setAccount(account) {
     try {
       if (account) localStorage.setItem(STORAGE_KEY, account);
       else localStorage.removeItem(STORAGE_KEY);
     } catch (e) {}
+  }
+  function setToken(token) {
+    try {
+      if (token) localStorage.setItem(TOKEN_KEY, token);
+      else localStorage.removeItem(TOKEN_KEY);
+    } catch (e) {}
+  }
+
+  function clearLogin() {
+    setAccount('');
+    setToken('');
   }
 
   function getPasswordMap() {
@@ -76,7 +95,7 @@
 
   function getPoints() {
     var account = getAccount();
-    if (!account) return 0;
+    if (!account || !getToken()) return 0;
     var map = readJson(POINTS_KEY, {});
     if (Object.prototype.hasOwnProperty.call(map, account)) {
       return map[account];
@@ -109,7 +128,8 @@
     if (!titleEl || !descEl) return;
 
     var account = getAccount();
-    if (account) {
+    var loggedIn = !!(account && getToken());
+    if (loggedIn) {
       titleEl.textContent = maskAccount(account);
       descEl.textContent = '欢迎使用批量查询服务';
       if (pointsValueEl) {
@@ -145,7 +165,7 @@
   }
 
   function isLoggedIn() {
-    return !!getAccount();
+    return !!(getAccount() && getToken());
   }
 
   function getAppBase() {
@@ -308,11 +328,16 @@
   }
 
   function applyRemoteLoginResult(account, password, data) {
+    var token = String((data && data.token) || '').trim();
+    if (!token) {
+      return false;
+    }
     var loginAccount = String(
       (data && (data.account || data.userName || data.phone || data.nickName)) || account || ''
     ).trim();
     if (!loginAccount) loginAccount = account;
     setAccount(loginAccount);
+    setToken(token);
 
     var points = Number(data && data.points);
     if (!isNaN(points)) {
@@ -322,6 +347,7 @@
     if (String(password || '').trim()) {
       setAccountPassword(loginAccount, password);
     }
+    return true;
   }
 
   function getQueryRecords() {
@@ -347,9 +373,9 @@
     if (!modal) return;
 
     document.getElementById('profile-user-btn').addEventListener('click', function () {
-      if (getAccount()) {
+      if (isLoggedIn()) {
         confirmAction('是否退出登录？', function () {
-          setAccount('');
+          clearLogin();
           if (window.UserAuth && typeof window.UserAuth.logout === 'function') {
             window.UserAuth.logout();
           }
@@ -392,7 +418,10 @@
           notify(loginErr);
           return;
         }
-        applyRemoteLoginResult(account, password, loginData);
+        if (!applyRemoteLoginResult(account, password, loginData)) {
+          notify('登录失败，请稍后重试');
+          return;
+        }
         renderUserHeader();
         closeLoginModal();
         accountInput.value = '';
@@ -547,6 +576,7 @@
 
   window.ProfilePage = {
     getAccount: getAccount,
+    getToken: getToken,
     isLoggedIn: isLoggedIn,
     requireLogin: requireLogin,
     openLoginModal: openLoginModal,
@@ -555,7 +585,8 @@
     getRechargeRecords: getRechargeRecords,
     getPoints: getPoints,
     setPoints: setPoints,
-    getTodayQueryCount: getTodayQueryCount
+    getTodayQueryCount: getTodayQueryCount,
+    clearLogin: clearLogin
   };
 
   renderUserHeader();

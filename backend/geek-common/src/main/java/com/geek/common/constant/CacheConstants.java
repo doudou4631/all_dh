@@ -41,6 +41,8 @@ public class CacheConstants {
 
     /** 文件路径 redis key */
     public static final String FILE_PATH_MD5_KEY = "file_path_md5";
+    /** 免费查询登录 token key */
+    public static final String FREE_QUERY_LOGIN_TOKEN_KEY = "free_query_login_tokens";
 
     private CacheConstants() {
     }

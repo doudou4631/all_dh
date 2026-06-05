@@ -9,6 +9,7 @@ import java.util.List;
 public interface IFreeQueryService {
 
     Map<String, Object> getQuota(String ip);
+    int countEnabledPlatforms();
 
     Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip);
 

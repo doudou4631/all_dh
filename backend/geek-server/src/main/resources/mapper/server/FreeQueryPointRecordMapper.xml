@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.FreeQueryPointRecordMapper">
+
+    <insert id="insertFreeQueryPointRecord" parameterType="FreeQueryPointRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into free_query_point_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="freeUserId != null">free_user_id,</if>
+            <if test="pointAmount != null">point_amount,</if>
+            <if test="pointType != null and pointType != ''">point_type,</if>
+            <if test="businessType != null and businessType != ''">business_type,</if>
+            <if test="bizNo != null and bizNo != ''">biz_no,</if>
+            <if test="reason != null and reason != ''">reason,</if>
+            <if test="operatorId != null">operator_id,</if>
+            <if test="balanceAfter != null">balance_after,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="freeUserId != null">#{freeUserId},</if>
+            <if test="pointAmount != null">#{pointAmount},</if>
+            <if test="pointType != null and pointType != ''">#{pointType},</if>
+            <if test="businessType != null and businessType != ''">#{businessType},</if>
+            <if test="bizNo != null and bizNo != ''">#{bizNo},</if>
+            <if test="reason != null and reason != ''">#{reason},</if>
+            <if test="operatorId != null">#{operatorId},</if>
+            <if test="balanceAfter != null">#{balanceAfter},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+</mapper>

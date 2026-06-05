@@ -1,5 +1,7 @@
 (function () {
   var PROFILE_ACCOUNT_KEY = 'profile_user_account';
+  var PROFILE_TOKEN_KEY = 'profile_user_token';
+  var PROFILE_POINTS_KEY = 'profile_user_points';
 
   function getAppBase() {
     var path = window.location.pathname || '/';
@@ -26,10 +28,22 @@
     }
   }
 
+  function getProfileToken() {
+    try {
+      return (localStorage.getItem(PROFILE_TOKEN_KEY) || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function getBatchLoginRedirectUrl() {
+    var redirect = encodeURIComponent('/batch/');
+    return resolveHref('/profile/?redirect=' + redirect);
+  }
+
   function ensureBatchLogin() {
-    if (getProfileAccount()) return true;
-    var loginUrl = resolveHref('/profile/');
-    window.location.replace(loginUrl);
+    if (getProfileAccount() && getProfileToken()) return true;
+    window.location.replace(getBatchLoginRedirectUrl());
     return false;
   }
 
@@ -44,6 +58,7 @@
 
   var currentTaskId = '';
   var currentResults = [];
+  var currentSummary = null;
   var batchToastTimer = null;
 
   function notify(message) {
@@ -89,15 +104,6 @@
       .replace(/"/g, '&quot;');
   }
 
-  function isMarked(item) {
-    if (!item) return false;
-    if (item.process === 1) return true;
-    var s = item.status || '';
-    if (s === '无标记' || s === '未标记' || s === '查询失败' || s === '未开放' || s === '-') {
-      return false;
-    }
-    return s !== '无标记';
-  }
 
   function getPlatformDisplayName(name) {
     if (!name) return '未知平台';
@@ -105,26 +111,121 @@
     if (name.indexOf('360') >= 0 && name.indexOf('卫士') < 0) return '360手机卫士';
     return name;
   }
-
-  function getMarkType(item) {
-    var s = item.status || '';
-    if (!s || s === '有标记') return '普通标记';
-    return s;
+  function parseMarkedInfo(platformResult) {
+    if (platformResult && typeof platformResult.error === 'string' && platformResult.error.trim()) {
+      return { marked: false, markType: '' };
+    }
+    var firstResult =
+      platformResult &&
+      platformResult.data &&
+      platformResult.data.platformResults &&
+      platformResult.data.platformResults[0];
+    if (!firstResult) {
+      return { marked: false, markType: '' };
+    }
+    var status = String(firstResult.status || '').trim();
+    if (!status) {
+      return { marked: false, markType: '' };
+    }
+    if (status.indexOf('yes-') === 0) {
+      var markType = status.slice(4).trim();
+      if (!markType || markType.indexOf('泰迪未来标记已取消') >= 0 || markType.indexOf('同步时间') >= 0) {
+        return { marked: false, markType: '' };
+      }
+      return { marked: true, markType: markType };
+    }
+    if (status === 'yes') {
+      return { marked: true, markType: '普通标记' };
+    }
+    if (status.indexOf('no') === 0) {
+      return { marked: false, markType: '' };
+    }
+    return { marked: false, markType: '' };
   }
 
   function getMarkedItems(results) {
-    return (results || [])
-      .filter(isMarked)
-      .map(function (r) {
-        return {
-          platform: getPlatformDisplayName(r.platform),
-          markType: getMarkType(r)
-        };
+    if (!Array.isArray(results) || !results.length) return [];
+    var list = [];
+    results.forEach(function (r) {
+      var parsed = parseMarkedInfo(r);
+      if (!parsed.marked) return;
+      list.push({
+        platform: getPlatformDisplayName((r && (r.platformName || r.platform)) || ''),
+        markType: parsed.markType || '普通标记'
       });
+    });
+    return list;
   }
 
   function createTaskId() {
     return '#' + String(Math.floor(10000 + Math.random() * 90000));
+  }
+
+  function formatInt(value) {
+    var num = Number(value);
+    if (isNaN(num)) return '0';
+    return String(Math.round(num));
+  }
+
+  function mapBatchResultItem(item) {
+    var code = Number(item && item.code);
+    var success = code === 0 || code === 200;
+    var data = item && item.data;
+    var platformResults = data && Array.isArray(data.results) ? data.results : [];
+    return {
+      phone: String((item && item.phone) || ''),
+      error: !success,
+      errorMessage: success ? '' : String((item && item.message) || '查询失败').trim() || '查询失败',
+      markedItems: success ? getMarkedItems(platformResults) : [],
+      failedEntries: Number(item && item.failedEntries) || 0
+    };
+  }
+
+  function normalizeBatchResults(resultRows, fallbackPhones) {
+    if (Array.isArray(resultRows) && resultRows.length) {
+      return resultRows.map(mapBatchResultItem);
+    }
+    return (fallbackPhones || []).map(function (phone) {
+      return {
+        phone: phone,
+        error: true,
+        errorMessage: '查询失败',
+        markedItems: [],
+        failedEntries: 0
+      };
+    });
+  }
+
+  function buildSummaryRows() {
+    if (!currentSummary) return '';
+    var html = '';
+    html +=
+      '<div class="batch-task-row"><span>命中平台数</span><span>' +
+      formatInt(currentSummary.platformCount) +
+      '</span></div>';
+    html +=
+      '<div class="batch-task-row"><span>成功/失败</span><span>' +
+      formatInt(currentSummary.successCount) +
+      '/' +
+      formatInt(currentSummary.failedCount) +
+      '</span></div>';
+    html +=
+      '<div class="batch-task-row"><span>预扣积分</span><span>' +
+      formatInt(currentSummary.totalChargePoints) +
+      '</span></div>';
+    html +=
+      '<div class="batch-task-row"><span>退回积分</span><span>' +
+      formatInt(currentSummary.refundedPoints) +
+      '</span></div>';
+    html +=
+      '<div class="batch-task-row"><span>实际消耗</span><span>' +
+      formatInt(currentSummary.actualCostPoints) +
+      '</span></div>';
+    html +=
+      '<div class="batch-task-row"><span>剩余积分</span><span>' +
+      formatInt(currentSummary.remainingPoints) +
+      '</span></div>';
+    return html;
   }
 
   function buildResultItem(item, index) {
@@ -134,7 +235,7 @@
     var badgeText = '无标记';
 
     if (item.error) {
-      tags = '查询失败，请稍后重试';
+      tags = item.errorMessage || '查询失败，请稍后重试';
       badgeClass = 'batch-result-badge--fail';
       badgeText = '查询失败';
     } else if (item.markedItems.length) {
@@ -175,7 +276,7 @@
 
   function renderTaskCard(done, current, total) {
     var percent = total ? Math.round((current / total) * 100) : 0;
-    return (
+    var html =
       '<div class="batch-task-card">' +
       '<div class="batch-task-row"><span>任务ID</span><span>' +
       escapeHtml(currentTaskId) +
@@ -192,9 +293,12 @@
       '</span></div>' +
       '<div class="batch-progress"><div class="batch-progress-bar" style="width:' +
       percent +
-      '%"></div></div>' +
-      '</div>'
-    );
+      '%\"></div></div>';
+    if (done) {
+      html += buildSummaryRows();
+    }
+    html += '</div>';
+    return html;
   }
 
   function renderResultsPanel() {
@@ -237,7 +341,8 @@
     detailPhoneEl.textContent = item.phone;
 
     if (item.error) {
-      detailListEl.innerHTML = '<p class="batch-detail-empty">查询失败，请稍后重试</p>';
+      detailListEl.innerHTML =
+        '<p class=\"batch-detail-empty\">' + escapeHtml(item.errorMessage || '查询失败，请稍后重试') + '</p>';
     } else if (!item.markedItems.length) {
       detailListEl.innerHTML = '<p class="batch-detail-empty">该号码未发现被标记平台</p>';
     } else {
@@ -296,7 +401,7 @@
       var lines = ['号码,标记状态,平台,标记类型'];
       currentResults.forEach(function (item) {
         if (item.error) {
-          lines.push([item.phone, '查询失败', '', ''].map(csvCell).join(','));
+          lines.push([item.phone, '查询失败', '', item.errorMessage || '查询失败'].map(csvCell).join(','));
           return;
         }
         if (!item.markedItems.length) {
@@ -372,6 +477,50 @@
     phonesEl.value = '';
     updateCount();
   }
+  function syncRemainingPoints(remainingPoints) {
+    var num = Number(remainingPoints);
+    if (isNaN(num)) return;
+    var account = getProfileAccount();
+    if (!account) return;
+    try {
+      var mapRaw = localStorage.getItem(PROFILE_POINTS_KEY);
+      var map = mapRaw ? JSON.parse(mapRaw) : {};
+      map[account] = Math.max(0, Math.round(num));
+      localStorage.setItem(PROFILE_POINTS_KEY, JSON.stringify(map));
+    } catch (e) {}
+  }
+
+  function clearTokenAndRedirect(message) {
+    try {
+      localStorage.removeItem(PROFILE_TOKEN_KEY);
+    } catch (e) {}
+    notify(message || '登录已失效，请重新登录');
+    setTimeout(function () {
+      window.location.href = getBatchLoginRedirectUrl();
+    }, 800);
+  }
+
+  function applyBatchResponse(data, phones) {
+    currentTaskId = String((data && data.taskId) || '').trim() || createTaskId();
+    currentSummary = {
+      total: Number(data && data.total) || phones.length,
+      platformCount: Number(data && data.platformCount) || 0,
+      successCount: Number(data && data.successCount) || 0,
+      failedCount: Number(data && data.failedCount) || 0,
+      totalChargePoints: Number(data && data.totalChargePoints) || 0,
+      refundedPoints: Number(data && data.refundedPoints) || 0,
+      actualCostPoints: Number(data && data.actualCostPoints) || 0,
+      remainingPoints: Number(data && data.remainingPoints)
+    };
+    currentResults = normalizeBatchResults(data && data.results, phones);
+    renderProgress(currentResults.length, phones.length, true);
+    if (window.QueryStats && typeof window.QueryStats.recordQueryForCurrentUser === 'function') {
+      window.QueryStats.recordQueryForCurrentUser(currentResults.length || phones.length);
+    }
+    if (!isNaN(currentSummary.remainingPoints)) {
+      syncRemainingPoints(currentSummary.remainingPoints);
+    }
+  }
 
   phonesEl.addEventListener('input', updateCount);
 
@@ -385,45 +534,38 @@
       notify('请输入至少一个有效号码');
       return;
     }
+    if (!window.BiaojiApiBridge || typeof window.BiaojiApiBridge.batchQuery !== 'function') {
+      notify('批量查询服务未加载，请刷新后重试');
+      return;
+    }
+    var token = getProfileToken();
+    if (!token) {
+      clearTokenAndRedirect('请先登录后再批量查询');
+      return;
+    }
 
     submitBtn.disabled = true;
     currentTaskId = createTaskId();
     currentResults = [];
-    var idx = 0;
-    var total = list.length;
+    currentSummary = null;
 
-    renderProgress(0, total, false);
+    renderProgress(0, list.length, false);
 
-    function next() {
-      if (idx >= list.length) {
-        renderProgress(total, total, true);
-        submitBtn.disabled = false;
+    window.BiaojiApiBridge.batchQuery(list, token, function (err, data) {
+      submitBtn.disabled = false;
+      if (err) {
+        var msg = String(err || '').trim();
+        if (msg.indexOf('登录') >= 0 || msg.indexOf('失效') >= 0 || msg.indexOf('401') >= 0) {
+          clearTokenAndRedirect(msg || '登录已失效，请重新登录');
+          return;
+        }
+        notify(msg || '批量查询失败');
         return;
       }
-
-      var phone = list[idx];
-      window.BiaojiApiBridge.queryPhone(phone, function (err, data) {
-        if (window.QueryStats) window.QueryStats.recordQueryForCurrentUser(1);
-
-        var markedItems = [];
-        if (!err && data && data.results) {
-          markedItems = getMarkedItems(data.results);
-        }
-
-        currentResults.push({
-          phone: phone,
-          error: !!err,
-          markedItems: markedItems
-        });
-
-        idx += 1;
-        renderProgress(idx, total, false);
-        next();
-      });
-    }
-
-    next();
+      applyBatchResponse(data || {}, list);
+    });
   });
 
+  updateCount();
   bindDetailModal();
 })();

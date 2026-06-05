@@ -16,6 +16,7 @@
   var APPEAL_TEXT =
     '泰迪熊：普通标记申诉后6小时生效（30天内二次处理会驳回）；提示10个工作日要暂停拨号；腾讯管家：审核1-3个工作日（期间暂停外呼）；360卫士：三个月内只能处理一次';
   var FREE_QUERY_DEVICE_ID_STORAGE_KEY = 'free_query_device_id';
+  var PROFILE_TOKEN_KEY = 'profile_user_token';
 
   function createRandomDeviceId() {
     var byCrypto = '';
@@ -54,6 +55,31 @@
       phone: String(phone || '').trim(),
       deviceId: getOrCreateDeviceId()
     };
+  }
+
+  function getStoredFreeToken() {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+    try {
+      return String(window.localStorage.getItem(PROFILE_TOKEN_KEY) || '').trim();
+    } catch (error) {
+      return '';
+    }
+  }
+
+  function normalizeBatchPhones(phones) {
+    if (!Array.isArray(phones)) return [];
+    var seen = {};
+    var list = [];
+    phones.forEach(function (item) {
+      var phone = String(item || '').replace(/\D/g, '').trim();
+      if (!/^\d{7,15}$/.test(phone)) return;
+      if (seen[phone]) return;
+      seen[phone] = true;
+      list.push(phone);
+    });
+    return list.slice(0, 20);
   }
 
   function parseStatus(item) {
@@ -252,6 +278,44 @@
           success && success(resp);
         },
         fail
+      );
+    },
+    batchQuery: function (phones, token, callback) {
+      var authToken = String(token || getStoredFreeToken() || '').trim();
+      if (!authToken) {
+        callback && callback('请先登录后再批量查询');
+        return;
+      }
+
+      var normalizedPhones = normalizeBatchPhones(phones);
+      if (!normalizedPhones.length) {
+        callback && callback('请输入至少一个有效号码');
+        return;
+      }
+
+      requestJson(
+        API_BASE + 'server/apiServer/asyncBatchOpt',
+        'POST',
+        {
+          phones: normalizedPhones,
+          token: authToken,
+          deviceId: getOrCreateDeviceId()
+        },
+        function (resp) {
+          var code = Number(resp && resp.code);
+          if (code === 0 || code === 200) {
+            callback && callback(null, (resp && resp.data) || {});
+            return;
+          }
+          callback && callback((resp && resp.msg) || '批量查询失败', (resp && resp.data) || null);
+        },
+        function (err) {
+          callback && callback((err && err.msg) || '网络错误，请重试');
+        },
+        {
+          'X-Free-Token': authToken,
+          Authorization: 'Bearer ' + authToken
+        }
       );
     }
   };

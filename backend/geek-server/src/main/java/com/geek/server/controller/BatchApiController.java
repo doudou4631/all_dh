@@ -1,12 +1,15 @@
 package com.geek.server.controller;
+import com.geek.common.annotation.Anonymous;
 
 import com.geek.common.core.domain.AjaxResult;
 import com.geek.server.domain.entity.BatchTask;
 import com.geek.server.domain.vo.ApiRequestVO;
+import com.geek.server.domain.vo.FreeBatchQueryRequest;
 import com.geek.server.service.IAsyncBatchOptimizedService;
 import com.geek.server.service.IAsyncBatchService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,6 +29,7 @@ public class BatchApiController {
 
     private final IAsyncBatchService asyncBatchService;
     private final IAsyncBatchOptimizedService asyncBatchOptimizedService;
+    private final FreeQueryController freeQueryController;
 
     /**
      * 提交异步批量查询任务
@@ -39,6 +43,17 @@ public class BatchApiController {
         } catch (Exception e) {
             return AjaxResult.error("任务提交失败：" + e.getMessage());
         }
+    }
+
+    /**
+     * 提交异步批量查询任务（免费用户兼容入口）
+     */
+    @Operation(summary = "提交异步批量查询任务（免费用户兼容入口）")
+    @Anonymous
+    @PostMapping(value = "/asyncBatchOpt", headers = "X-Free-Token")
+    public AjaxResult submitBatchQueryOptimizedForFree(@RequestBody FreeBatchQueryRequest request,
+                                                       HttpServletRequest httpServletRequest) {
+        return freeQueryController.batch(request, httpServletRequest);
     }
 
     /**

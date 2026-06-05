@@ -102,6 +102,24 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
     }
 
     @Override
+    public int countEnabledPlatforms() {
+        List<String> disabledPlatformNames = loadFreeQueryDisabledPlatformNames();
+        Set<String> disabledNameSet = new HashSet<>(disabledPlatformNames);
+        List<com.geek.server.domain.UserPlatformUrlConfig> platforms = userPlatformUrlConfigService
+                .selectUserPlatformUrlConfigList(new com.geek.server.domain.UserPlatformUrlConfig());
+        return (int) platforms.stream()
+                .filter(p -> "0".equals(p.getStatus()))
+                .filter(p -> {
+                    String name = p.getPlatformName();
+                    if (StringUtils.isEmpty(name)) {
+                        return true;
+                    }
+                    return !disabledNameSet.contains(name.trim());
+                })
+                .count();
+    }
+
+    @Override
     public Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip) {
         DictConfig config = loadDictConfig();
         String phone = normalizePhone(request != null ? request.getPhone() : null);

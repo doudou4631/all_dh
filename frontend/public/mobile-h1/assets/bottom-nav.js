@@ -2,6 +2,7 @@
   var WECHAT_QR = '/mobile-h1/assets/icons/customer-wechat-h1.png';
   var SERVICE_PHONE = '13027616171';
   var PROFILE_ACCOUNT_KEY = 'profile_user_account';
+  var PROFILE_TOKEN_KEY = 'profile_user_token';
 
   var ICONS = {
     home:
@@ -50,12 +51,21 @@
     }
   }
 
+  function getProfileToken() {
+    try {
+      return (localStorage.getItem(PROFILE_TOKEN_KEY) || '').trim();
+    } catch (e) {
+      return '';
+    }
+  }
+
   function isBatchLoginReady() {
-    return !!getProfileAccount();
+    return !!(getProfileAccount() && getProfileToken());
   }
 
   function getBatchLoginRedirectHref() {
-    return resolveHref('/profile/');
+    var redirect = encodeURIComponent('/batch/');
+    return resolveHref('/profile/?redirect=' + redirect);
   }
 
   function getActiveId() {
