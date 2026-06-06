@@ -49,7 +49,12 @@
 
             <div class="submit-charge-bar">
               当前平台：{{ activePlatformName }}，每个号码扣 {{ activeUnitPrice }} 次，
-              预计提交：{{ expectedSubmitCount }} 个，预计扣除：{{ expectedDeductAmount }} 次
+              当前剩余：{{ activeRemainCount }} 次，
+              预计提交：{{ expectedSubmitCount }} 个，预计扣除：{{ expectedDeductAmount }} 次，
+              预计剩余：{{ expectedRemainAfterSubmit }} 次
+            </div>
+            <div v-if="insufficientRemain" class="submit-warning-bar">
+              当前平台剩余次数不足，请减少号码后再提交。
             </div>
 
             <div class="submit-actions">
@@ -67,7 +72,7 @@
                 type="warning"
                 icon="Promotion"
                 :loading="submitLoading"
-                :disabled="!canSubmit"
+                :disabled="!canDirectSubmit"
                 @click="submitDirectOrder"
                 v-hasPermi="['server:markUser:order:add']"
               >
@@ -390,6 +395,10 @@ const activeUnitPrice = computed(() => {
   const price = Number(activePlatform.value?.unitPrice ?? 1)
   return Number.isFinite(price) ? price : 1
 })
+const activeRemainCount = computed(() => {
+  const remain = Number(activePlatform.value?.remainCount ?? 0)
+  return Number.isFinite(remain) ? Math.max(0, remain) : 0
+})
 
 const activePlatformHint = computed(() => {
   if (!activePlatform.value) return '请选择平台后提交号码。'
@@ -441,6 +450,9 @@ const canSubmit = computed(() => {
 const expectedSubmitCount = computed(() => submitPhoneStats.value.validCount)
 
 const expectedDeductAmount = computed(() => expectedSubmitCount.value * activeUnitPrice.value)
+const expectedRemainAfterSubmit = computed(() => activeRemainCount.value - expectedDeductAmount.value)
+const insufficientRemain = computed(() => expectedDeductAmount.value > activeRemainCount.value)
+const canDirectSubmit = computed(() => canSubmit.value && !insufficientRemain.value)
 const precheckTableData = computed(() => Array.isArray(precheckDialogData.value.items) ? precheckDialogData.value.items : [])
 const precheckMarkedCount = computed(() => Array.isArray(precheckDialogData.value.markedPhones) ? precheckDialogData.value.markedPhones.length : 0)
 
@@ -702,6 +714,10 @@ async function submitDirectOrder() {
     proxy.$modal.msgError('请输入有效号码')
     return
   }
+  if (insufficientRemain.value) {
+    proxy.$modal.msgError('当前平台剩余次数不足')
+    return
+  }
   const payload = {
     platformCode: activePlatform.value.platformCode,
     platformName: activePlatform.value.platformName,
@@ -742,6 +758,11 @@ async function confirmSubmitAfterPrecheck() {
   const markedCount = precheckMarkedCount.value
   if (!payload || markedCount <= 0) {
     proxy.$modal.msgWarning('预查询无可提交号码')
+    return
+  }
+  const finalDeductAmount = markedCount * activeUnitPrice.value
+  if (finalDeductAmount > activeRemainCount.value) {
+    proxy.$modal.msgError('当前平台剩余次数不足，请减少提交数量')
     return
   }
 
@@ -887,6 +908,16 @@ onMounted(async () => {
   border-radius: 4px;
   background: #faf4db;
   color: #606266;
+  font-size: 14px;
+}
+
+.submit-warning-bar {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #f56c6c;
+  border-radius: 4px;
+  background: #fef0f0;
+  color: #c45656;
   font-size: 14px;
 }
 

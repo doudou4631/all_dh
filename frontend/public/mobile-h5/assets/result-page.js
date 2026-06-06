@@ -108,7 +108,11 @@
   function renderCard(item) {
     var name = item.platform || '未知平台';
     var title = name.indexOf('标记') >= 0 ? '[' + name + ']' : '[' + name + ' 标记]';
-    var msg = item.status && item.status !== '有标记' ? item.status : '普通标记';
+    var status = item.status || '';
+    var msg = status && status !== '有标记' ? status : '普通标记';
+    if (name === '移动高频' && (status === '有标记' || status === '普通标记')) {
+      msg = '高频拦截';
+    }
     var icon = getPlatformIcon(name);
     var iconClass =
       'result-card-icon' + (name.indexOf('小米') >= 0 ? ' result-card-icon--xiaomi' : '');

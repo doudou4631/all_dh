@@ -82,7 +82,7 @@ public class UserApiQueryRecordServiceImpl implements IUserApiQueryRecordService
         {
             if ("移动高频".equals(platformName))
             {
-                return "移动高频拦截";
+                return "高频拦截";
             }
             return "有标记";
         }

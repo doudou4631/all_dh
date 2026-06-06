@@ -31,6 +31,13 @@ public class MarkWalletLog extends BaseEntity {
     @Schema(title = "订单明细ID")
     @Excel(name = "订单明细ID")
     private Long orderItemId;
+    @Schema(title = "平台编码")
+    @Excel(name = "平台编码")
+    private String platformCode;
+
+    @Schema(title = "平台名称")
+    @Excel(name = "平台名称")
+    private String platformName;
 
     @Schema(title = "流水业务类型（DEDUCT/REFUND/ADJUST）")
     @Excel(name = "流水业务类型")

@@ -216,7 +216,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 .toList();
         if (enabledPlatforms.isEmpty()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    "\\u6682\\u65e0\\u53ef\\u7528\\u5e73\\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
+                    "暂无可用平台", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
                     queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 500);
@@ -259,7 +259,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
         long costMs = System.currentTimeMillis() - start;
         saveIpLog(ip, phone, "0", costMs, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                "\\u67e5\\u8be2\\u6210\\u529f", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
+                "查询成功", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
                 queryUserId, queryCreateBy);
 
         Map<String, Object> data = new LinkedHashMap<>();

@@ -3,8 +3,10 @@ package com.geek.server.service;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
+import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
@@ -41,4 +43,8 @@ public interface IMarkOrderService {
     List<MarkOrder> selectAdminAuditOrderList(MarkOrder query);
 
     List<MarkWalletLog> selectAdminWalletLogList(MarkWalletLog query);
+
+    List<MarkUserPlatformPrice> selectAgentUserPlatformPriceList(Long userId);
+
+    MarkAgentPlatformQuotaAdjustResultVO adjustAgentUserPlatformQuota(MarkAgentPlatformQuotaAdjustRequest request);
 }

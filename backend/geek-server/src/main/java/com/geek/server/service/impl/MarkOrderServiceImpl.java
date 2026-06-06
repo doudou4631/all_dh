@@ -12,11 +12,14 @@ import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkOrderItem;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.domain.MarkUserPlatformPrice;
+import com.geek.server.domain.MarkUserPlatformQuota;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.entity.BatchTask;
+import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.domain.vo.FreeSingleQueryRequest;
+import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.domain.vo.MarkPhoneCheckItemVO;
@@ -25,6 +28,7 @@ import com.geek.server.mapper.MarkOrderItemMapper;
 import com.geek.server.mapper.MarkOrderMapper;
 import com.geek.server.mapper.MarkPlatformTemplateMapper;
 import com.geek.server.mapper.MarkUserPlatformPriceMapper;
+import com.geek.server.mapper.MarkUserPlatformQuotaMapper;
 import com.geek.server.mapper.MarkWalletLogMapper;
 import com.geek.server.service.IFreeQueryService;
 import com.geek.server.service.IMarkOrderService;
@@ -79,6 +83,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     @Autowired
     private MarkUserPlatformPriceMapper markUserPlatformPriceMapper;
     @Autowired
+    private MarkUserPlatformQuotaMapper markUserPlatformQuotaMapper;
+    @Autowired
     private MarkPlatformTemplateMapper markPlatformTemplateMapper;
 
     @Autowired
@@ -115,24 +121,34 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             }
         }
 
-        long unitPrice = getEffectiveUnitPrice(currentUserId, request.getPlatformCode());
-        long totalAmount = unitPrice * normalizedPhones.size();
-        SysUser currentUser = requireUser(currentUserId);
-        long balanceBefore = currentUser.getPoints() == null ? 0L : currentUser.getPoints();
-        if (balanceBefore < totalAmount) {
-            throw new ServiceException("积分不足，无法下单");
-        }
-        long balanceAfter = balanceBefore - totalAmount;
-        currentUser.setPoints(safePointValue(balanceAfter));
-        sysUserMapper.update(currentUser);
 
         Date now = DateUtils.getNowDate();
+        String platformName = resolvePlatformNameByUser(currentUserId, request.getPlatformCode(), request.getPlatformName());
+        long unitPrice = getEffectiveUnitPrice(currentUserId, request.getPlatformCode());
+        long totalAmount = unitPrice * normalizedPhones.size();
+        MarkUserPlatformQuota quota = lockUserPlatformQuota(
+                currentUserId,
+                request.getPlatformCode(),
+                platformName,
+                currentUserName,
+                now
+        );
+        long balanceBefore = sanitizeRemainCount(quota.getRemainCount());
+        if (balanceBefore < totalAmount) {
+            throw new ServiceException("当前平台剩余次数不足，无法下单");
+        }
+        long balanceAfter = balanceBefore - totalAmount;
+        quota.setPlatformName(platformName);
+        quota.setRemainCount(balanceAfter);
+        quota.setUpdateBy(currentUserName);
+        quota.setUpdateTime(now);
+        markUserPlatformQuotaMapper.updateMarkUserPlatformQuota(quota);
         MarkOrder order = new MarkOrder();
         order.setOrderNo(generateOrderNo());
         order.setRequestNo(StringUtils.isBlank(requestNo) ? null : requestNo);
         order.setUserId(currentUserId);
         order.setPlatformCode(request.getPlatformCode());
-        order.setPlatformName(resolvePlatformName(request.getPlatformCode(), request.getPlatformName()));
+        order.setPlatformName(platformName);
         order.setTotalCount(normalizedPhones.size());
         order.setSuccessCount(0);
         order.setFailedCount(0);
@@ -165,6 +181,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 currentUserId,
                 order.getId(),
                 null,
+                order.getPlatformCode(),
+                order.getPlatformName(),
                 "DEDUCT",
                 -totalAmount,
                 balanceBefore,
@@ -281,13 +299,14 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     @Override
     public MarkWalletSummaryVO selectMyWalletSummary() {
         Long currentUserId = SecurityUtils.getUserId();
-        SysUser user = requireUser(currentUserId);
         MarkWalletLog query = new MarkWalletLog();
         query.setUserId(currentUserId);
         List<MarkWalletLog> logs = markWalletLogMapper.selectMarkWalletLogList(query);
+        List<MarkUserPlatformPrice> platformPrices = selectMyPlatformPriceList();
 
         long totalDeduct = 0L;
         long totalRefund = 0L;
+        long totalRemain = 0L;
         for (MarkWalletLog log : logs) {
             long amount = log.getChangeAmount() == null ? 0L : log.getChangeAmount();
             if (amount < 0) {
@@ -296,13 +315,16 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 totalRefund += amount;
             }
         }
+        for (MarkUserPlatformPrice price : platformPrices) {
+            totalRemain += sanitizeRemainCount(price.getRemainCount());
+        }
 
         MarkWalletSummaryVO summaryVO = new MarkWalletSummaryVO();
         summaryVO.setUserId(currentUserId);
-        summaryVO.setPointsBalance(user.getPoints() == null ? 0 : user.getPoints());
+        summaryVO.setPointsBalance(safeInteger(totalRemain));
         summaryVO.setTotalDeductAmount(totalDeduct);
         summaryVO.setTotalRefundAmount(totalRefund);
-        summaryVO.setPlatformPrices(selectMyPlatformPriceList());
+        summaryVO.setPlatformPrices(platformPrices);
         return summaryVO;
     }
 
@@ -412,18 +434,118 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return markWalletLogMapper.selectMarkWalletLogList(walletLogQuery);
     }
 
+    @Override
+    public List<MarkUserPlatformPrice> selectAgentUserPlatformPriceList(Long userId) {
+        SysUser targetUser = requireUser(userId);
+        assertAgentAdjustAllowed(targetUser);
+        return buildPlatformPriceListByUser(targetUser.getUserId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarkAgentPlatformQuotaAdjustResultVO adjustAgentUserPlatformQuota(MarkAgentPlatformQuotaAdjustRequest request) {
+        if (request == null) {
+            throw new ServiceException("请求参数不能为空");
+        }
+        SysUser targetUser = requireUser(request.getUserId());
+        assertAgentAdjustAllowed(targetUser);
+
+        String platformCode = StringUtils.trimToEmpty(request.getPlatformCode());
+        if (StringUtils.isBlank(platformCode)) {
+            throw new ServiceException("平台编码不能为空");
+        }
+        if (!isPlatformAvailableForUser(targetUser.getUserId(), platformCode)) {
+            throw new ServiceException("目标用户未开通该平台");
+        }
+        String adjustType = normalizeAdjustType(request.getAdjustType());
+        long changeCount = request.getChangeCount() == null ? 0L : request.getChangeCount();
+        if (changeCount <= 0) {
+            throw new ServiceException("变动次数必须大于0");
+        }
+
+        Date now = DateUtils.getNowDate();
+        String operator = SecurityUtils.getUsername();
+        String platformName = resolvePlatformNameByUser(targetUser.getUserId(), platformCode, request.getPlatformName());
+
+        MarkUserPlatformQuota quota = lockUserPlatformQuota(
+                targetUser.getUserId(),
+                platformCode,
+                platformName,
+                operator,
+                now
+        );
+        long balanceBefore = sanitizeRemainCount(quota.getRemainCount());
+        long balanceAfter;
+        long changeAmount;
+        if ("ADD".equals(adjustType)) {
+            balanceAfter = balanceBefore + changeCount;
+            changeAmount = changeCount;
+        } else {
+            if (balanceBefore < changeCount) {
+                throw new ServiceException("当前平台剩余次数不足，无法扣减");
+            }
+            balanceAfter = balanceBefore - changeCount;
+            changeAmount = -changeCount;
+        }
+        quota.setPlatformName(platformName);
+        quota.setRemainCount(balanceAfter);
+        quota.setUpdateBy(operator);
+        quota.setUpdateTime(now);
+        markUserPlatformQuotaMapper.updateMarkUserPlatformQuota(quota);
+
+        String remark = StringUtils.defaultIfBlank(StringUtils.trimToNull(request.getRemark()), "代理平台次数调整");
+        insertWalletLog(
+                targetUser.getUserId(),
+                null,
+                null,
+                platformCode,
+                platformName,
+                "ADJUST",
+                changeAmount,
+                balanceBefore,
+                balanceAfter,
+                remark,
+                operator,
+                now
+        );
+
+        MarkAgentPlatformQuotaAdjustResultVO resultVO = new MarkAgentPlatformQuotaAdjustResultVO();
+        resultVO.setUserId(targetUser.getUserId());
+        resultVO.setPlatformCode(platformCode);
+        resultVO.setPlatformName(platformName);
+        resultVO.setAdjustType(adjustType);
+        resultVO.setChangeCount(changeCount);
+        resultVO.setBalanceBefore(balanceBefore);
+        resultVO.setBalanceAfter(balanceAfter);
+        resultVO.setRemainCount(balanceAfter);
+        return resultVO;
+    }
+
     private void refundOrderItem(MarkOrder order, MarkOrderItem item, String currentUserName, Date now) {
-        SysUser user = requireUser(order.getUserId());
-        long balanceBefore = user.getPoints() == null ? 0L : user.getPoints();
+        String platformCode = order.getPlatformCode();
+        String platformName = resolvePlatformNameByUser(order.getUserId(), platformCode, order.getPlatformName());
+        MarkUserPlatformQuota quota = lockUserPlatformQuota(
+                order.getUserId(),
+                platformCode,
+                platformName,
+                currentUserName,
+                now
+        );
+        long balanceBefore = sanitizeRemainCount(quota.getRemainCount());
         long refundAmount = item.getItemAmount() == null ? 0L : item.getItemAmount();
         long balanceAfter = balanceBefore + refundAmount;
-        user.setPoints(safePointValue(balanceAfter));
-        sysUserMapper.update(user);
+        quota.setPlatformName(platformName);
+        quota.setRemainCount(balanceAfter);
+        quota.setUpdateBy(currentUserName);
+        quota.setUpdateTime(now);
+        markUserPlatformQuotaMapper.updateMarkUserPlatformQuota(quota);
 
         insertWalletLog(
                 order.getUserId(),
                 order.getId(),
                 item.getId(),
+                platformCode,
+                platformName,
                 "REFUND",
                 refundAmount,
                 balanceBefore,
@@ -552,6 +674,14 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         Map<String, MarkUserPlatformPrice> savedMap = savedPrices.stream()
                 .filter(item -> StringUtils.isNotBlank(item.getPlatformCode()))
                 .collect(Collectors.toMap(MarkUserPlatformPrice::getPlatformCode, item -> item, (a, b) -> a, LinkedHashMap::new));
+        List<MarkUserPlatformQuota> quotas = markUserPlatformQuotaMapper.selectByUserId(userId);
+        Map<String, Long> quotaMap = new LinkedHashMap<>();
+        for (MarkUserPlatformQuota quota : quotas) {
+            if (quota == null || StringUtils.isBlank(quota.getPlatformCode())) {
+                continue;
+            }
+            quotaMap.put(quota.getPlatformCode(), sanitizeRemainCount(quota.getRemainCount()));
+        }
         Set<String> explicitlyConfiguredCodes = new LinkedHashSet<>(savedMap.keySet());
         Map<String, String> dynamicPlatformNameMap = resolveMenuPlatformNameMap();
         Map<String, String> platformNameMap = resolvePlatformNameMap(dynamicPlatformNameMap);
@@ -588,6 +718,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             } else if (price.getUnitPrice() == null || price.getUnitPrice() <= 0) {
                 price.setUnitPrice(defaultUnitPrice);
             }
+            price.setRemainCount(sanitizeRemainCount(quotaMap.get(platformCode)));
             result.add(price);
         }
         return result;
@@ -1104,6 +1235,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private void insertWalletLog(Long userId,
                                  Long orderId,
                                  Long orderItemId,
+                                 String platformCode,
+                                 String platformName,
                                  String bizType,
                                  Long changeAmount,
                                  Long balanceBefore,
@@ -1115,6 +1248,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         walletLog.setUserId(userId);
         walletLog.setOrderId(orderId);
         walletLog.setOrderItemId(orderItemId);
+        walletLog.setPlatformCode(platformCode);
+        walletLog.setPlatformName(platformName);
         walletLog.setBizType(bizType);
         walletLog.setChangeAmount(changeAmount);
         walletLog.setBalanceBefore(balanceBefore);
@@ -1124,12 +1259,86 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         walletLog.setCreateTime(createTime);
         markWalletLogMapper.insertMarkWalletLog(walletLog);
     }
-
-    private int safePointValue(long points) {
-        if (points < Integer.MIN_VALUE || points > Integer.MAX_VALUE) {
-            throw new ServiceException("积分值超出可用范围");
+    private String resolvePlatformNameByUser(Long userId, String platformCode, String requestPlatformName) {
+        if (StringUtils.isNotBlank(requestPlatformName)) {
+            return requestPlatformName.trim();
         }
-        return (int) points;
+        if (StringUtils.isBlank(platformCode)) {
+            return platformCode;
+        }
+        List<MarkUserPlatformPrice> prices = buildPlatformPriceListByUser(userId);
+        for (MarkUserPlatformPrice price : prices) {
+            if (StringUtils.equals(platformCode, price.getPlatformCode())
+                    && StringUtils.isNotBlank(price.getPlatformName())) {
+                return price.getPlatformName();
+            }
+        }
+        return resolvePlatformName(platformCode, null);
+    }
+
+    private MarkUserPlatformQuota lockUserPlatformQuota(Long userId,
+                                                        String platformCode,
+                                                        String platformName,
+                                                        String operator,
+                                                        Date now) {
+        MarkUserPlatformQuota quota = markUserPlatformQuotaMapper.selectByUserAndPlatformForUpdate(userId, platformCode);
+        if (quota != null) {
+            return quota;
+        }
+        MarkUserPlatformQuota insert = new MarkUserPlatformQuota();
+        insert.setUserId(userId);
+        insert.setPlatformCode(platformCode);
+        insert.setPlatformName(platformName);
+        insert.setRemainCount(0L);
+        insert.setCreateBy(operator);
+        insert.setCreateTime(now);
+        insert.setUpdateBy(operator);
+        insert.setUpdateTime(now);
+        markUserPlatformQuotaMapper.insertMarkUserPlatformQuota(insert);
+        return markUserPlatformQuotaMapper.selectByUserAndPlatformForUpdate(userId, platformCode);
+    }
+
+    private long sanitizeRemainCount(Long remainCount) {
+        return remainCount == null ? 0L : Math.max(remainCount, 0L);
+    }
+
+    private int safeInteger(long value) {
+        if (value > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        if (value < Integer.MIN_VALUE) {
+            return Integer.MIN_VALUE;
+        }
+        return (int) value;
+    }
+
+    private String normalizeAdjustType(String adjustType) {
+        String normalized = StringUtils.upperCase(StringUtils.trimToEmpty(adjustType));
+        if ("ADD".equals(normalized) || "PLUS".equals(normalized)) {
+            return "ADD";
+        }
+        if ("SUBTRACT".equals(normalized) || "REDUCE".equals(normalized) || "DEDUCT".equals(normalized)
+                || "MINUS".equals(normalized) || "SUB".equals(normalized)) {
+            return "SUBTRACT";
+        }
+        throw new ServiceException("调整类型仅支持 ADD 或 SUBTRACT");
+    }
+
+    private void assertAgentAdjustAllowed(SysUser targetUser) {
+        if (targetUser == null) {
+            throw new ServiceException("目标用户不存在");
+        }
+        if (isAdminRole()) {
+            return;
+        }
+        if (!isAgentRole()) {
+            throw new ServiceException("仅代理或管理员可操作");
+        }
+        String operator = SecurityUtils.getUsername();
+        String owner = StringUtils.trimToEmpty(targetUser.getCreateBy());
+        if (!StringUtils.equals(operator, owner)) {
+            throw new ServiceException("仅可调整自己下线用户的平台次数");
+        }
     }
 
     private boolean isAdminRole() {

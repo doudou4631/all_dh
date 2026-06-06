@@ -94,15 +94,22 @@
     if (!pr) {
       return { status: '查询失败', process: 0 };
     }
+    var platformName = String((item && (item.platformName || item.platform)) || '').trim();
     var st = String(pr.status || '');
     if (st.indexOf('yes-') === 0) {
       var msg = st.slice(4).trim();
       if (msg.indexOf('泰迪未来标记已取消') >= 0 || msg.indexOf('同步时间') >= 0) {
         return { status: '无标记', process: 0 };
       }
+      if (platformName === '移动高频' && (!msg || msg === '普通标记')) {
+        return { status: '高频拦截', process: 1 };
+      }
       return { status: msg || '有标记', process: 1 };
     }
     if (st === 'yes') {
+      if (platformName === '移动高频') {
+        return { status: '高频拦截', process: 1 };
+      }
       return { status: '有标记', process: 1 };
     }
     if (st.indexOf('no') === 0 || st === 'no') {

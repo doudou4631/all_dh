@@ -207,6 +207,8 @@ function parseOne(item) {
   }
   const payload = item.data && typeof item.data === 'object' ? item.data : null
   const platformResults = payload?.platformResults
+  const platformName = item.platformName || platformKeyToName[item.platform] || platformKeyToName[item.name]
+  const isMobileHighFreq = platformName === '移动高频'
   const rawResult = Array.isArray(platformResults) && platformResults.length > 0 ? platformResults[0]?.status : ''
 
   if (rawResult) {
@@ -214,10 +216,13 @@ function parseOne(item) {
     if (statusText.startsWith('yes-')) {
       const msg = statusText.slice(4).trim()
       if (isCanceledMessage(msg)) return { status: '无标记', message: '无标记' }
+      if (isMobileHighFreq && (!msg || msg === '普通标记')) {
+        return { status: '有标记', message: '高频拦截' }
+      }
       return { status: '有标记', message: msg || '普通标记' }
     }
     if (statusText.startsWith('no-')) return { status: '无标记', message: '无标记' }
-    if (statusText === 'yes') return { status: '有标记', message: '普通标记' }
+    if (statusText === 'yes') return { status: '有标记', message: isMobileHighFreq ? '高频拦截' : '普通标记' }
     if (statusText === 'no' || /no/i.test(statusText)) return { status: '无标记', message: '无标记' }
   }
 

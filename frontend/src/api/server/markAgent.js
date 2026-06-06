@@ -33,3 +33,20 @@ export function completeMarkOrder(orderId) {
     method: 'post'
   })
 }
+
+// 代理查询下线平台次数选项
+export function listMarkAgentQuotaPlatformOptions(userId) {
+  return request({
+    url: '/server/markAgent/quota/platformOptions/' + userId,
+    method: 'get'
+  })
+}
+
+// 代理调整下线平台次数
+export function adjustMarkAgentQuota(data) {
+  return request({
+    url: '/server/markAgent/quota/adjust',
+    method: 'post',
+    data
+  })
+}

@@ -137,6 +137,8 @@
     if (!firstResult) {
       return { marked: false, markType: '' };
     }
+    var platformName = getPlatformDisplayName((platformResult && (platformResult.platformName || platformResult.platform)) || '');
+    var isMobileHighFreq = platformName === '移动高频';
     var status = String(firstResult.status || '').trim();
     if (!status) {
       return { marked: false, markType: '' };
@@ -146,9 +148,15 @@
       if (!markType || markType.indexOf('泰迪未来标记已取消') >= 0 || markType.indexOf('同步时间') >= 0) {
         return { marked: false, markType: '' };
       }
+      if (isMobileHighFreq && markType === '普通标记') {
+        return { marked: true, markType: '高频拦截' };
+      }
       return { marked: true, markType: markType };
     }
     if (status === 'yes') {
+      if (isMobileHighFreq) {
+        return { marked: true, markType: '高频拦截' };
+      }
       return { marked: true, markType: '普通标记' };
     }
     if (status.indexOf('no') === 0) {
@@ -171,15 +179,6 @@
     return list;
   }
 
-  function createTaskId() {
-    return '#' + String(Math.floor(10000 + Math.random() * 90000));
-  }
-
-  function formatInt(value) {
-    var num = Number(value);
-    if (isNaN(num)) return '0';
-    return String(Math.round(num));
-  }
 
   function mapBatchResultItem(item) {
     var code = Number(item && item.code);
@@ -210,37 +209,6 @@
     });
   }
 
-  function buildSummaryRows() {
-    if (!currentSummary) return '';
-    var html = '';
-    html +=
-      '<div class="batch-task-row"><span>命中平台数</span><span>' +
-      formatInt(currentSummary.platformCount) +
-      '</span></div>';
-    html +=
-      '<div class="batch-task-row"><span>成功/失败</span><span>' +
-      formatInt(currentSummary.successCount) +
-      '/' +
-      formatInt(currentSummary.failedCount) +
-      '</span></div>';
-    html +=
-      '<div class="batch-task-row"><span>预扣积分</span><span>' +
-      formatInt(currentSummary.totalChargePoints) +
-      '</span></div>';
-    html +=
-      '<div class="batch-task-row"><span>退回积分</span><span>' +
-      formatInt(currentSummary.refundedPoints) +
-      '</span></div>';
-    html +=
-      '<div class="batch-task-row"><span>实际消耗</span><span>' +
-      formatInt(currentSummary.actualCostPoints) +
-      '</span></div>';
-    html +=
-      '<div class="batch-task-row"><span>剩余积分</span><span>' +
-      formatInt(currentSummary.remainingPoints) +
-      '</span></div>';
-    return html;
-  }
 
   function buildResultItem(item, index) {
     var phone = item.phone;
@@ -290,10 +258,11 @@
 
   function renderTaskCard(done, current, total) {
     var percent = total ? Math.round((current / total) * 100) : 0;
+    var taskIdText = currentTaskId || (done ? '—' : '生成中');
     var html =
       '<div class="batch-task-card">' +
       '<div class="batch-task-row"><span>任务ID</span><span>' +
-      escapeHtml(currentTaskId) +
+      escapeHtml(taskIdText) +
       '</span></div>' +
       '<div class="batch-task-row"><span>状态</span><span class="batch-status ' +
       (done ? 'batch-status--done' : 'batch-status--running') +
@@ -308,9 +277,6 @@
       '<div class="batch-progress"><div class="batch-progress-bar" style="width:' +
       percent +
       '%\"></div></div>';
-    if (done) {
-      html += buildSummaryRows();
-    }
     html += '</div>';
     return html;
   }
@@ -431,8 +397,9 @@
       var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
+      var taskIdForFile = currentTaskId ? currentTaskId.replace('#', '') : String(Date.now());
       a.href = url;
-      a.download = '批量查询结果_' + currentTaskId.replace('#', '') + '.csv';
+      a.download = '批量查询结果_' + taskIdForFile + '.csv';
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -515,7 +482,7 @@
   }
 
   function applyBatchResponse(data, phones) {
-    currentTaskId = String((data && data.taskId) || '').trim() || createTaskId();
+    currentTaskId = String((data && data.taskId) || '').trim();
     currentSummary = {
       total: Number(data && data.total) || phones.length,
       platformCount: Number(data && data.platformCount) || 0,
@@ -562,7 +529,7 @@
     }
 
     submitBtn.disabled = true;
-    currentTaskId = createTaskId();
+    currentTaskId = '';
     currentResults = [];
     currentSummary = null;
 

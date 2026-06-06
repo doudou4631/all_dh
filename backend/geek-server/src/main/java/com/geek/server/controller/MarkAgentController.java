@@ -6,6 +6,8 @@ import com.geek.common.core.domain.AjaxResult;
 import com.geek.common.core.page.TableDataInfo;
 import com.geek.common.enums.BusinessType;
 import com.geek.server.domain.MarkOrder;
+import com.geek.server.domain.MarkUserPlatformPrice;
+import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.service.IMarkOrderService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -63,5 +65,21 @@ public class MarkAgentController extends BaseController {
     @PostMapping("/order/{orderId}/complete")
     public AjaxResult complete(@PathVariable Long orderId) {
         return AjaxResult.success("整单已完成", markOrderService.completeOrder(orderId));
+    }
+
+    @Operation(summary = "代理查询下线用户平台次数")
+    @PreAuthorize("@ss.hasPermi('server:pointRecord:add')")
+    @GetMapping("/quota/platformOptions/{userId}")
+    public AjaxResult platformOptions(@PathVariable Long userId) {
+        List<MarkUserPlatformPrice> list = markOrderService.selectAgentUserPlatformPriceList(userId);
+        return success(list);
+    }
+
+    @Operation(summary = "代理给下线按平台充值/扣减")
+    @PreAuthorize("@ss.hasPermi('server:pointRecord:add')")
+    @Log(title = "代理平台次数调整", businessType = BusinessType.UPDATE)
+    @PostMapping("/quota/adjust")
+    public AjaxResult adjustQuota(@Valid @RequestBody MarkAgentPlatformQuotaAdjustRequest request) {
+        return AjaxResult.success("操作成功", markOrderService.adjustAgentUserPlatformQuota(request));
     }
 }

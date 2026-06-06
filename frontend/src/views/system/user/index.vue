@@ -297,8 +297,27 @@
             <el-form-item label="用户名" prop="userName">
                <el-input v-model="pointForm.userName" disabled />
             </el-form-item>
-            <el-form-item label="积分值" prop="points">
-               <el-input-number v-model="pointForm.points" :min="1" :precision="0" placeholder="请输入积分值"
+            <el-form-item v-if="useAgentQuotaAdjust" label="平台" prop="platformCode">
+               <el-select
+                  v-model="pointForm.platformCode"
+                  placeholder="请选择平台"
+                  :loading="pointPlatformLoading"
+                  style="width: 100%;"
+                  @change="handlePointPlatformChange"
+               >
+                  <el-option
+                     v-for="item in pointPlatformOptions"
+                     :key="item.platformCode"
+                     :label="`${item.platformName}（剩余 ${item.remainCount || 0} 次）`"
+                     :value="item.platformCode"
+                  />
+               </el-select>
+            </el-form-item>
+            <el-form-item v-if="useAgentQuotaAdjust" label="剩余次数">
+               <span style="color: #67C23A; font-weight: 600;">{{ selectedPointPlatformRemain }}</span>
+            </el-form-item>
+            <el-form-item :label="useAgentQuotaAdjust ? '次数' : '积分值'" prop="points">
+               <el-input-number v-model="pointForm.points" :min="1" :precision="0" :placeholder="useAgentQuotaAdjust ? '请输入次数' : '请输入积分值'"
                   style="width: 100%;" />
             </el-form-item>
             <el-form-item label="备注" prop="remark">
@@ -347,6 +366,7 @@
 import { getToken } from "@/utils/auth";
 import { changeUserStatus, listUser, resetUserPwd, delUser, getUser, updateUser, addUser, deptTreeSelect } from "@/api/system/user";
 import { adjustPointRecord } from "@/api/server/pointRecord";
+import { adjustMarkAgentQuota, listMarkAgentQuotaPlatformOptions } from "@/api/server/markAgent";
 import { listTemplate } from "@/api/server/template";
 import { listMarkTemplateOptions } from "@/api/server/markTemplate";
 import { listPlatformConfig } from "@/api/server/platformConfig";
@@ -363,6 +383,7 @@ const isAgent = computed(() => {
    return roleSet.has('agent') || roleSet.has('mark_agent');
 });
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
+const useAgentQuotaAdjust = computed(() => isAgentAccountPage.value);
 
 const userList = ref([]);
 const open = ref(false);
@@ -440,13 +461,38 @@ const pointForm = reactive({
    userId: null,
    userName: "",
    points: 1,
+   platformCode: "",
+   platformName: "",
    remark: "",
    type: "add"
 });
 const pointRules = {
-   points: [{ required: true, message: "积分值不能为空", trigger: "blur" }]
+   points: [{ required: true, message: "积分值不能为空", trigger: "blur" }],
+   platformCode: [{
+      validator: (_rule, value, callback) => {
+         if (!useAgentQuotaAdjust.value) {
+            callback();
+            return;
+         }
+         if (!value) {
+            callback(new Error("请选择平台"));
+            return;
+         }
+         callback();
+      },
+      trigger: "change"
+   }]
 };
 const pointRef = ref(null);
+const pointPlatformOptions = ref([]);
+const pointPlatformLoading = ref(false);
+const selectedPointPlatform = computed(() => {
+   return pointPlatformOptions.value.find(item => item.platformCode === pointForm.platformCode) || null;
+});
+const selectedPointPlatformRemain = computed(() => {
+   const remain = Number(selectedPointPlatform.value?.remainCount ?? 0);
+   return Number.isFinite(remain) ? Math.max(0, remain) : 0;
+});
 
 /*** 用户导入参数 */
 const upload = reactive({
@@ -748,26 +794,74 @@ function handleAuthRole(row) {
    const userId = row.userId;
    router.push("/system/user-auth/role/" + userId);
 };
+function handlePointPlatformChange(platformCode) {
+   const platform = pointPlatformOptions.value.find(item => item.platformCode === platformCode);
+   pointForm.platformName = platform?.platformName || "";
+}
+
+async function loadPointPlatformOptions(userId) {
+   if (!useAgentQuotaAdjust.value || !userId) {
+      pointPlatformOptions.value = [];
+      pointForm.platformCode = "";
+      pointForm.platformName = "";
+      return;
+   }
+   pointPlatformLoading.value = true;
+   try {
+      const resp = await listMarkAgentQuotaPlatformOptions(userId);
+      const list = Array.isArray(resp?.data) ? resp.data : [];
+      pointPlatformOptions.value = list.map(item => ({
+         ...item,
+         remainCount: Number.isFinite(Number(item?.remainCount)) ? Number(item.remainCount) : 0
+      }));
+      if (pointPlatformOptions.value.length > 0) {
+         pointForm.platformCode = pointPlatformOptions.value[0].platformCode;
+         pointForm.platformName = pointPlatformOptions.value[0].platformName || "";
+      } else {
+         pointForm.platformCode = "";
+         pointForm.platformName = "";
+      }
+   } catch (error) {
+      pointPlatformOptions.value = [];
+      pointForm.platformCode = "";
+      pointForm.platformName = "";
+      proxy.$modal.msgError(error?.message || "加载平台次数失败");
+   } finally {
+      pointPlatformLoading.value = false;
+   }
+}
 
 /** 积分充值按钮操作 */
-function handleAddPoints(row) {
+async function handleAddPoints(row) {
    resetPointForm();
    pointForm.userId = row.userId;
    pointForm.userName = row.userName;
    pointForm.type = "add";
    pointDialog.type = "add";
-   pointDialog.title = "积分充值 - " + row.userName;
+   pointDialog.title = (useAgentQuotaAdjust.value ? "平台次数充值 - " : "积分充值 - ") + row.userName;
+   if (useAgentQuotaAdjust.value) {
+      await loadPointPlatformOptions(row.userId);
+      if (pointPlatformOptions.value.length === 0) {
+         proxy.$modal.msgWarning("该用户暂无可调整的平台");
+      }
+   }
    pointDialog.open = true;
 }
 
 /** 积分扣减按钮操作 */
-function handleDeductPoints(row) {
+async function handleDeductPoints(row) {
    resetPointForm();
    pointForm.userId = row.userId;
    pointForm.userName = row.userName;
    pointForm.type = "deduct";
    pointDialog.type = "deduct";
-   pointDialog.title = "积分扣减 - " + row.userName;
+   pointDialog.title = (useAgentQuotaAdjust.value ? "平台次数扣减 - " : "积分扣减 - ") + row.userName;
+   if (useAgentQuotaAdjust.value) {
+      await loadPointPlatformOptions(row.userId);
+      if (pointPlatformOptions.value.length === 0) {
+         proxy.$modal.msgWarning("该用户暂无可调整的平台");
+      }
+   }
    pointDialog.open = true;
 }
 
@@ -854,8 +948,12 @@ function resetPointForm() {
    pointForm.userId = null;
    pointForm.userName = "";
    pointForm.points = 1;
+   pointForm.platformCode = "";
+   pointForm.platformName = "";
    pointForm.remark = "";
    pointForm.type = "add";
+   pointPlatformOptions.value = [];
+   pointPlatformLoading.value = false;
    if (pointRef.value) {
       pointRef.value.resetFields();
    }
@@ -878,6 +976,31 @@ function resetServiceForm() {
 function submitPointForm() {
    proxy.$refs["pointRef"].validate(valid => {
       if (valid) {
+         if (useAgentQuotaAdjust.value) {
+            if (!pointForm.platformCode) {
+               proxy.$modal.msgError("请选择平台");
+               return;
+            }
+            if (pointDialog.type === "deduct" && Number(pointForm.points || 0) > selectedPointPlatformRemain.value) {
+               proxy.$modal.msgError("当前平台剩余次数不足");
+               return;
+            }
+            const request = {
+               userId: pointForm.userId,
+               platformCode: pointForm.platformCode,
+               platformName: pointForm.platformName || selectedPointPlatform.value?.platformName || "",
+               adjustType: pointForm.type === "add" ? "ADD" : "SUBTRACT",
+               changeCount: Number(pointForm.points || 0),
+               remark: pointForm.remark
+            };
+            adjustMarkAgentQuota(request).then(() => {
+               proxy.$modal.msgSuccess(pointForm.type === "add" ? "充值成功" : "扣减成功");
+               pointDialog.open = false;
+               getList();
+            });
+            return;
+         }
+
          const pointData = {
             id: null,
             userId: pointForm.userId,
