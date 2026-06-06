@@ -18,6 +18,7 @@ import com.geek.server.domain.vo.FreeBatchQueryRequest;
 import com.geek.server.domain.vo.FreeLoginRequest;
 import com.geek.server.domain.vo.FreeSingleQueryRequest;
 import com.geek.server.service.IFreeQueryService;
+import com.geek.server.service.IUserApiQueryRecordService;
 import com.geek.server.service.IFreeQueryUserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -34,7 +35,9 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,9 +56,12 @@ public class FreeQueryController extends BaseController {
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String SOURCE_TYPE_FREE_SINGLE = "FREE_SINGLE";
     private static final String SOURCE_TYPE_FREE_BATCH = "FREE_BATCH";
+    private static final int DEFAULT_RECORD_LIMIT = 120;
+    private static final int MAX_RECORD_LIMIT = 200;
 
     private final IFreeQueryService freeQueryService;
     private final IFreeQueryUserService freeQueryUserService;
+    private final IUserApiQueryRecordService userApiQueryRecordService;
 
     @Operation(summary = "获取操作IP的查询次数")
     @Anonymous
@@ -72,8 +78,24 @@ public class FreeQueryController extends BaseController {
         String ip = IpUtils.getIpAddr(request);
         FreeSingleQueryRequest payload = body == null ? new FreeSingleQueryRequest() : body;
         payload.setSourceType(SOURCE_TYPE_FREE_SINGLE);
+        String token = resolveToken((String) null, request);
+        Long loginUserId = null;
+        String loginAccount = null;
+        if (StringUtils.isNotEmpty(token)) {
+            FreeQueryLoginSession session = resolveLoginSession(token);
+            if (session != null && session.getUserId() != null) {
+                try {
+                    FreeQueryUser loginUser = freeQueryUserService.requireEnabledUser(session.getUserId());
+                    loginUserId = loginUser.getId();
+                    loginAccount = loginUser.getAccount();
+                    refreshLoginSession(token, session);
+                } catch (ServiceException e) {
+                    CacheUtils.remove(CacheConstants.FREE_QUERY_LOGIN_TOKEN_KEY, token);
+                }
+            }
+        }
         try {
-            Map<String, Object> result = freeQueryService.singleQuery(payload, ip);
+            Map<String, Object> result = freeQueryService.singleQuery(payload, ip, loginUserId, loginAccount);
             Integer code = (Integer) result.get("code");
             if (code != null && code == 42901) {
                 AjaxResult rsp = AjaxResult.error(42901, String.valueOf(result.get("message")));
@@ -222,7 +244,7 @@ public class FreeQueryController extends BaseController {
                 req.setSourceType(SOURCE_TYPE_FREE_BATCH);
 
                 try {
-                    Map<String, Object> result = freeQueryService.singleQuery(req, ip);
+                    Map<String, Object> result = freeQueryService.singleQuery(req, ip, loginUser.getId(), loginUser.getAccount());
                     Integer code = asInteger(result.get("code"));
                     String message = String.valueOf(result.getOrDefault("message", "查询失败"));
                     Object data = result.get("data");
@@ -287,6 +309,31 @@ public class FreeQueryController extends BaseController {
             safeRefund(loginUserId, taskId, chargedPoints, refundedPoints, "批量查询异常退回积分");
             return AjaxResult.error("批量查询失败" + e.getMessage());
         }
+    }
+
+    @Operation(summary = "查询当前账号查询记录")
+    @Anonymous
+    @GetMapping("/records")
+    public AjaxResult records(@RequestParam(required = false) Integer limit,
+                              HttpServletRequest request) {
+        String token = resolveToken((String) null, request);
+        if (StringUtils.isEmpty(token)) {
+            return AjaxResult.error(40101, "请先登录后查看查询记录");
+        }
+        FreeQueryLoginSession session = resolveLoginSession(token);
+        if (session == null || session.getUserId() == null) {
+            return AjaxResult.error(40101, "登录已失效，请重新登录");
+        }
+        refreshLoginSession(token, session);
+        FreeQueryUser loginUser;
+        try {
+            loginUser = freeQueryUserService.requireEnabledUser(session.getUserId());
+        } catch (ServiceException e) {
+            CacheUtils.remove(CacheConstants.FREE_QUERY_LOGIN_TOKEN_KEY, token);
+            return AjaxResult.error(40101, e.getMessage());
+        }
+        int normalizedLimit = normalizeRecordLimit(limit);
+        return AjaxResult.success(loadAccountRecords(loginUser.getId(), normalizedLimit));
     }
 
     @Operation(summary = "查询操作IP的查询记录")
@@ -409,6 +456,15 @@ public class FreeQueryController extends BaseController {
 
     private String resolveToken(FreeBatchQueryRequest body, HttpServletRequest request) {
         String bodyToken = body == null ? "" : StringUtils.trimToEmpty(body.getToken());
+        String token = resolveToken(bodyToken, request);
+        if (StringUtils.isNotEmpty(token)) {
+            return token;
+        }
+        String legacyToken = body == null ? "" : StringUtils.trimToEmpty(body.getDeviceId());
+        return legacyToken;
+    }
+
+    private String resolveToken(String bodyToken, HttpServletRequest request) {
         if (StringUtils.isNotEmpty(bodyToken)) {
             return bodyToken;
         }
@@ -420,8 +476,7 @@ public class FreeQueryController extends BaseController {
         if (StringUtils.startsWithIgnoreCase(authHeader, BEARER_PREFIX)) {
             return StringUtils.trimToEmpty(authHeader.substring(BEARER_PREFIX.length()));
         }
-        String legacyToken = body == null ? "" : StringUtils.trimToEmpty(body.getDeviceId());
-        return legacyToken;
+        return "";
     }
 
     private FreeQueryLoginSession resolveLoginSession(String token) {
@@ -444,5 +499,104 @@ public class FreeQueryController extends BaseController {
             return "free-query-user";
         }
         return "fqu#" + user.getId();
+    }
+
+    private int normalizeRecordLimit(Integer limit) {
+        if (limit == null || limit <= 0) {
+            return DEFAULT_RECORD_LIMIT;
+        }
+        return Math.min(limit, MAX_RECORD_LIMIT);
+    }
+
+    private List<Map<String, Object>> loadAccountRecords(Long userId, int limit) {
+        UserApiQueryRecord query = new UserApiQueryRecord();
+        query.setUserId(userId);
+        query.setQueryType("2");
+        List<UserApiQueryRecord> rows = userApiQueryRecordService.selectUserApiQueryRecordList(query);
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, MobileRecordGroup> groups = new LinkedHashMap<>();
+        for (UserApiQueryRecord row : rows) {
+            if (row == null) {
+                continue;
+            }
+            String sourceType = StringUtils.trimToEmpty(row.getSourceType()).toUpperCase();
+            if (!SOURCE_TYPE_FREE_SINGLE.equals(sourceType) && !SOURCE_TYPE_FREE_BATCH.equals(sourceType)) {
+                continue;
+            }
+            String phone = StringUtils.trimToEmpty(row.getPhone());
+            if (StringUtils.isEmpty(phone)) {
+                continue;
+            }
+            String taskId = StringUtils.trimToEmpty(row.getTaskId());
+            String key = phone + "|" + (StringUtils.isNotEmpty(taskId) ? taskId : ("__id_" + row.getId()));
+            MobileRecordGroup group = groups.get(key);
+            if (group == null) {
+                group = new MobileRecordGroup();
+                group.phone = phone;
+                group.type = SOURCE_TYPE_FREE_BATCH.equals(sourceType) ? "批量查询" : "单号查询";
+                group.taskId = taskId;
+                group.latestTime = row.getCreateTime();
+                groups.put(key, group);
+            } else if (row.getCreateTime() != null && (group.latestTime == null || row.getCreateTime().after(group.latestTime))) {
+                group.latestTime = row.getCreateTime();
+            }
+            if (isMarkedPlatformRow(row)) {
+                String platform = StringUtils.trimToEmpty(row.getPlatformName());
+                if (StringUtils.isNotEmpty(platform)) {
+                    group.markedPlatforms.add(platform);
+                }
+            }
+        }
+
+        List<Map<String, Object>> list = new ArrayList<>();
+        for (MobileRecordGroup group : groups.values()) {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("phone", group.phone);
+            row.put("type", group.type);
+            row.put("marked", group.markedPlatforms.size());
+            row.put("markedPlatforms", new ArrayList<>(group.markedPlatforms));
+            row.put("time", formatRecordTime(group.latestTime));
+            row.put("taskId", group.taskId);
+            list.add(row);
+            if (list.size() >= limit) {
+                break;
+            }
+        }
+        return list;
+    }
+
+    private boolean isMarkedPlatformRow(UserApiQueryRecord row) {
+        if (row == null) {
+            return false;
+        }
+        if (!"0".equals(StringUtils.trimToEmpty(row.getRequestStatus()))) {
+            return false;
+        }
+        String result = StringUtils.trimToEmpty(row.getResults());
+        if (StringUtils.isEmpty(result)) {
+            return false;
+        }
+        if ("无标记".equals(result) || "查询失败".equals(result) || "-".equals(result)) {
+            return false;
+        }
+        return !result.startsWith("未开放");
+    }
+
+    private String formatRecordTime(Date date) {
+        if (date == null) {
+            return "";
+        }
+        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm").format(date);
+    }
+
+    private static class MobileRecordGroup {
+        private String phone;
+        private String type;
+        private String taskId;
+        private Date latestTime;
+        private final LinkedHashSet<String> markedPlatforms = new LinkedHashSet<>();
     }
 }

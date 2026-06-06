@@ -10,16 +10,62 @@
 </head>
 <body>
   <div class="profile-sub-page">
-    <a class="profile-sub-back" href="index.html">‹ 返回个人中心</a>
+    <a class="profile-sub-back" href="index.html?v=3">‹ 返回个人中心</a>
     <h1 class="profile-sub-title">查询记录</h1>
     <div id="record-list" class="profile-record-list"></div>
   </div>
 
   <script src="../assets/runtime-config.js"></script>
   <script src="../assets/bottom-nav.js"></script>
-  <script src="../assets/query-records.js?v=1"></script>
-  <script src="../assets/profile-page.js?v=2"></script>
+  <script src="../assets/api-bridge.js?v=2"></script>
+  <script src="../assets/profile-page.js?v=3"></script>
   <script>
+    function escapeHtml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function renderMarkedPlatforms(item) {
+      var platforms = Array.isArray(item && item.markedPlatforms) ? item.markedPlatforms : [];
+      if (!platforms.length) return '无';
+      return platforms.join('、');
+    }
+
+    function renderRecordList(list) {
+      var el = document.getElementById('record-list');
+      if (!Array.isArray(list) || !list.length) {
+        el.innerHTML = '<div class="profile-sub-empty">暂无查询记录</div>';
+        return;
+      }
+      el.innerHTML = list
+        .map(function (item) {
+          var markedCount = Number(item && item.marked);
+          if (isNaN(markedCount) || markedCount < 0) markedCount = 0;
+          var platformText = renderMarkedPlatforms(item);
+          return (
+            '<div class="profile-record-item">' +
+            '<div class="profile-record-head"><strong>' + escapeHtml(item.phone) + '</strong><span>' + escapeHtml(item.time) + '</span></div>' +
+            '<div class="profile-record-meta">类型：' + escapeHtml(item.type) + ' · 标记平台：' + escapeHtml(String(markedCount)) + ' 个</div>' +
+            '<div class="profile-record-meta">被标记平台：' + escapeHtml(platformText) + '</div>' +
+            '</div>'
+          );
+        })
+        .join('');
+    }
+
+
+    function loadRemoteRecords(callback) {
+      if (!window.BiaojiApiBridge || typeof window.BiaojiApiBridge.queryRecords !== 'function') {
+        callback('记录接口未加载', []);
+        return;
+      }
+      window.BiaojiApiBridge.queryRecords(function (err, records) {
+        callback(err, Array.isArray(records) ? records : []);
+      });
+    }
     if (!window.ProfilePage || !ProfilePage.isLoggedIn()) {
       if (window.AppBottomNav && typeof window.AppBottomNav.notify === 'function') {
         window.AppBottomNav.notify('请先登录');
@@ -31,22 +77,12 @@
         location.replace(target);
       }, 400);
     } else {
-      var list = ProfilePage.getQueryRecords();
-      var el = document.getElementById('record-list');
-      if (!list.length) {
-        el.innerHTML = '<div class="profile-sub-empty">暂无查询记录</div>';
-      } else {
-        el.innerHTML = list
-          .map(function (item) {
-            return (
-              '<div class="profile-record-item">' +
-              '<div class="profile-record-head"><strong>' + item.phone + '</strong><span>' + item.time + '</span></div>' +
-              '<div class="profile-record-meta">类型：' + item.type + ' · 标记平台：' + item.marked + ' 个</div>' +
-              '</div>'
-            );
-          })
-          .join('');
-      }
+      loadRemoteRecords(function (err, remoteList) {
+        if (err && window.AppBottomNav && typeof window.AppBottomNav.notify === 'function') {
+          window.AppBottomNav.notify(err);
+        }
+        renderRecordList(remoteList);
+      });
     }
   </script>
 </body>

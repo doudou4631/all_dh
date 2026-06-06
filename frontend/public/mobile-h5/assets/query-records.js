@@ -55,22 +55,52 @@
     if (isNaN(n) || n < 0) return 0;
     return Math.round(n);
   }
+  function normalizePhone(phone) {
+    var raw = String(phone == null ? '' : phone).trim();
+    if (!raw) return '';
+    var digits = raw.replace(/\D/g, '');
+    if (/^\d{7,15}$/.test(digits)) return digits;
+    return raw;
+  }
 
-  function maskPhone(phone) {
-    var digits = String(phone || '').replace(/\D/g, '');
-    if (!digits) return '';
-    if (digits.length <= 7) return digits;
-    return digits.slice(0, 3) + '****' + digits.slice(-4);
+  function normalizeMarkedPlatforms(value) {
+    var list = [];
+    if (Array.isArray(value)) {
+      list = value;
+    } else if (typeof value === 'string') {
+      list = value.split(/[、,，;；|·]+/);
+    } else if (value != null) {
+      list = [value];
+    }
+    var seen = {};
+    return list
+      .map(function (item) {
+        return String(item == null ? '' : item).trim();
+      })
+      .filter(function (name) {
+        if (!name) return false;
+        if (seen[name]) return false;
+        seen[name] = true;
+        return true;
+      });
   }
 
   function normalizeRecord(record) {
     if (!record) return null;
-    var phone = maskPhone(record.phone);
+    var phone = normalizePhone(record.phone);
     if (!phone) return null;
+    var markedPlatforms = normalizeMarkedPlatforms(
+      record.markedPlatforms != null ? record.markedPlatforms : record.platforms
+    );
+    var marked = normalizeMarked(record.marked);
+    if (!marked && markedPlatforms.length) {
+      marked = markedPlatforms.length;
+    }
     return {
       phone: phone,
       type: normalizeType(record.type),
-      marked: normalizeMarked(record.marked),
+      marked: marked,
+      markedPlatforms: markedPlatforms,
       time: String(record.time || '').trim() || nowText()
     };
   }
@@ -132,15 +162,22 @@
     return addRecords([record], account);
   }
 
-  function addSingleRecord(phone, marked, account) {
+  function addSingleRecord(phone, marked, markedPlatforms, account) {
+    var targetAccount = account;
+    var platforms = markedPlatforms;
+    if (arguments.length === 3 && !Array.isArray(markedPlatforms)) {
+      targetAccount = markedPlatforms;
+      platforms = [];
+    }
     return addRecord(
       {
         phone: phone,
         type: '单号查询',
         marked: marked,
+        markedPlatforms: platforms,
         time: nowText()
       },
-      account
+      targetAccount
     );
   }
 
@@ -151,15 +188,23 @@
     var time = nowText();
     var records = results.map(function (row) {
       var marked = 0;
+      var markedPlatforms = [];
       if (Array.isArray(row && row.markedItems)) {
         marked = row.markedItems.length;
+        markedPlatforms = row.markedItems.map(function (item) {
+          return item && item.platform;
+        });
       } else if (typeof row === 'object' && row) {
         marked = normalizeMarked(row.marked);
+        markedPlatforms = normalizeMarkedPlatforms(
+          row.markedPlatforms != null ? row.markedPlatforms : row.platforms
+        );
       }
       return {
         phone: row && row.phone,
         type: '批量查询',
         marked: marked,
+        markedPlatforms: markedPlatforms,
         time: time
       };
     });

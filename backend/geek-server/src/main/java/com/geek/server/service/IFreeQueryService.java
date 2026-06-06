@@ -12,6 +12,7 @@ public interface IFreeQueryService {
     int countEnabledPlatforms();
 
     Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip);
+    Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip, Long loginUserId, String loginAccount);
 
     List<UserApiQueryRecord> listIpLogs(String ip, String phone, String requestStatus, String taskId,
                                         String deviceId, String deviceSource, String queryType,

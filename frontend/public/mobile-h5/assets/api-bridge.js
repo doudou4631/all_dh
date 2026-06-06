@@ -177,6 +177,8 @@
   window.BiaojiApiBridge = {
     API_BASE: API_BASE,
     queryPhone: function (phone, callback) {
+      var authToken = getStoredFreeToken();
+      var headers = authToken ? { 'X-Free-Token': authToken } : null;
       requestJson(
         API_BASE + 'server/freeQuery/single',
         'POST',
@@ -199,6 +201,41 @@
         },
         function (err) {
           callback((err && err.msg) || '网络错误，请重试');
+        },
+        headers
+      );
+    },
+    queryRecords: function (token, callback) {
+      var cb = callback;
+      var inputToken = token;
+      if (typeof token === 'function') {
+        cb = token;
+        inputToken = '';
+      }
+      var authToken = String(inputToken || getStoredFreeToken() || '').trim();
+      if (!authToken) {
+        cb && cb('请先登录后查看查询记录', []);
+        return;
+      }
+
+      requestJson(
+        API_BASE + 'server/freeQuery/records',
+        'GET',
+        null,
+        function (resp) {
+          var code = Number(resp && resp.code);
+          if (code === 0 || code === 200) {
+            var data = (resp && resp.data) || [];
+            cb && cb(null, Array.isArray(data) ? data : []);
+            return;
+          }
+          cb && cb((resp && resp.msg) || '获取查询记录失败', []);
+        },
+        function (err) {
+          cb && cb((err && err.msg) || '网络错误，请重试', []);
+        },
+        {
+          'X-Free-Token': authToken
         }
       );
     },

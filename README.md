@@ -8,15 +8,24 @@
 ## 目录结构
 ```text path=null start=null
 all/
-├─ backend/                     # 后端源码（Maven 多模块）
+├─ .git/                        # Git 元数据
+├─ backend/                     # 后端工程（Maven 多模块）
 │  ├─ geek-admin/               # 启动模块（生成 geek-admin.jar）
 │  ├─ geek-server/              # 业务模块
 │  ├─ geek-system/              # 系统模块
 │  ├─ geek-framework/           # 框架模块
 │  ├─ geek-common/              # 公共模块
-│  ├─ geek-modules/             # 扩展模块（generator/online/quartz）
-│  └─ sql/                      # 数据库脚本
-├─ frontend/                    # 前端源码（Vue3 + Vite）
+│  ├─ geek-modules/             # 扩展模块聚合
+│  │  ├─ geek-module-generator/
+│  │  ├─ geek-module-online/
+│  │  └─ geek-module-quartz/
+│  ├─ geek-plugins/             # 预留插件目录（当前仅 .gitkeep）
+│  ├─ geek-scenes/              # 预留场景目录（当前仅 .gitkeep）
+│  ├─ sql/                      # 数据库脚本
+│  ├─ bin/                      # 后端批处理脚本
+│  ├─ doc/                      # 后端文档与流程图
+│  └─ .idea/                    # IntelliJ 本地配置
+├─ frontend/                    # 前端工程（Vue3 + Vite）
 │  ├─ src/
 │  │  ├─ api/                   # 接口请求
 │  │  ├─ components/            # 通用组件
@@ -40,9 +49,19 @@ all/
 │  │  ├─ draco/
 │  │  ├─ glb/
 │  │  └─ wechat/
-│  ├─ package.json
-│  └─ vite.config.js
-├─ docs/                        # 部署与备份文档
+│  ├─ vite/
+│  │  └─ plugins/               # Vite 插件配置拆分
+│  ├─ scripts/                  # 前端脚本目录（当前可为空）
+│  ├─ lib/                      # 前端库文件（如 vform）
+│  ├─ html/                     # 独立 HTML 页面
+│  ├─ doc/                      # 前端文档与示意图
+│  ├─ bin/                      # 前端批处理脚本
+│  ├─ dist/                     # 前端构建产物
+│  ├─ node_modules/             # 前端依赖目录
+│  └─ .vscode/                  # VS Code 本地配置
+├─ docs/                        # 部署与维护文档
+├─ db-backups/                  # 数据库备份归档（按时间戳分目录）
+├─ server-sync/                 # 服务器同步快照（按时间戳分目录）
 └─ README.md                    # 当前说明文档
 ```
 

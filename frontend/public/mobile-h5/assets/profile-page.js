@@ -201,7 +201,7 @@
       'about.html': '/profile/about.html',
       'agreement.html': '/profile/agreement.html',
       'privacy.html': '/profile/privacy.html',
-      'index.html': '/profile/'
+      'index.html': '/profile/?v=3'
     };
     var links = document.querySelectorAll('a[href]');
     links.forEach(function (link) {
@@ -518,7 +518,7 @@
     if (todayQueryBtn) {
       todayQueryBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = resolveHref('/profile/query-records.html');
+        window.location.href = resolveHref('/profile/query-records.html?v=3');
       });
     }
 
@@ -547,7 +547,7 @@
     if (queryBtn) {
       queryBtn.addEventListener('click', function () {
         if (!requireLogin()) return;
-        window.location.href = resolveHref('/profile/query-records.html');
+        window.location.href = resolveHref('/profile/query-records.html?v=3');
       });
     }
 

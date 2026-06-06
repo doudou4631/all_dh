@@ -167,8 +167,15 @@
 
       var all = data.results || [];
       var marked = all.filter(isMarked);
+      var markedPlatforms = marked
+        .map(function (item) {
+          return String((item && item.platform) || '').trim();
+        })
+        .filter(function (name, index, arr) {
+          return !!name && arr.indexOf(name) === index;
+        });
       if (window.QueryRecords && typeof window.QueryRecords.addSingleRecord === 'function') {
-        window.QueryRecords.addSingleRecord(phone, marked.length);
+        window.QueryRecords.addSingleRecord(phone, marked.length, markedPlatforms);
       }
 
       document.getElementById('hero-count').textContent = String(marked.length);

@@ -125,11 +125,18 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
     @Override
     public Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip) {
+        return singleQuery(request, ip, null, null);
+    }
+
+    @Override
+    public Map<String, Object> singleQuery(FreeSingleQueryRequest request, String ip, Long loginUserId, String loginAccount) {
         DictConfig config = loadDictConfig();
         String phone = normalizePhone(request != null ? request.getPhone() : null);
         NormalizedDeviceId normalizedDeviceId = normalizeDeviceId(request != null ? request.getDeviceId() : null, ip);
         String deviceId = normalizedDeviceId.value();
         String sourceType = normalizeSourceType(request != null ? request.getSourceType() : null);
+        Long queryUserId = loginUserId == null ? FREE_QUERY_USER_ID : loginUserId;
+        String queryCreateBy = StringUtils.isNotEmpty(loginAccount) ? loginAccount.trim() : ("free-ip-" + ip);
         validatePhone(phone);
         List<String> disabledPlatformNames = loadFreeQueryDisabledPlatformNames();
         if (normalizedDeviceId.usedIpFallback()) {
@@ -139,7 +146,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (config.requireDeviceId() && normalizedDeviceId.usedIpFallback()) {
             QuotaCounter deviceCounter = currentDeviceCounter(deviceId, config.dailyDeviceLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceCounter.used(), deviceCounter.used(),
-                    config.requireDeviceIdMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
+                    config.requireDeviceIdMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType,
+                    queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42903);
             fail.put("message", config.requireDeviceIdMsg());
@@ -151,7 +159,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         CounterDecision globalDecision = reserveGlobalSlotIfNeeded(config.dailyAllLimit());
         if (!globalDecision.allowed()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyAllLimit(), globalDecision.usedBefore(),
-                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
+                    globalDecision.usedAfter(), ALL_LIMIT_MSG, deviceId, null, normalizedDeviceId.deviceSource(), sourceType,
+                    queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42902);
             fail.put("message", ALL_LIMIT_MSG);
@@ -164,7 +173,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         if (!decision.allowed()) {
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    config.overLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
+                    config.overLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType,
+                    queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.overLimitMsg());
@@ -177,7 +187,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             rollbackIpOne(ip);
             rollbackGlobalSlotIfNeeded(config.dailyAllLimit());
             saveIpLog(ip, phone, "1", 0L, config.dailyDeviceLimit(), deviceDecision.usedBefore(), deviceDecision.usedAfter(),
-                    config.deviceOverLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType);
+                    config.deviceOverLimitMsg(), deviceId, null, normalizedDeviceId.deviceSource(), sourceType,
+                    queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 42901);
             fail.put("message", config.deviceOverLimitMsg());
@@ -205,7 +216,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
                 .toList();
         if (enabledPlatforms.isEmpty()) {
             saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                    "\u6682\u65e0\u53ef\u7528\u5e73\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType);
+                    "\\u6682\\u65e0\\u53ef\\u7528\\u5e73\\u53f0", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
+                    queryUserId, queryCreateBy);
             Map<String, Object> fail = new HashMap<>();
             fail.put("code", 500);
             fail.put("message", "\u6682\u65e0\u53ef\u7528\u5e73\u53f0");
@@ -214,8 +226,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         }
 
         OptimizedBatchSession session = new OptimizedBatchSession(
-                FREE_QUERY_USER_ID,
-                "free-ip-" + ip,
+                queryUserId,
+                queryCreateBy,
                 userAggregateConfigService.selectUserAggregateConfigById(1L)
         );
 
@@ -229,8 +241,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             if (outcome.getQueryRecord() != null) {
                 UserApiQueryRecord row = outcome.getQueryRecord();
                 row.setTaskId(taskId);
-                row.setCreateBy("free-ip-" + ip);
-                row.setUserId(FREE_QUERY_USER_ID);
+                row.setCreateBy(queryCreateBy);
+                row.setUserId(queryUserId);
                 row.setRequestParams(appendIpToRequestParams(row.getRequestParams(), ip));
                 row.setSourceType(sourceType);
                 row.setDeviceId(deviceId);
@@ -247,7 +259,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
         long costMs = System.currentTimeMillis() - start;
         saveIpLog(ip, phone, "0", costMs, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
-                "\u67e5\u8be2\u6210\u529f", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType);
+                "\\u67e5\\u8be2\\u6210\\u529f", deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
+                queryUserId, queryCreateBy);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", taskId);
@@ -442,7 +455,7 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
 
     private void saveIpLog(String ip, String phone, String requestStatus, Long requestTime, int limit, int usedBefore,
                            int usedAfter, String message, String deviceId, String taskId, String deviceSource,
-                           String sourceType) {
+                           String sourceType, Long userId, String createBy) {
         UserApiQueryRecord row = new UserApiQueryRecord();
         row.setQueryType("9");
         row.setPlatformId(0L);
@@ -450,8 +463,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         row.setRequestStatus(requestStatus);
         row.setRequestTime(requestTime);
         row.setPhone(phone);
-        row.setCreateBy("free-ip-" + ip);
-        row.setUserId(FREE_QUERY_USER_ID);
+        row.setCreateBy(StringUtils.isNotEmpty(createBy) ? createBy : ("free-ip-" + ip));
+        row.setUserId(userId == null ? FREE_QUERY_USER_ID : userId);
         row.setCreateTime(new Date());
         row.setTaskId(taskId);
         row.setResults(message);
