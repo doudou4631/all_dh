@@ -1,6 +1,6 @@
 # 号码标记管理系统前端（frontend）
 ## 1. 项目说明
-前端基于 Vue 3 + Vite，承载管理端页面、业务页面与移动端静态资源（`public/mobile-h5`）。
+前端基于 Vue 3 + Vite，承载管理端页面、业务页面，以及手机端源码工程（`mobile-h5-src`）与发布静态目录（`public/mobile-h5`）。
 
 ## 2. 技术栈
 - Vue 3
@@ -29,6 +29,12 @@ npm --prefix frontend run dev
 
 默认开发端口见 `vite.config.js`（当前配置为 `80`）。
 
+### 4.3 启动手机端源码开发环境
+```bash
+npm --prefix frontend run dev:mobile-h5-src
+```
+默认端口见 `vite.mobile-h5.config.js`（当前配置为 `5175`）。
+
 ## 5. 构建与预览
 ### 5.1 生产构建
 ```bash
@@ -46,6 +52,21 @@ npm --prefix frontend run preview
 ```
 
 构建产物默认输出到 `frontend/dist`。
+
+### 5.4 手机端源码构建与切换
+```bash
+npm --prefix frontend run build:mobile-h5-src
+npm --prefix frontend run check:mobile-h5-shims
+npm --prefix frontend run cutover:mobile-h5-src
+```
+说明：
+- `build:mobile-h5-src` 产物目录为 `frontend/mobile-h5-src/dist/mobile-h5`。
+- `cutover:mobile-h5-src` 会将构建产物同步到 `frontend/public/mobile-h5`。
+### 5.5 手机端当前关键行为（2026-06）
+- 页面标题：`标记查询`（`mobile-h5-src/index.html`）。
+- 查询结果页在“泰迪熊普通标记 + 已登录用户”场景下，直接显示内嵌短信处理区域，不再通过“短信处理”按钮跳转到独立页面。
+- `captcha/tdx` 路径继续保留兼容入口能力，但默认流程在结果页完成。
+- 平台图标中腾讯使用 `public/assets/icons/tencent.png` 资源。
 
 ## 6. 目录结构（核心）
 ```text
@@ -70,7 +91,9 @@ frontend/
 ├─ public/
 │  ├─ mobile-h5/                # 移动端静态资源
 │  └─ assets/
+├─ mobile-h5-src/               # 手机端 Vue 源码工程（Vite root）
 ├─ vite.config.js               # Vite 配置
+├─ vite.mobile-h5.config.js     # 手机端 Vite 配置
 └─ package.json
 ```
 
@@ -83,6 +106,7 @@ frontend/
 
 ## 8. 常用配置文件
 - `vite.config.js`：开发端口、代理、别名
+- `vite.mobile-h5.config.js`：手机端源码构建与预览配置
 - `package.json`：脚本与依赖
 - `.env*`：环境变量（如项目中已配置）
 
@@ -96,7 +120,7 @@ frontend/
 
 - 代理身份兼容判断：`agent` 与 `mark_agent` 都视为代理操作者。
 - 代理账户页用户加载兼容角色键：`user`、`mark_user`、`agent`、`mark_agent`。
-- 新增用户默认角色只会从 `user/mark_user` 中选择，不再回退到 `common`。
+- 新增用户默认角色只会从 `user/mark_user` 中选择，不再使用 `common` 作为默认候选。
 - 角色下拉会根据当前编辑目标收敛：
   - 下游账号：仅展示 `user/mark_user`
   - 代理本人账号：仅展示 `agent/mark_agent`

@@ -195,6 +195,40 @@ SET `visible` = '0',
     `update_by` = 'admin',
     `update_time` = NOW()
 WHERE `menu_id` = 900100000102;
+-- 用户端按钮权限（预查询/直接提交/提交消除）
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
+SELECT 900100001103, '用户订单预查询', 900100000101, 3, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:order:precheck', '#', 'admin', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001103);
+
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
+SELECT 900100001104, '用户订单提交消除', 900100000101, 4, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:order:clear', '#', 'admin', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001104);
+
+UPDATE `sys_menu`
+SET `menu_name` = '用户订单预查询',
+    `parent_id` = 900100000101,
+    `order_num` = 3,
+    `menu_type` = 'F',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:markUser:order:precheck',
+    `icon` = '#',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `menu_id` = 900100001103;
+
+UPDATE `sys_menu`
+SET `menu_name` = '用户订单提交消除',
+    `parent_id` = 900100000101,
+    `order_num` = 4,
+    `menu_type` = 'F',
+    `visible` = '0',
+    `status` = '0',
+    `perms` = 'server:markUser:order:clear',
+    `icon` = '#',
+    `update_by` = 'admin',
+    `update_time` = NOW()
+WHERE `menu_id` = 900100001104;
 
 -- common/user 角色保留平台入口，移除用户订单入口
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
@@ -207,7 +241,11 @@ JOIN (
   SELECT 900100000123 UNION ALL
   SELECT 900100000124 UNION ALL
   SELECT 900100000125 UNION ALL
-  SELECT 900100000126
+  SELECT 900100000126 UNION ALL
+  SELECT 900100001101 UNION ALL
+  SELECT 900100001102 UNION ALL
+  SELECT 900100001103 UNION ALL
+  SELECT 900100001104
 ) m
 LEFT JOIN `sys_role_menu` rm ON rm.role_id = r.role_id AND rm.menu_id = m.menu_id
 WHERE r.role_key IN ('common', 'user')

@@ -52,159 +52,93 @@
                       <el-button
                         type="primary"
                         icon="Search"
-                        :loading="submitLoading"
+                        :loading="precheckLoading"
                         :disabled="!canSubmit"
                         @click="submitBatchOrder"
                         v-hasPermi="['server:markUser:order:add']"
                       >
                         一键批量查询
                       </el-button>
-                      <el-button
-                        type="warning"
-                        icon="Promotion"
-                        :loading="submitLoading"
-                        :disabled="!canDirectSubmit"
-                        @click="submitDirectOrder"
-                        v-hasPermi="['server:markUser:order:add']"
-                      >
-                        直接提交号码
-                      </el-button>
                       <el-button @click="clearSubmitPhones">清空</el-button>
                     </div>
                   </div>
 
                   <div class="submit-right">
-
-                    <div class="query-result-panel">
-                      <div class="query-result-head">
-                        <div class="query-result-head-left">
-                          <span class="query-result-title">查询结果</span>
-                          <span class="query-result-platform">{{ activePlatformName }}</span>
-                        </div>
-                        <div class="query-result-actions">
-                          <el-button
-                            type="success"
-                            size="small"
-                            :disabled="precheckMarkedSelectedCount === 0 || submitLoading"
-                            :loading="submitLoading"
-                            @click="submitSelectedMarkedPhones"
-                          >
-                            提交消除
-                          </el-button>
-                          <el-button
-                            type="warning"
-                            size="small"
-                            :disabled="!hasPrecheckResult"
-                            @click="togglePrecheckSelectAll"
-                          >
-                            全选
-                          </el-button>
-                          <el-button
-                            size="small"
-                            :disabled="!hasPrecheckResult"
-                            @click="resetPrecheckPanel"
-                          >
-                            清空结果
-                          </el-button>
-                          <el-button
-                            size="small"
-                            :disabled="!hasPrecheckResult"
-                            @click="copyPrecheckPhones"
-                          >
-                            复制
-                          </el-button>
-                          <el-button
-                            size="small"
-                            :disabled="!hasPrecheckResult"
-                            @click="exportPrecheckRows"
-                          >
-                            导出
-                          </el-button>
-                        </div>
-                      </div>
-
-                      <div class="query-result-body">
-                        <template v-if="hasPrecheckResult">
-                          <div class="query-result-summary">
-                            <span>总查询：{{ precheckDialogData.totalCount || 0 }}</span>
-                            <span>已标记：{{ precheckDialogData.markedCount || 0 }}</span>
-                            <span>未标记：{{ precheckDialogData.unmarkedCount || 0 }}</span>
-                            <span>失败：{{ precheckDialogData.failedCount || 0 }}</span>
-                            <span>已选可提交：{{ precheckMarkedSelectedCount }}</span>
-                          </div>
-
-                          <div class="precheck-filter-bar">
-                            <el-input
-                              v-model="precheckKeyword"
-                              clearable
-                              placeholder="搜索号码/状态码/详情"
-                              style="width: 240px;"
-                            />
-                            <el-select
-                              v-model="precheckQueryStatus"
-                              clearable
-                              placeholder="查询状态"
-                              style="width: 120px;"
-                            >
-                              <el-option label="成功" value="success" />
-                              <el-option label="失败" value="failed" />
-                            </el-select>
-                            <el-select
-                              v-model="precheckMarkStatus"
-                              clearable
-                              placeholder="标记状态"
-                              style="width: 120px;"
-                            >
-                              <el-option label="已标记" value="marked" />
-                              <el-option label="未标记" value="unmarked" />
-                              <el-option label="失败" value="failed" />
-                            </el-select>
+                    <div class="submit-right-content">
+                      <h3 class="submit-title">查询结果</h3>
+                      <div class="query-result-panel">
+                        <div class="query-result-head">
+                          <div class="query-result-actions">
                             <el-button
-                              link
-                              icon="Refresh"
-                              :disabled="submitLoading"
-                              @click="refreshPrecheckResult"
+                              type="success"
+                              size="small"
+                              icon="CircleCheck"
+                              :disabled="precheckMarkedSelectedCount === 0 || clearSubmitLoading || precheckLoading"
+                              :loading="clearSubmitLoading"
+                              @click="submitSelectedMarkedPhones"
                             >
-                              刷新
+                              提交消除
+                            </el-button>
+                            <el-button
+                              type="warning"
+                              size="small"
+                              icon="Select"
+                              :disabled="!hasPrecheckResult"
+                              @click="togglePrecheckSelectAll"
+                            >
+                              全选
+                            </el-button>
+                            <el-button
+                              size="small"
+                              icon="Delete"
+                              :disabled="!hasPrecheckResult"
+                              @click="resetPrecheckPanel"
+                            >
+                              清空结果
+                            </el-button>
+                            <el-button
+                              size="small"
+                              icon="DocumentCopy"
+                              :disabled="!hasPrecheckResult"
+                              @click="copyPrecheckPhones"
+                            >
+                              复制
+                            </el-button>
+                            <el-button
+                              size="small"
+                              icon="Download"
+                              :disabled="!hasPrecheckResult"
+                              @click="exportPrecheckRows"
+                            >
+                              导出
                             </el-button>
                           </div>
-
+                        </div>
+                        <div class="query-result-body">
                           <el-table
                             ref="precheckTableRef"
-                            :data="precheckFilteredTableData"
+                            class="query-result-table"
+                            :data="precheckTableData"
                             border
                             max-height="430"
                             row-key="phone"
                             @selection-change="handlePrecheckSelectionChange"
                           >
                             <el-table-column type="selection" width="48" reserve-selection />
-                            <el-table-column label="号码" prop="phone" min-width="130" />
-                            <el-table-column label="查询状态" width="100" align="center">
+                            <el-table-column label="手机号码" prop="phone" min-width="150" />
+                            <el-table-column label="状态" width="100" align="center">
                               <template #default="scope">
                                 <el-tag :type="queryStatusType(scope.row)" size="small">
                                   {{ queryStatusLabel(scope.row) }}
                                 </el-tag>
                               </template>
                             </el-table-column>
-                            <el-table-column label="标记结果" width="110" align="center">
+                            <el-table-column :label="`查询结果(${activePlatformName})`" min-width="220" show-overflow-tooltip>
                               <template #default="scope">
-                                <el-tag :type="markStatusType(scope.row)" size="small">
-                                  {{ markStatusLabel(scope.row) }}
-                                </el-tag>
-                              </template>
-                            </el-table-column>
-                            <el-table-column label="状态码" prop="status" width="120" align="center" show-overflow-tooltip />
-                            <el-table-column label="详情" prop="detail" min-width="180" show-overflow-tooltip />
-                            <el-table-column label="错误信息" prop="errorMessage" min-width="180" show-overflow-tooltip />
-                            <el-table-column label="响应时长(ms)" width="110" align="center">
-                              <template #default="scope">
-                                {{ scope.row.responseTime ?? '-' }}
+                                {{ precheckResultLabel(scope.row) }}
                               </template>
                             </el-table-column>
                           </el-table>
-                        </template>
-                        <div v-else class="query-result-empty">
-                          <el-empty :description="`暂无【${activePlatformName}】查询结果，请输入手机号查询`" />
                         </div>
                       </div>
                     </div>
@@ -347,7 +281,7 @@
 <script setup name="MarkUserOrder">
 import {
   listMarkUserOrder,
-  createMarkUserOrder,
+  createMarkUserClearOrder,
   precheckMarkUserOrder,
   listMarkUserPlatformPrice
 } from '@/api/server/markUser'
@@ -358,7 +292,8 @@ const route = useRoute()
 const router = useRouter()
 
 const loading = ref(false)
-const submitLoading = ref(false)
+const precheckLoading = ref(false)
+const clearSubmitLoading = ref(false)
 const total = ref(0)
 const orderList = ref([])
 const recordSelectedRows = ref([])
@@ -484,7 +419,6 @@ const canSubmit = computed(() => !!activePlatform.value && submitPhoneStats.valu
 const expectedSubmitCount = computed(() => submitPhoneStats.value.validCount)
 const expectedDeductAmount = computed(() => expectedSubmitCount.value * activeUnitPrice.value)
 const insufficientRemain = computed(() => expectedDeductAmount.value > activeRemainCount.value)
-const canDirectSubmit = computed(() => canSubmit.value && !insufficientRemain.value)
 const precheckTableData = computed(() => Array.isArray(precheckDialogData.value.items) ? precheckDialogData.value.items : [])
 const hasPrecheckResult = computed(() => precheckTableData.value.length > 0 || precheckDialogData.value.totalCount > 0)
 
@@ -563,6 +497,13 @@ function markStatusType(row) {
   return ''
 }
 
+function precheckResultLabel(row) {
+  if (row?.querySuccess === false) return row?.errorMessage || row?.detail || '查询失败'
+  if (row?.detail) return row.detail
+  const statusText = markStatusLabel(row)
+  return statusText === '-' ? '查询成功' : statusText
+}
+
 function resolvePrecheckQueryStatus(row) {
   if (row?.querySuccess === true) return 'success'
   if (row?.querySuccess === false) return 'failed'
@@ -587,7 +528,7 @@ function resetPrecheckPanel() {
 }
 
 async function executePrecheck(payload, { silentWarning = false } = {}) {
-  submitLoading.value = true
+  precheckLoading.value = true
   try {
     const precheckRes = await precheckMarkUserOrder(payload)
     const source = precheckRes?.data || {}
@@ -631,7 +572,7 @@ async function executePrecheck(payload, { silentWarning = false } = {}) {
     console.error('预查询失败:', error)
     proxy.$modal.msgError(error?.message || '预查询失败')
   } finally {
-    submitLoading.value = false
+    precheckLoading.value = false
   }
 }
 
@@ -903,39 +844,6 @@ async function submitBatchOrder() {
   await executePrecheck(payload)
 }
 
-async function submitDirectOrder() {
-  if (!activePlatform.value) {
-    proxy.$modal.msgError('当前未选择平台')
-    return
-  }
-  const phones = submitPhoneStats.value.validPhones
-  if (phones.length === 0) {
-    proxy.$modal.msgError('请输入有效号码')
-    return
-  }
-  if (insufficientRemain.value) {
-    proxy.$modal.msgError('当前平台剩余次数不足')
-    return
-  }
-  const payload = {
-    platformCode: activePlatform.value.platformCode,
-    platformName: activePlatform.value.platformName,
-    requestNo: String(submitForm.requestNo || '').trim(),
-    phones,
-    remark: String(submitForm.remark || '').trim()
-  }
-  submitLoading.value = true
-  try {
-    const res = await createMarkUserOrder(payload)
-    await afterCreateOrderSuccess(res)
-  } catch (error) {
-    console.error('直接提交订单失败:', error)
-    proxy.$modal.msgError(error?.message || '提交失败')
-  } finally {
-    submitLoading.value = false
-  }
-}
-
 async function afterCreateOrderSuccess(res) {
   proxy.$modal.msgSuccess(res?.msg || '下单成功')
   resetPrecheckPanel()
@@ -967,15 +875,15 @@ async function submitSelectedMarkedPhones() {
     ...precheckSourcePayload.value,
     phones: selectedPhones
   }
-  submitLoading.value = true
+  clearSubmitLoading.value = true
   try {
-    const res = await createMarkUserOrder(payload)
+    const res = await createMarkUserClearOrder(payload)
     await afterCreateOrderSuccess(res)
   } catch (error) {
     console.error('提交订单失败:', error)
     proxy.$modal.msgError(error?.message || '提交失败')
   } finally {
-    submitLoading.value = false
+    clearSubmitLoading.value = false
   }
 }
 
@@ -1107,8 +1015,9 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: minmax(0, 540px) minmax(0, 1fr);
   width: 100%;
+  min-height: 560px;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .submit-left,
@@ -1117,7 +1026,15 @@ onMounted(async () => {
 }
 
 .submit-right {
+  display: flex;
   width: 100%;
+}
+.submit-right-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .submit-right-remain {
@@ -1184,7 +1101,9 @@ onMounted(async () => {
   border-radius: 8px;
   background: #fff;
   overflow: hidden;
-  min-height: 560px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   color: var(--el-text-color-primary);
@@ -1193,40 +1112,32 @@ onMounted(async () => {
 .query-result-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   padding: 12px 14px;
   border-bottom: 1px solid var(--el-border-color-lighter);
   background: #f8fbff;
 }
 
-.query-result-head-left {
+.query-result-head-meta {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
 }
 
-.query-result-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
 
-.query-result-platform {
-  padding: 2px 10px;
-  border-radius: 10px;
-  border: 1px solid #b9d3ff;
-  font-size: 13px;
-  color: #2f76d2;
-  line-height: 1.5;
-  background: #ecf5ff;
-}
 
 .query-result-actions {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   flex-wrap: wrap;
+}
+.query-result-actions :deep(.el-button) {
+  min-height: 34px;
+  padding: 0 16px;
+  font-size: 14px;
 }
 
 .query-result-body {
@@ -1267,10 +1178,10 @@ onMounted(async () => {
 
 .record-search-panel {
   margin-bottom: 12px;
-  border: 1px solid #284367;
+  border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
-  background: linear-gradient(180deg, #122746 0%, #0f213d 100%);
-  padding: 14px 16px;
+  background: #fff;
+  padding: 12px 14px;
 }
 
 .record-search-grid {
@@ -1288,7 +1199,7 @@ onMounted(async () => {
   display: inline-block;
   margin-bottom: 8px;
   font-size: 13px;
-  color: #ceddf6;
+  color: var(--el-text-color-regular);
 }
 
 .record-quick-group {
@@ -1303,32 +1214,6 @@ onMounted(async () => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
-}
-.record-search-panel :deep(.el-input__wrapper),
-.record-search-panel :deep(.el-select__wrapper),
-.record-search-panel :deep(.el-range-editor.el-input__wrapper) {
-  background: #132949;
-  box-shadow: 0 0 0 1px #35608d inset;
-}
-
-.record-search-panel :deep(.el-input__inner),
-.record-search-panel :deep(.el-select__placeholder),
-.record-search-panel :deep(.el-range-input),
-.record-search-panel :deep(.el-range-separator),
-.record-search-panel :deep(.el-date-editor .el-input__prefix) {
-  color: #dce9ff;
-}
-
-.record-search-panel :deep(.el-button:not(.el-button--primary)) {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: #355275;
-  color: #dce9ff;
-}
-
-.record-search-panel :deep(.el-button--primary) {
-  border-color: #36bbff;
-  background: #36bbff;
-  color: #fff;
 }
 
 @media (max-width: 768px) {

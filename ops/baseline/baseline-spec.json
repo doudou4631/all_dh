@@ -1,0 +1,263 @@
+{
+  "baselineName": "mobile-ui-admin-module-guardrail",
+  "groups": [
+    {
+      "id": "mobile_ui",
+      "description": "手机端 mobile-h5-src 发布产物与核心行为基线",
+      "files": [
+        "frontend/public/mobile-h5/index.html",
+        "frontend/public/mobile-h5/batch/index.html",
+        "frontend/public/mobile-h5/captcha/tdx.html",
+        "frontend/public/mobile-h5/captcha/tdx/index.html",
+        "frontend/public/mobile-h5/pages/captcha/tdx/index.html",
+        "frontend/public/mobile-h5/profile/index.html",
+        "frontend/public/mobile-h5/profile/agreement.html",
+        "frontend/public/mobile-h5/profile/about.html",
+        "frontend/public/mobile-h5/profile/privacy.html",
+        "frontend/public/mobile-h5/profile/query-records.html",
+        "frontend/public/mobile-h5/profile/recharge-records.html",
+        "frontend/public/mobile-h5/result/index.html",
+        "frontend/public/mobile-h5/assets/icons/teddy-home.png",
+        "frontend/public/mobile-h5/assets/icons/service-phone.png",
+        "frontend/mobile-h5-src/src/main.js",
+        "frontend/mobile-h5-src/src/runtime/mobileRuntimeConfig.js",
+        "frontend/mobile-h5-src/src/services/freeQueryBridge.js",
+        "frontend/mobile-h5-src/src/pages/ResultPage.vue",
+        "frontend/mobile-h5-src/src/router/index.js",
+        "frontend/mobile-h5-src/src/components/AppBottomNav.vue"
+      ],
+      "markers": [
+        {
+          "path": "frontend/public/mobile-h5/index.html",
+          "contains": [
+            "src=\"/mobile-h5/assets/index-",
+            "href=\"/mobile-h5/assets/index-",
+            "<div id=\"app\"></div>"
+          ]
+        },
+        {
+          "path": "frontend/public/mobile-h5/batch/index.html",
+          "contains": [
+            "var base = '/mobile-h5';",
+            "params.get('page')",
+            "&to=' + encodeURIComponent(target)"
+          ]
+        },
+        {
+          "path": "frontend/public/mobile-h5/profile/query-records.html",
+          "contains": [
+            "var base = '/mobile-h5';",
+            "params.get('page')",
+            "&to=' + encodeURIComponent(target)"
+          ]
+        },
+        {
+          "path": "frontend/public/mobile-h5/captcha/tdx.html",
+          "contains": [
+            "var base = '/mobile-h5';",
+            "params.get('page')",
+            "&to=' + encodeURIComponent(target)"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/main.js",
+          "contains": [
+            "params.get('to')",
+            "normalizeTargetPath",
+            "router.replace(redirectPath)"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/runtime/mobileRuntimeConfig.js",
+          "contains": [
+            "apiBase: '/prod-api/'",
+            "server/mobilePageConfig/public/current",
+            "window.MobileRuntimeConfig",
+            "entryUrl: '/mobile-h5/?page=mobile-h5'"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/services/freeQueryBridge.js",
+          "contains": [
+            "DEFAULT_API_BASE = '/prod-api/'",
+            "PROFILE_SESSION_KEY = 'biaoji_user_session'",
+            "X-Free-Token",
+            "getTeddyVerifyCode",
+            "submitTeddyVerification"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/pages/ResultPage.vue",
+          "contains": [
+            "openTeddySmsFlow",
+            "/captcha/tdx.html?phone=",
+            "isTeddyNormalMarkItem",
+            "客服微信"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/router/index.js",
+          "contains": [
+            "path: '/profile/query-records.html'",
+            "path: '/captcha/tdx'",
+            "'/pages/captcha/tdx/'"
+          ]
+        },
+        {
+          "path": "frontend/mobile-h5-src/src/components/AppBottomNav.vue",
+          "contains": [
+            "path.startsWith('/captcha') || path.startsWith('/pages/captcha')",
+            "loadMobileRuntimeConfig()",
+            "navBatchUrl"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "admin_mobile_module",
+      "description": "管理端手机模块（前后端）基线",
+      "files": [
+        "frontend/src/views/server/web/freeUser/index.vue",
+        "frontend/src/views/server/web/mobilePageConfig/index.vue",
+        "frontend/src/views/server/mark/user/index.vue",
+        "frontend/src/api/server/freeQueryUser.js",
+        "frontend/src/api/server/mobilePageConfig.js",
+        "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryController.java",
+        "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryUserController.java",
+        "backend/geek-server/src/main/java/com/geek/server/controller/MobilePageConfigController.java",
+        "backend/geek-server/src/main/java/com/geek/server/service/impl/FreeQueryServiceImpl.java",
+        "backend/geek-server/src/main/java/com/geek/server/service/impl/FreeQueryUserServiceImpl.java",
+        "backend/geek-server/src/main/java/com/geek/server/service/impl/MobilePageConfigServiceImpl.java",
+        "backend/geek-framework/src/main/java/com/geek/framework/web/service/SysLoginService.java"
+      ],
+      "markers": [
+        {
+          "path": "frontend/src/views/server/web/freeUser/index.vue",
+          "contains": [
+            "server:freeQueryUser:add",
+            "server:freeQueryUser:adjust",
+            "server:freeQueryUser:resetPwd"
+          ]
+        },
+        {
+          "path": "frontend/src/views/server/web/mobilePageConfig/index.vue",
+          "contains": [
+            "server:mobilePageConfig:add",
+            "server:mobilePageConfig:edit",
+            "buildEntryPath"
+          ]
+        },
+        {
+          "path": "frontend/src/views/server/mark/user/index.vue",
+          "contains": [
+            "查询结果",
+            "submitSelectedMarkedPhones",
+            "precheck-filter-bar"
+          ]
+        },
+        {
+          "path": "frontend/src/api/server/freeQueryUser.js",
+          "contains": [
+            "/server/freeQueryUser/list",
+            "/server/freeQueryUser/adjustPoints",
+            "/server/freeQueryUser/resetPwd"
+          ]
+        },
+        {
+          "path": "frontend/src/api/server/mobilePageConfig.js",
+          "contains": [
+            "/server/mobilePageConfig/list",
+            "/server/mobilePageConfig/",
+            "method: 'delete'"
+          ]
+        },
+        {
+          "path": "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryUserController.java",
+          "contains": [
+            "@RequestMapping(\"/server/freeQueryUser\")",
+            "@PostMapping(\"/adjustPoints\")",
+            "@PutMapping(\"/resetPwd\")"
+          ]
+        },
+        {
+          "path": "backend/geek-server/src/main/java/com/geek/server/controller/MobilePageConfigController.java",
+          "contains": [
+            "@RequestMapping(\"/server/mobilePageConfig\")",
+            "@GetMapping(\"/public/current\")",
+            "@Anonymous"
+          ]
+        },
+        {
+          "path": "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryController.java",
+          "contains": [
+            "FREE_TOKEN_HEADER",
+            "@PostMapping(\"/batch\")",
+            "@GetMapping(\"/records\")"
+          ]
+        },
+        {
+          "path": "backend/geek-framework/src/main/java/com/geek/framework/web/service/SysLoginService.java",
+          "contains": [
+            "configService.selectCaptchaEnabled()",
+            "captchaService.check(captchaVO)",
+            "if (captchaEnabled)"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "db_migrations",
+      "description": "手机端相关数据库迁移脚本基线",
+      "files": [
+        "backend/sql/m10_free_query_user.sql",
+        "backend/sql/m11_free_query_log_structured.sql",
+        "backend/sql/m12_free_query_user_account_reuse.sql",
+        "backend/sql/m13_mobile_page_config.sql",
+        "backend/sql/m14_mobile_user_wording.sql",
+        "backend/sql/m15_mobile_h1_decommission.sql",
+        "backend/sql/m16_mark_platform_quota.sql"
+      ],
+      "markers": [
+        {
+          "path": "backend/sql/m10_free_query_user.sql",
+          "contains": [
+            "CREATE TABLE IF NOT EXISTS `free_query_user`",
+            "CREATE TABLE IF NOT EXISTS `free_query_point_record`",
+            "server:freeQueryUser:list"
+          ]
+        },
+        {
+          "path": "backend/sql/m11_free_query_log_structured.sql",
+          "contains": [
+            "user_api_query_record",
+            "source_type",
+            "idx_uaqr_source_time"
+          ]
+        },
+        {
+          "path": "backend/sql/m13_mobile_page_config.sql",
+          "contains": [
+            "CREATE TABLE IF NOT EXISTS `mobile_page_config`",
+            "'mobile-h5'",
+            "'mobile-h1'"
+          ]
+        },
+        {
+          "path": "backend/sql/m15_mobile_h1_decommission.sql",
+          "contains": [
+            "page_code` = 'mobile-h1'",
+            "`status` = '1'"
+          ]
+        },
+        {
+          "path": "backend/sql/m16_mark_platform_quota.sql",
+          "contains": [
+            "CREATE TABLE IF NOT EXISTS `mark_user_platform_quota`",
+            "platform_code",
+            "idx_mark_wallet_log_platform_code"
+          ]
+        }
+      ]
+    }
+  ]
+}

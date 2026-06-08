@@ -17,6 +17,14 @@ export function createMarkUserOrder(data) {
     data
   })
 }
+// 用户提交消除订单
+export function createMarkUserClearOrder(data) {
+  return request({
+    url: '/server/markUser/order/clear',
+    method: 'post',
+    data
+  })
+}
 
 // 用户提交前预查询
 export function precheckMarkUserOrder(data) {

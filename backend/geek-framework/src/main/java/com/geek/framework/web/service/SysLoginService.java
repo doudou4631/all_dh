@@ -73,9 +73,13 @@ public class SysLoginService
     {
         // 验证码校验
         // validateCaptcha(username, code, uuid);
-        ResponseModel rm = captchaService.check(captchaVO);
-        if(!rm.isSuccess()){
-            throw new CaptchaException();
+        boolean captchaEnabled = configService.selectCaptchaEnabled();
+        if (captchaEnabled)
+        {
+            ResponseModel rm = captchaService.check(captchaVO);
+            if(!rm.isSuccess()){
+                throw new CaptchaException();
+            }
         }
         // 登录前置校验
         loginPreCheck(username, password);

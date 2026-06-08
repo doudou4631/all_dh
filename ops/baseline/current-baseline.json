@@ -1,0 +1,382 @@
+﻿{
+    "baselineName":  "mobile-ui-admin-module-guardrail",
+    "generatedAt":  "2026-06-08T17:51:53.5175420Z",
+    "gitHead":  "03fbe698c250442eaef0e675d30f2b2c20bd11df",
+    "groups":  [
+                   {
+                       "id":  "mobile_ui",
+                       "description":  "手机端 mobile-h5-src 发布产物与核心行为基线",
+                       "files":  [
+                                     {
+                                         "path":  "frontend/public/mobile-h5/index.html",
+                                         "sha256":  "7a378274882d0d7587accbc49aa5e0df8a45c91dc7d5d76468e7dd1da2e06acb"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/batch/index.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/captcha/tdx.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/captcha/tdx/index.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/pages/captcha/tdx/index.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/index.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/agreement.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/about.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/privacy.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/query-records.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/profile/recharge-records.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/result/index.html",
+                                         "sha256":  "360e5652ab12ca98fa06f87e321a6288cb07e5061ee96138496079a95b3a0604"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/assets/icons/teddy-home.png",
+                                         "sha256":  "a445f4b1349e9e74804dc454cdda157b118fe17ddecbed70ce7cd713d3876420"
+                                     },
+                                     {
+                                         "path":  "frontend/public/mobile-h5/assets/icons/service-phone.png",
+                                         "sha256":  "36e8c975ddd3a1cc4199a7fcf5470ab83459392aee557796af239f7a830b6d26"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/main.js",
+                                         "sha256":  "e98e5c065edfadc7f7666f38719bdab2897d9eaaa5a189efbb6e283198dc318f"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/runtime/mobileRuntimeConfig.js",
+                                         "sha256":  "f89b6d40b229c086c2261494d2deff191c69b706a1af3e2078651e320a2552a3"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/services/freeQueryBridge.js",
+                                         "sha256":  "e7f0bb3ed30a25dd7a0831f05f117e06c4760c52505ccca36d2bba9f1bb7ff8b"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/pages/ResultPage.vue",
+                                         "sha256":  "32a180a223ddbb25dd5a8586ffe01fee0f76e5379f1fa481ccd5ae8418618fa3"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/router/index.js",
+                                         "sha256":  "7e51e5e50afdd9399c1700377a36fafd105138b206e35465def2e5542d52888f"
+                                     },
+                                     {
+                                         "path":  "frontend/mobile-h5-src/src/components/AppBottomNav.vue",
+                                         "sha256":  "5864c84eda1d245e1b6772fc9e0cfc3f42242e818f4cbcbaafd4ee383b4b52a3"
+                                     }
+                                 ],
+                       "markers":  [
+                                       {
+                                           "path":  "frontend/public/mobile-h5/index.html",
+                                           "contains":  [
+                                                            "src=\"/mobile-h5/assets/index-",
+                                                            "href=\"/mobile-h5/assets/index-",
+                                                            "\u003cdiv id=\"app\"\u003e\u003c/div\u003e"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/public/mobile-h5/batch/index.html",
+                                           "contains":  [
+                                                            "var base = \u0027/mobile-h5\u0027;",
+                                                            "params.get(\u0027page\u0027)",
+                                                            "\u0026to=\u0027 + encodeURIComponent(target)"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/public/mobile-h5/profile/query-records.html",
+                                           "contains":  [
+                                                            "var base = \u0027/mobile-h5\u0027;",
+                                                            "params.get(\u0027page\u0027)",
+                                                            "\u0026to=\u0027 + encodeURIComponent(target)"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/public/mobile-h5/captcha/tdx.html",
+                                           "contains":  [
+                                                            "var base = \u0027/mobile-h5\u0027;",
+                                                            "params.get(\u0027page\u0027)",
+                                                            "\u0026to=\u0027 + encodeURIComponent(target)"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/main.js",
+                                           "contains":  [
+                                                            "params.get(\u0027to\u0027)",
+                                                            "normalizeTargetPath",
+                                                            "router.replace(redirectPath)"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/runtime/mobileRuntimeConfig.js",
+                                           "contains":  [
+                                                            "apiBase: \u0027/prod-api/\u0027",
+                                                            "server/mobilePageConfig/public/current",
+                                                            "window.MobileRuntimeConfig",
+                                                            "entryUrl: \u0027/mobile-h5/?page=mobile-h5\u0027"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/services/freeQueryBridge.js",
+                                           "contains":  [
+                                                            "DEFAULT_API_BASE = \u0027/prod-api/\u0027",
+                                                            "PROFILE_SESSION_KEY = \u0027biaoji_user_session\u0027",
+                                                            "X-Free-Token",
+                                                            "getTeddyVerifyCode",
+                                                            "submitTeddyVerification"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/pages/ResultPage.vue",
+                                           "contains":  [
+                                                            "openTeddySmsFlow",
+                                                            "/captcha/tdx.html?phone=",
+                                                            "isTeddyNormalMarkItem",
+                                                            "客服微信"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/router/index.js",
+                                           "contains":  [
+                                                            "path: \u0027/profile/query-records.html\u0027",
+                                                            "path: \u0027/captcha/tdx\u0027",
+                                                            "\u0027/pages/captcha/tdx/\u0027"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/mobile-h5-src/src/components/AppBottomNav.vue",
+                                           "contains":  [
+                                                            "path.startsWith(\u0027/captcha\u0027) || path.startsWith(\u0027/pages/captcha\u0027)",
+                                                            "loadMobileRuntimeConfig()",
+                                                            "navBatchUrl"
+                                                        ]
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  "admin_mobile_module",
+                       "description":  "管理端手机模块（前后端）基线",
+                       "files":  [
+                                     {
+                                         "path":  "frontend/src/views/server/web/freeUser/index.vue",
+                                         "sha256":  "957f37bc77edc77ae52a06a559bced0ecf7981db81ef3e867a6a442fb891cc4a"
+                                     },
+                                     {
+                                         "path":  "frontend/src/views/server/web/mobilePageConfig/index.vue",
+                                         "sha256":  "0c239096d42b9db766df9226ba1de79f0b7e011e55c5db4b993c7fb0bbe49a15"
+                                     },
+                                     {
+                                         "path":  "frontend/src/views/server/mark/user/index.vue",
+                                         "sha256":  "5b79502221be87708b64e01b848f889d3896abf9b3108296de5fd5863e7f1140"
+                                     },
+                                     {
+                                         "path":  "frontend/src/api/server/freeQueryUser.js",
+                                         "sha256":  "ff18587089d74d90c85f8da0f05f6e3d1b6cc6d0b36349a563f5f9ff92f93741"
+                                     },
+                                     {
+                                         "path":  "frontend/src/api/server/mobilePageConfig.js",
+                                         "sha256":  "3a1bdb7510d37543c33a4b6b46a5b57d0098479823a0fbfcaf0819159375f421"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryController.java",
+                                         "sha256":  "4eb177ad9442c187bca1ab7c277714e036681a282b21f6ebd0769b528ad41cd7"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryUserController.java",
+                                         "sha256":  "bdc981d4af3193c3f0b9a0ad011e87ee54deedd56eb285a2560b39097a76a922"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/controller/MobilePageConfigController.java",
+                                         "sha256":  "1cf5d2aa55e89bb1cff6eb7eb9fde8e7c543e510f17d872c40aa6d407fea9e12"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/service/impl/FreeQueryServiceImpl.java",
+                                         "sha256":  "2ff05784a4ca3734c6057d27a7423e762f8027e15a16b2ec4c5004bc199e546f"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/service/impl/FreeQueryUserServiceImpl.java",
+                                         "sha256":  "1067e71013a41a4bb74c405a0313b51b841fe838d4f69fd78e155e7b1b098070"
+                                     },
+                                     {
+                                         "path":  "backend/geek-server/src/main/java/com/geek/server/service/impl/MobilePageConfigServiceImpl.java",
+                                         "sha256":  "8c74cefc0cd50e53a3b333a99d27bb14f41335e1cfc7f68497a66b81bb665776"
+                                     },
+                                     {
+                                         "path":  "backend/geek-framework/src/main/java/com/geek/framework/web/service/SysLoginService.java",
+                                         "sha256":  "5bcc821f15972cd9f137e3ea59305116d3845ed93ff34cecef7590be1945a41e"
+                                     }
+                                 ],
+                       "markers":  [
+                                       {
+                                           "path":  "frontend/src/views/server/web/freeUser/index.vue",
+                                           "contains":  [
+                                                            "server:freeQueryUser:add",
+                                                            "server:freeQueryUser:adjust",
+                                                            "server:freeQueryUser:resetPwd"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/src/views/server/web/mobilePageConfig/index.vue",
+                                           "contains":  [
+                                                            "server:mobilePageConfig:add",
+                                                            "server:mobilePageConfig:edit",
+                                                            "buildEntryPath"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/src/views/server/mark/user/index.vue",
+                                           "contains":  [
+                                                            "查询结果",
+                                                            "submitSelectedMarkedPhones",
+                                                            "precheck-filter-bar"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/src/api/server/freeQueryUser.js",
+                                           "contains":  [
+                                                            "/server/freeQueryUser/list",
+                                                            "/server/freeQueryUser/adjustPoints",
+                                                            "/server/freeQueryUser/resetPwd"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "frontend/src/api/server/mobilePageConfig.js",
+                                           "contains":  [
+                                                            "/server/mobilePageConfig/list",
+                                                            "/server/mobilePageConfig/",
+                                                            "method: \u0027delete\u0027"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryUserController.java",
+                                           "contains":  [
+                                                            "@RequestMapping(\"/server/freeQueryUser\")",
+                                                            "@PostMapping(\"/adjustPoints\")",
+                                                            "@PutMapping(\"/resetPwd\")"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/geek-server/src/main/java/com/geek/server/controller/MobilePageConfigController.java",
+                                           "contains":  [
+                                                            "@RequestMapping(\"/server/mobilePageConfig\")",
+                                                            "@GetMapping(\"/public/current\")",
+                                                            "@Anonymous"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/geek-server/src/main/java/com/geek/server/controller/FreeQueryController.java",
+                                           "contains":  [
+                                                            "FREE_TOKEN_HEADER",
+                                                            "@PostMapping(\"/batch\")",
+                                                            "@GetMapping(\"/records\")"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/geek-framework/src/main/java/com/geek/framework/web/service/SysLoginService.java",
+                                           "contains":  [
+                                                            "configService.selectCaptchaEnabled()",
+                                                            "captchaService.check(captchaVO)",
+                                                            "if (captchaEnabled)"
+                                                        ]
+                                       }
+                                   ]
+                   },
+                   {
+                       "id":  "db_migrations",
+                       "description":  "手机端相关数据库迁移脚本基线",
+                       "files":  [
+                                     {
+                                         "path":  "backend/sql/m10_free_query_user.sql",
+                                         "sha256":  "ab22041485b3d8307f4cb6f1023123089338ab4d79960e1e9ace914ddbea287a"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m11_free_query_log_structured.sql",
+                                         "sha256":  "6fd9f57475f761e701705ab1c6e244a68dfa29d9263d98eef055d3090f86c399"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m12_free_query_user_account_reuse.sql",
+                                         "sha256":  "6225d0995a33544cd633868af9725bb4ea945e9e8c0a74bd790be8f0bcb20dd9"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m13_mobile_page_config.sql",
+                                         "sha256":  "786257609d5e66a3d2389c7645a8acb0b395e9a945231cf2d19ff031882c8830"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m14_mobile_user_wording.sql",
+                                         "sha256":  "c59149be0588af1a5448d7268efe30e8aad39440f55d565e5b602768fcbadb68"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m15_mobile_h1_decommission.sql",
+                                         "sha256":  "430b7788755bd548ab5246e8628e853db6c422a2d917aeafa6f1c35eca11b312"
+                                     },
+                                     {
+                                         "path":  "backend/sql/m16_mark_platform_quota.sql",
+                                         "sha256":  "778c549aa33c18ab5459b6ec0526b0c6a124f0acef01ae6bbb95db4d7bef9ce7"
+                                     }
+                                 ],
+                       "markers":  [
+                                       {
+                                           "path":  "backend/sql/m10_free_query_user.sql",
+                                           "contains":  [
+                                                            "CREATE TABLE IF NOT EXISTS `free_query_user`",
+                                                            "CREATE TABLE IF NOT EXISTS `free_query_point_record`",
+                                                            "server:freeQueryUser:list"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/sql/m11_free_query_log_structured.sql",
+                                           "contains":  [
+                                                            "user_api_query_record",
+                                                            "source_type",
+                                                            "idx_uaqr_source_time"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/sql/m13_mobile_page_config.sql",
+                                           "contains":  [
+                                                            "CREATE TABLE IF NOT EXISTS `mobile_page_config`",
+                                                            "\u0027mobile-h5\u0027",
+                                                            "\u0027mobile-h1\u0027"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/sql/m15_mobile_h1_decommission.sql",
+                                           "contains":  [
+                                                            "page_code` = \u0027mobile-h1\u0027",
+                                                            "`status` = \u00271\u0027"
+                                                        ]
+                                       },
+                                       {
+                                           "path":  "backend/sql/m16_mark_platform_quota.sql",
+                                           "contains":  [
+                                                            "CREATE TABLE IF NOT EXISTS `mark_user_platform_quota`",
+                                                            "platform_code",
+                                                            "idx_mark_wallet_log_platform_code"
+                                                        ]
+                                       }
+                                   ]
+                   }
+               ]
+}

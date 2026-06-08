@@ -1,89 +1,23 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>查询记录</title>
-  <link rel="stylesheet" href="../assets/fixed-layout.css" />
-  <link rel="stylesheet" href="../assets/profile-page.css" />
-  <link rel="stylesheet" href="../assets/bottom-nav.css" />
-</head>
-<body>
-  <div class="profile-sub-page">
-    <a class="profile-sub-back" href="index.html?v=3">‹ 返回个人中心</a>
-    <h1 class="profile-sub-title">查询记录</h1>
-    <div id="record-list" class="profile-record-list"></div>
-  </div>
-
-  <script src="../assets/runtime-config.js"></script>
-  <script src="../assets/bottom-nav.js"></script>
-  <script src="../assets/api-bridge.js?v=2"></script>
-  <script src="../assets/profile-page.js?v=3"></script>
+  <title>跳转中...</title>
   <script>
-    function escapeHtml(str) {
-      return String(str == null ? '' : str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-    }
-
-    function renderMarkedPlatforms(item) {
-      var platforms = Array.isArray(item && item.markedPlatforms) ? item.markedPlatforms : [];
-      if (!platforms.length) return '无';
-      return platforms.join('、');
-    }
-
-    function renderRecordList(list) {
-      var el = document.getElementById('record-list');
-      if (!Array.isArray(list) || !list.length) {
-        el.innerHTML = '<div class="profile-sub-empty">暂无查询记录</div>';
-        return;
-      }
-      el.innerHTML = list
-        .map(function (item) {
-          var markedCount = Number(item && item.marked);
-          if (isNaN(markedCount) || markedCount < 0) markedCount = 0;
-          var platformText = renderMarkedPlatforms(item);
-          return (
-            '<div class="profile-record-item">' +
-            '<div class="profile-record-head"><strong>' + escapeHtml(item.phone) + '</strong><span>' + escapeHtml(item.time) + '</span></div>' +
-            '<div class="profile-record-meta">类型：' + escapeHtml(item.type) + ' · 标记平台：' + escapeHtml(String(markedCount)) + ' 个</div>' +
-            '<div class="profile-record-meta">被标记平台：' + escapeHtml(platformText) + '</div>' +
-            '</div>'
-          );
-        })
-        .join('');
-    }
-
-
-    function loadRemoteRecords(callback) {
-      if (!window.BiaojiApiBridge || typeof window.BiaojiApiBridge.queryRecords !== 'function') {
-        callback('记录接口未加载', []);
-        return;
-      }
-      window.BiaojiApiBridge.queryRecords(function (err, records) {
-        callback(err, Array.isArray(records) ? records : []);
-      });
-    }
-    if (!window.ProfilePage || !ProfilePage.isLoggedIn()) {
-      if (window.AppBottomNav && typeof window.AppBottomNav.notify === 'function') {
-        window.AppBottomNav.notify('请先登录');
-      }
-      setTimeout(function () {
-        var target = (window.MobileRuntimeConfig && window.MobileRuntimeConfig.resolveHref)
-          ? window.MobileRuntimeConfig.resolveHref('/profile/')
-          : 'index.html';
-        location.replace(target);
-      }, 400);
-    } else {
-      loadRemoteRecords(function (err, remoteList) {
-        if (err && window.AppBottomNav && typeof window.AppBottomNav.notify === 'function') {
-          window.AppBottomNav.notify(err);
-        }
-        renderRecordList(remoteList);
-      });
-    }
+    (function () {
+      var base = '/mobile-h5';
+      var path = window.location.pathname || '/';
+      if (path.indexOf(base) === 0) path = path.slice(base.length) || '/';
+      var target = path + (window.location.search || '') + (window.location.hash || '');
+      var page = 'mobile-h5';
+      try {
+        var params = new URLSearchParams(window.location.search || '');
+        page = String(params.get('page') || 'mobile-h5').trim() || 'mobile-h5';
+      } catch (e) {}
+      window.location.replace(base + '/?page=' + encodeURIComponent(page) + '&to=' + encodeURIComponent(target));
+    })();
   </script>
-</body>
+</head>
+<body></body>
 </html>

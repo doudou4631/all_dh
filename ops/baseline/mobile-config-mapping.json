@@ -1,0 +1,131 @@
+{
+  "name": "mobile-h5-runtime-config-mapping",
+  "generatedPurpose": "Lock current behavior before hardcoded-to-config convergence, while preserving existing UI and management functionality.",
+  "runtimeConfigEndpoint": "/server/mobilePageConfig/public/current?page={pageCode}",
+  "runtimeConfigPrimarySourceFile": "frontend/public/mobile-h5/assets/runtime-config.js",
+  "configKeys": [
+    {
+      "key": "servicePhone",
+      "defaultValueInRuntimeConfig": "13027616171",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/result-page.js",
+        "frontend/public/mobile-h5/assets/bottom-nav.js",
+        "frontend/public/mobile-h5/profile/about.html",
+        "frontend/public/mobile-h5/profile/privacy.html"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "wechatQrUrl",
+      "defaultValueInRuntimeConfig": "/mobile-h5/assets/icons/customer-wechat.png",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/result-page.js",
+        "frontend/public/mobile-h5/assets/bottom-nav.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "navHomeUrl",
+      "defaultValueInRuntimeConfig": "/",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/bottom-nav.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "navQueryUrl",
+      "defaultValueInRuntimeConfig": "/?tab=query",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/bottom-nav.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "navBatchUrl",
+      "defaultValueInRuntimeConfig": "/batch/",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/bottom-nav.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "navProfileUrl",
+      "defaultValueInRuntimeConfig": "/profile/",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/bottom-nav.js",
+        "frontend/public/mobile-h5/profile/about.html",
+        "frontend/public/mobile-h5/profile/privacy.html"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "resultBackUrl",
+      "defaultValueInRuntimeConfig": "/",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/result-page.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "apiBase",
+      "defaultValueInRuntimeConfig": "/prod-api/",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/runtime-config.js",
+        "frontend/public/mobile-h5/assets/api-bridge.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "teddyProtocolBase",
+      "defaultValueInRuntimeConfig": "https://www.teddymobile.cn",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/runtime-config.js",
+        "frontend/public/mobile-h5/assets/api-bridge.js"
+      ],
+      "hardcodedHotspots": []
+    },
+    {
+      "key": "pageCode",
+      "defaultValueInRuntimeConfig": "mobile-h5",
+      "usedByFiles": [
+        "frontend/public/mobile-h5/assets/runtime-config.js"
+      ],
+      "hardcodedHotspots": []
+    }
+  ],
+  "nonConfigHardcodedItems": [
+    {
+      "item": "API base URL",
+      "value": "/prod-api/",
+      "files": [
+        "frontend/public/mobile-h5/assets/api-bridge.js",
+        "frontend/public/mobile-h5/assets/runtime-config.js"
+      ],
+      "riskLevel": "low"
+    },
+    {
+      "item": "Teddy protocol domain",
+      "value": "https://www.teddymobile.cn",
+      "files": [
+        "frontend/public/mobile-h5/assets/api-bridge.js"
+      ],
+      "riskLevel": "low"
+    }
+  ],
+  "phase2Priority": [
+    {
+      "priority": 1,
+      "target": "frontend/public/mobile-h5/result/index.html",
+      "goal": "Remove direct phone/QR hardcoding and rely on runtime-config hydrated values. (done)",
+      "status": "done",
+      "mustKeep": "Current UI layout, wording, and result interactions unchanged."
+    },
+    {
+      "priority": 2,
+      "target": "frontend/public/mobile-h5/assets/api-bridge.js",
+      "goal": "Abstract API base and third-party domain values to controlled config constants. (done)",
+      "status": "done",
+      "mustKeep": "Current query flow, Teddy SMS process path, and token/header behavior."
+    }
+  ]
+}

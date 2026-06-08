@@ -319,6 +319,12 @@ INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`
 SELECT 900100001102, '用户订单新增', 900100000101, 2, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:order:add', '#', 'admin', NOW()
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001102);
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
+SELECT 900100001103, '用户订单预查询', 900100000101, 3, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:order:precheck', '#', 'admin', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001103);
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
+SELECT 900100001104, '用户订单提交消除', 900100000101, 4, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:order:clear', '#', 'admin', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001104);
+INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
 SELECT 900100001201, '钱包流水查询', 900100000102, 1, '#', '', '', '', 1, 0, 'F', '0', '0', 'server:markUser:wallet:log:list', '#', 'admin', NOW()
 WHERE NOT EXISTS (SELECT 1 FROM `sys_menu` WHERE `menu_id` = 900100001201);
 INSERT INTO `sys_menu` (`menu_id`, `menu_name`, `parent_id`, `order_num`, `path`, `component`, `query`, `route_name`, `is_frame`, `is_cache`, `menu_type`, `visible`, `status`, `perms`, `icon`, `create_by`, `create_time`)
@@ -375,7 +381,7 @@ JOIN `sys_role` r ON rm.role_id = r.role_id
 WHERE r.role_key = 'admin'
   AND rm.menu_id IN (
     900100000101, 900100000102,
-    900100001101, 900100001102, 900100001201, 900100001202
+    900100001101, 900100001102, 900100001103, 900100001104, 900100001201, 900100001202
   );
 -- admin 角色：全量权限
 INSERT INTO `sys_role_menu` (`role_id`, `menu_id`)
@@ -400,7 +406,7 @@ FROM `sys_role` r
 JOIN (
   SELECT 900100000001 AS menu_id UNION ALL
   SELECT 900100000101 UNION ALL SELECT 900100000102 UNION ALL
-  SELECT 900100001101 UNION ALL SELECT 900100001102 UNION ALL
+  SELECT 900100001101 UNION ALL SELECT 900100001102 UNION ALL SELECT 900100001103 UNION ALL SELECT 900100001104 UNION ALL
   SELECT 900100001201 UNION ALL SELECT 900100001202
 ) m
 LEFT JOIN `sys_role_menu` rm ON rm.role_id = r.role_id AND rm.menu_id = m.menu_id
@@ -602,6 +608,8 @@ WHERE r.role_key = 'admin'
     900100001303,
     900100001101,
     900100001102,
+    900100001103,
+    900100001104,
     900100001201,
     900100001202
   );

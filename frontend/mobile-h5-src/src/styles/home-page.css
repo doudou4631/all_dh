@@ -1,0 +1,219 @@
+.home-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: #f0f6fb;
+  position: relative;
+  overflow: hidden;
+  padding: 0 15px 12px;
+  box-sizing: border-box;
+}
+
+.home-container > * {
+  position: relative;
+  z-index: 1;
+}
+
+.home-header {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  text-align: center;
+  position: relative;
+  width: calc(100% + 30px);
+  margin-left: -15px;
+  margin-right: -15px;
+  margin-top: 0;
+  margin-bottom: 0;
+  min-height: clamp(240px, 52vw, 340px);
+  padding: 0 23px 18px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.home-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-color: #d8ecfc;
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(195, 225, 251, 0.15) 0%,
+      rgba(210, 233, 251, 0.45) 45%,
+      rgba(230, 242, 251, 0.88) 78%,
+      rgba(240, 246, 251, 1) 100%
+    ),
+    radial-gradient(ellipse 90% 70% at 50% 28%, rgba(170, 210, 255, 0.35) 0%, transparent 68%),
+    url('/mobile-h5/assets/home-header-bg.png');
+  background-repeat: no-repeat, no-repeat, no-repeat;
+  background-size: 100% 100%, 100% 100%, 100% auto;
+  background-position: center, center, center 8%;
+  pointer-events: none;
+}
+
+.home-title {
+  position: relative;
+  margin: 0 0 10px;
+  color: #111;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  line-height: 1.3;
+}
+
+.home-subtitle {
+  position: relative;
+  margin: 0;
+  color: #888;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.home-search-section {
+  flex-shrink: 0;
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 8px 0 20px;
+  box-sizing: border-box;
+}
+
+:root {
+  --home-search-h: 74px;
+  --home-search-r: 12px;
+  --home-search-btn-ratio: 29.5%;
+}
+
+.home-search-box {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: var(--home-search-h);
+  min-height: var(--home-search-h);
+  max-height: var(--home-search-h);
+  background: #fff;
+  border-radius: var(--home-search-r);
+  overflow: hidden;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  border: 1px solid #eee;
+}
+
+.home-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: 100%;
+  height: var(--home-search-h);
+  min-height: var(--home-search-h);
+  line-height: var(--home-search-h);
+  border: none;
+  border-radius: var(--home-search-r) 0 0 var(--home-search-r);
+  padding: 0 16px;
+  font-size: 16px;
+  color: #333;
+  background: #fff;
+  outline: none;
+}
+
+.home-search-input::placeholder {
+  color: #ccc;
+  font-size: 16px;
+}
+
+.home-search-btn {
+  flex: 0 0 var(--home-search-btn-ratio);
+  width: var(--home-search-btn-ratio);
+  min-width: var(--home-search-btn-ratio);
+  max-width: var(--home-search-btn-ratio);
+  height: var(--home-search-h);
+  min-height: var(--home-search-h);
+  margin: 0;
+  border: none;
+  border-radius: 0 var(--home-search-r) var(--home-search-r) 0;
+  background: #3b71fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.home-search-btn-text {
+  color: #fff;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.home-platform-section,
+.home-intro-section {
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.home-platform-section {
+  padding: 14px 12px 10px;
+  margin-bottom: 10px;
+}
+
+.home-intro-section {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 12px 16px;
+}
+
+.home-section-title {
+  margin: 0;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #111;
+}
+
+.home-platform-list {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+
+.home-platform-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 25%;
+  margin-bottom: 10px;
+  box-sizing: border-box;
+}
+
+.home-platform-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.5rem;
+  margin-bottom: 0.375rem;
+  object-fit: contain;
+}
+
+.home-platform-name {
+  font-size: 0.75rem;
+  color: #444;
+}
+
+.home-intro-content {
+  flex: 1 1 auto;
+  margin-top: 8px;
+}
+
+.home-intro-text {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #444;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}

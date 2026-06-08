@@ -8,7 +8,8 @@
 - 前端目录：`/www/wwwroot/frontend`
 - 手机端页面目录（线上）：`/www/wwwroot/frontend/mobile-h5`
 - 手机端访问路径：`https://biaoji.aleo1314.vip/mobile-h5/`
-- 手机端源码目录（仓库）：`frontend/public/mobile-h5`
+- 手机端源码目录（仓库）：`frontend/mobile-h5-src`
+- 手机端发布目录（仓库）：`frontend/public/mobile-h5`（由切换脚本从源码构建产物同步）
 - 后端 Jar：`/www/wwwroot/backend/geek-admin.jar`
 - 后端服务：`geek-admin.service`（systemd 托管）
 - 后端端口：`8080`
@@ -23,7 +24,7 @@
 ## 2. 本地打包
 在项目根目录执行。
 
-### 2.1 前端打包
+### 2.1 前端打包（管理端/主站）
 ```bash
 npm --prefix frontend ci
 npm --prefix frontend run build:prod
@@ -31,8 +32,22 @@ npm --prefix frontend run build:prod
 产物目录：`frontend/dist`
 手机端产物目录：`frontend/dist/mobile-h5`
 说明：旧目录 `frontend/dist/free-query-ui` 已迁移为 `mobile-h5`
+### 2.2 手机端源码构建与切换（mobile-h5-src）
+```bash
+npm --prefix frontend run build:mobile-h5-src
+npm --prefix frontend run check:mobile-h5-shims
+npm --prefix frontend run cutover:mobile-h5-src
+```
+说明：
+- `build:mobile-h5-src` 产物目录：`frontend/mobile-h5-src/dist/mobile-h5`
+- `cutover:mobile-h5-src` 会把构建产物同步到 `frontend/public/mobile-h5`
+### 2.2.1 当前手机端实现说明（2026-06）
+- 浏览器页签标题为 `标记查询`（来源 `frontend/mobile-h5-src/index.html`）。
+- 查询结果页在“泰迪熊普通标记 + 已登录用户”场景下，直接在结果页内嵌短信处理区域，不再通过“短信处理”按钮跳转。
+- `captcha/tdx` 路径仍保留兼容访问能力，但不是当前默认流程入口。
+- 腾讯平台图标使用 `assets/icons/tencent.png`。
 
-### 2.2 后端打包
+### 2.3 后端打包
 ```bash
 mvn -f backend/pom.xml clean package -DskipTests
 ```
@@ -62,7 +77,8 @@ ssh $KEY_OPTS ubuntu@43.142.125.17 '
 ```
 
 ### 3.2 仅手机端快速上传（可选）
-仅当本次变更只涉及 `frontend/public/mobile-h5/**` 时使用：
+仅当本次变更只涉及手机端时使用（`frontend/mobile-h5-src/**` 与其同步产物 `frontend/public/mobile-h5/**`）。
+如果改了 `mobile-h5-src`，先完成 2.2 的构建、shim 校验与切换，再执行上传。
 ```bash
 KEY_OPTS="-i ~/.ssh/id_rsa_43_142_125_17"
 ssh $KEY_OPTS ubuntu@43.142.125.17 "mkdir -p /tmp/deploy && rm -rf /tmp/deploy/mobile-h5"
@@ -136,7 +152,7 @@ sudo find "$FRONT_DIR" -type f -exec chmod 644 {} +
 sudo chown -R www-data:www-data "$FRONT_DIR"
 ```
 ### 4.5 （可选）仅手机端快速发布（mobile-h5）
-仅当本次变更只涉及 `frontend/public/mobile-h5/**` 时使用：
+仅当本次变更只涉及手机端时使用（已完成 2.2 并同步 `frontend/public/mobile-h5`）：
 ```bash
 if [ -d "$FRONT_DIR/mobile-h5" ]; then
   sudo cp -a "$FRONT_DIR/mobile-h5" "$BACKUP_DIR/mobile-h5"
@@ -171,7 +187,13 @@ curl -I -m 8 -H "Host: biaoji.aleo1314.vip" "http://127.0.0.1/assets/$ASSET_JS"
 
 curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/prod-api/
 curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/
-curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/assets/result-page.js
+MOBILE_ASSET_JS=$(grep -oE '/mobile-h5/assets/index-[^"]+\.js' /www/wwwroot/frontend/mobile-h5/index.html | sed -n '1p' | sed 's#^/mobile-h5/assets/##')
+test -n "$MOBILE_ASSET_JS"
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" "http://127.0.0.1/mobile-h5/assets/$MOBILE_ASSET_JS"
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/batch/
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/profile/query-records.html
+curl -I -m 8 -H "Host: biaoji.aleo1314.vip" "http://127.0.0.1/mobile-h5/captcha/tdx.html?phone=13800138000"
+grep -o '<title>[^<]*</title>' /www/wwwroot/frontend/mobile-h5/index.html | sed -n '1p'
 ```
 
 ### 5.2 外网验收
@@ -179,7 +201,13 @@ curl -I -m 8 -H "Host: biaoji.aleo1314.vip" http://127.0.0.1/mobile-h5/assets/re
 curl -I -m 10 https://biaoji.aleo1314.vip/
 curl -I -m 10 https://biaoji.aleo1314.vip/prod-api/
 curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/
-curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/assets/result-page.js
+MOBILE_ASSET_JS=$(curl -fsSL https://biaoji.aleo1314.vip/mobile-h5/ | grep -oE '/mobile-h5/assets/index-[^"]+\.js' | sed -n '1p' | sed 's#^/mobile-h5/assets/##')
+test -n "$MOBILE_ASSET_JS"
+curl -I -m 10 "https://biaoji.aleo1314.vip/mobile-h5/assets/$MOBILE_ASSET_JS"
+curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/batch/
+curl -I -m 10 https://biaoji.aleo1314.vip/mobile-h5/profile/query-records.html
+curl -I -m 10 "https://biaoji.aleo1314.vip/mobile-h5/captcha/tdx.html?phone=13800138000"
+curl -fsSL https://biaoji.aleo1314.vip/mobile-h5/ | grep -o '<title>[^<]*</title>' | sed -n '1p'
 
 # 可选：外网首页实时提取正在引用的入口 JS 并校验（排查 CDN/缓存时很有用）
 ASSET_JS=$(curl -fsSL https://biaoji.aleo1314.vip/ | grep -oE '/assets/index-[^"]+\.js' | sed -n '1p')
@@ -207,27 +235,12 @@ sudo mysql -N -D verifynum -e "SELECT COUNT(*) AS admin_menu_count FROM sys_role
 - `/assets/index-*.js` 返回 `200` 且 `Content-Type` 为 `application/javascript`
 - `/prod-api/` 返回 `200`
 - `/mobile-h5/` 返回 `200`
-- `/mobile-h5/assets/result-page.js` 返回 `200` 且 `Content-Type` 为 `application/javascript`
+- `/mobile-h5/assets/index-*.js` 返回 `200` 且 `Content-Type` 为 `application/javascript`
+- `/mobile-h5/` 页面标题为 `标记查询`
 - `geek-admin` 服务状态为 `active (running)`
 
-## 6. 回滚流程（发布失败立即执行）
-```bash
-LAST_BACKUP=$(ls -dt /www/backup/deploy/* | sed -n '1p')
-
-sudo cp -f "$LAST_BACKUP/geek-admin.jar" /www/wwwroot/backend/geek-admin.jar
-sudo rm -rf /www/wwwroot/frontend/*
-sudo cp -a "$LAST_BACKUP/frontend/." /www/wwwroot/frontend/
-
-sudo find /www/wwwroot/frontend -type d -exec chmod 755 {} +
-sudo find /www/wwwroot/frontend -type f -exec chmod 644 {} +
-sudo chown -R www-data:www-data /www/wwwroot/frontend
-
-sudo systemctl restart geek-admin
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-## 7. 日常发布流程
-### 7.1 前后端都改了（常规）
+## 6. 日常发布流程
+### 6.1 前后端都改了（常规）
 1. 本地打包前端和后端。
 2. 上传前先清空 `/tmp/deploy` 旧包，再上传 `frontend-dist` 和 `geek-admin.jar`（见 3.1）。
 3. 上传后立即做结构校验：必须有 `frontend-dist/index.html`、`frontend-dist/assets`，且不能有 `frontend-dist/dist`。
@@ -235,44 +248,47 @@ sudo nginx -t && sudo systemctl reload nginx
 5. 替换后端并重启 `geek-admin`；如有 SQL 变更，执行迁移脚本。
 6. 按第 5 节做本机 + 外网验收（含按 `index.html` 提取真实入口 JS 校验）。
 
-### 7.2 仅手机端改了（快速）
-1. 确认变更仅在 `frontend/public/mobile-h5/**`。
-2. 上传 `mobile-h5` 到 `/tmp/deploy/mobile-h5`（见 3.2）。
-3. 服务器备份并替换 `/www/wwwroot/frontend/mobile-h5`（见 4.5）。
-4. 验收 `/mobile-h5/` 与 `/mobile-h5/assets/result-page.js`。
+### 6.2 仅手机端改了（快速）
+1. 确认变更仅在手机端范围：`frontend/mobile-h5-src/**`（及同步产物 `frontend/public/mobile-h5/**`）。
+2. 本地执行：`build:mobile-h5-src` → `check:mobile-h5-shims` → `cutover:mobile-h5-src`（见 2.2）。
+3. 上传 `mobile-h5` 到 `/tmp/deploy/mobile-h5`（见 3.2）。
+4. 服务器备份并替换 `/www/wwwroot/frontend/mobile-h5`（见 4.5）。
+5. 验收 `/mobile-h5/`、`/mobile-h5/batch/`、`/mobile-h5/profile/query-records.html`、`/mobile-h5/captcha/tdx.html?phone=...`、`/mobile-h5/assets/icons/tencent.png`、`/mobile-h5/assets/home-header-bg.png`，并确认页面标题为 `标记查询`。
 
-## 8. 常见问题快速判断
-### 8.1 页面 500 或 JS MIME 错误
+## 7. 常见问题快速判断
+### 7.1 页面 500 或 JS MIME 错误
 优先检查：
 - `location /` 的 root 是否仍为 `/www/wwwroot/frontend`
 - `frontend/assets` 权限是否目录 `755`、文件 `644`
 - 是否误把旧 hash 的前端文件引用到了新页面
 
-### 8.2 `/prod-api/` 不通
+### 7.2 `/prod-api/` 不通
 优先检查：
 - `sudo systemctl status geek-admin --no-pager`
 - `sudo journalctl -u geek-admin -n 200 --no-pager`
 - `/www/wwwroot/backend/application-data.yml` 的数据库连接是否正确
 
-### 8.3 Nginx 重载失败
+### 7.3 Nginx 重载失败
 ```bash
 sudo nginx -t
 ```
 按报错行修复 `biaoji.aleo1314.vip.conf` 后再 reload。
-### 8.4 admin 菜单突然变少
+### 7.4 admin 菜单突然变少
 优先检查 `sys_role_menu` 是否被误删或覆盖：
 ```bash
 sudo mysql -N -D verifynum -e "SELECT COUNT(*) AS admin_menu_count FROM sys_role_menu WHERE role_id=1;"
 ```
 如果数量异常偏少，先恢复最近备份里的 `sys_role_menu.sql`，再重新执行正确的迁移脚本。
 
-### 8.5 手机端页面 404 或未生效
+### 7.5 手机端页面 404 或未生效
 优先检查：
 - `/www/wwwroot/frontend/mobile-h5` 是否存在且权限正确（目录 `755`、文件 `644`）。
+- 若本次改了 `frontend/mobile-h5-src/**`，是否已执行 `build:mobile-h5-src`、`check:mobile-h5-shims`、`cutover:mobile-h5-src`。
 - 本次是否误用“快速发布”：若改动包含 `frontend/src/**`，必须走 3.1 常规整包发布。
-- `https://biaoji.aleo1314.vip/mobile-h5/assets/result-page.js` 是否返回 `200` 且 `Content-Type` 为 `application/javascript`。
+- 是否已从 `/mobile-h5/index.html` 提取当前 `index-*.js` 并确认返回 `200` 且 `Content-Type` 为 `application/javascript`。
+- `https://biaoji.aleo1314.vip/mobile-h5/` 的页面标题是否为 `标记查询`。
 
-### 8.6 前端已发布但页面仍是旧版（`frontend-dist/dist` 嵌套）
+### 7.6 前端已发布但页面仍是旧版（`frontend-dist/dist` 嵌套）
 典型现象：
 - 发布流程看起来成功，但页面仍是旧内容。
 - `/tmp/deploy/frontend-dist` 下存在异常嵌套（如 `dist/` 子目录），导致复制到了错误层级文件。
@@ -291,7 +307,7 @@ ssh $KEY_OPTS ubuntu@43.142.125.17 '
 ```
 然后重新执行 4.4 前端发布步骤与第 5 节验收步骤。
 
-### 8.7 `UNPROTECTED PRIVATE KEY FILE`（私钥权限过宽）
+### 7.7 `UNPROTECTED PRIVATE KEY FILE`（私钥权限过宽）
 典型报错：
 - `WARNING: UNPROTECTED PRIVATE KEY FILE!`
 - `Permissions for '...id_rsa_43_142_125_17' are too open`

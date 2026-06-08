@@ -1,0 +1,4 @@
+time=20260609_030137
+db=verifynum
+operator=ubuntu
+note=before deploy/code change
