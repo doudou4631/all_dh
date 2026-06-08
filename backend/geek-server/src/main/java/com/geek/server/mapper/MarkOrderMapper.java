@@ -13,6 +13,7 @@ public interface MarkOrderMapper {
     MarkOrder selectMarkOrderById(Long id);
 
     List<MarkOrder> selectMarkOrderList(MarkOrder markOrder);
+    List<MarkOrder> selectMyOrderItemList(MarkOrder markOrder);
 
     List<MarkOrder> selectAgentOrderList(@Param("query") MarkOrder markOrder,
                                          @Param("agentId") Long agentId,

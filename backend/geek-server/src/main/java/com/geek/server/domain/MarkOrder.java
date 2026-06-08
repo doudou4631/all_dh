@@ -30,6 +30,9 @@ public class MarkOrder extends BaseEntity {
     @Schema(title = "请求幂等号")
     private String requestNo;
 
+    @Schema(title = "综合搜索关键词")
+    private String keyword;
+
     @Schema(title = "下单用户ID")
     @Excel(name = "下单用户ID")
     private Long userId;
@@ -79,4 +82,7 @@ public class MarkOrder extends BaseEntity {
 
     @Schema(title = "号码预览")
     private String phonePreview;
+
+    @Schema(title = "下单用户名")
+    private String userName;
 }

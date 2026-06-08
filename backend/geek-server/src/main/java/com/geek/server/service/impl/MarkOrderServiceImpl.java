@@ -284,7 +284,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     public List<MarkOrder> selectMyOrderList(MarkOrder query) {
         MarkOrder orderQuery = query == null ? new MarkOrder() : query;
         orderQuery.setUserId(SecurityUtils.getUserId());
-        return markOrderMapper.selectMarkOrderList(orderQuery);
+        return markOrderMapper.selectMyOrderItemList(orderQuery);
     }
 
     @Override

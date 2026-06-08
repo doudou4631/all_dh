@@ -8,6 +8,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="id" column="id"/>
         <result property="orderNo" column="order_no"/>
         <result property="requestNo" column="request_no"/>
+        <result property="userName" column="user_name"/>
         <result property="userId" column="user_id"/>
         <result property="assignedAgentId" column="assigned_agent_id"/>
         <result property="platformCode" column="platform_code"/>
@@ -24,6 +25,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="updateBy" column="update_by"/>
         <result property="updateTime" column="update_time"/>
         <result property="remark" column="remark"/>
+        <result property="phonePreview" column="phone_preview"/>
     </resultMap>
 
     <sql id="selectMarkOrderVo">
@@ -31,6 +33,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.id,
             mo.order_no,
             mo.request_no,
+            su.user_name,
             mo.user_id,
             mo.assigned_agent_id,
             mo.platform_code,
@@ -46,8 +49,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.create_time,
             mo.update_by,
             mo.update_time,
-            mo.remark
+            mo.remark,
+            (
+                select moi.phone
+                from mark_order_item moi
+                where moi.order_id = mo.id
+                order by moi.id asc
+                limit 1
+            ) as phone_preview
         from mark_order mo
+        left join sys_user su on su.user_id = mo.user_id
     </sql>
 
     <select id="selectMarkOrderById" parameterType="Long" resultMap="MarkOrderResult">
@@ -60,6 +71,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <where>
             <if test="orderNo != null and orderNo != ''"> and mo.order_no like concat('%', #{orderNo}, '%')</if>
             <if test="requestNo != null and requestNo != ''"> and mo.request_no like concat('%', #{requestNo}, '%')</if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    mo.order_no like concat('%', #{keyword}, '%')
+                    or su.user_name like concat('%', #{keyword}, '%')
+                    or exists (
+                        select 1
+                        from mark_order_item moi
+                        where moi.order_id = mo.id
+                          and moi.phone like concat('%', #{keyword}, '%')
+                    )
+                )
+            </if>
             <if test="userId != null"> and mo.user_id = #{userId}</if>
             <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
             <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
@@ -81,11 +104,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by mo.create_time desc
     </select>
 
-    <select id="selectAgentOrderList" resultMap="MarkOrderResult">
+    <select id="selectMyOrderItemList" parameterType="MarkOrder" resultMap="MarkOrderResult">
         select
             mo.id,
             mo.order_no,
             mo.request_no,
+            su.user_name,
             mo.user_id,
             mo.assigned_agent_id,
             mo.platform_code,
@@ -101,7 +125,65 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.create_time,
             mo.update_by,
             mo.update_time,
-            mo.remark
+            mo.remark,
+            moi.phone as phone_preview
+        from mark_order mo
+        left join sys_user su on su.user_id = mo.user_id
+        inner join mark_order_item moi on moi.order_id = mo.id
+        <where>
+            <if test="orderNo != null and orderNo != ''"> and mo.order_no like concat('%', #{orderNo}, '%')</if>
+            <if test="requestNo != null and requestNo != ''"> and mo.request_no like concat('%', #{requestNo}, '%')</if>
+            <if test="keyword != null and keyword != ''">
+                and (
+                    mo.order_no like concat('%', #{keyword}, '%')
+                    or su.user_name like concat('%', #{keyword}, '%')
+                    or moi.phone like concat('%', #{keyword}, '%')
+                )
+            </if>
+            <if test="userId != null"> and mo.user_id = #{userId}</if>
+            <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
+            <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
+            <if test="orderStatus != null and orderStatus != ''"> and mo.order_status = #{orderStatus}</if>
+            <if test="phone != null and phone != ''"> and moi.phone like concat('%', #{phone}, '%')</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and mo.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and mo.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mo.create_time desc, moi.id asc
+    </select>
+
+    <select id="selectAgentOrderList" resultMap="MarkOrderResult">
+        select
+            mo.id,
+            mo.order_no,
+            mo.request_no,
+            su.user_name,
+            mo.user_id,
+            mo.assigned_agent_id,
+            mo.platform_code,
+            mo.platform_name,
+            mo.total_count,
+            mo.success_count,
+            mo.failed_count,
+            mo.total_amount,
+            mo.refund_amount,
+            mo.order_status,
+            mo.completed_time,
+            mo.create_by,
+            mo.create_time,
+            mo.update_by,
+            mo.update_time,
+            mo.remark,
+            (
+                select moi.phone
+                from mark_order_item moi
+                where moi.order_id = mo.id
+                order by moi.id asc
+                limit 1
+            ) as phone_preview
         from mark_order mo
         left join sys_user su on su.user_id = mo.user_id
         <where>
@@ -113,6 +195,18 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="query != null and query.requestNo != null and query.requestNo != ''">
                 and mo.request_no like concat('%', #{query.requestNo}, '%')
+            </if>
+            <if test="query != null and query.keyword != null and query.keyword != ''">
+                and (
+                    mo.order_no like concat('%', #{query.keyword}, '%')
+                    or su.user_name like concat('%', #{query.keyword}, '%')
+                    or exists (
+                        select 1
+                        from mark_order_item moi
+                        where moi.order_id = mo.id
+                          and moi.phone like concat('%', #{query.keyword}, '%')
+                    )
+                )
             </if>
             <if test="query != null and query.userId != null">
                 and mo.user_id = #{query.userId}
