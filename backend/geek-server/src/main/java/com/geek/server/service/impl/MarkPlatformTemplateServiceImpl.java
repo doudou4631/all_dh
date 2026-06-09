@@ -12,6 +12,7 @@ import com.geek.server.service.IMarkPlatformTemplateService;
 import com.mybatisflex.core.query.QueryChain;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -115,6 +116,9 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
         if (ownerUserId == null) {
             throw new ServiceException("无法识别模板归属人");
         }
+        String templateName = normalizeTemplateName(markPlatformTemplate.getTemplateName());
+        markPlatformTemplate.setTemplateName(templateName);
+        checkTemplateNameUnique(ownerUserId, templateName, null);
         markPlatformTemplate.setStatus(StringUtils.defaultIfBlank(markPlatformTemplate.getStatus(), "0"));
         markPlatformTemplate.setOwnerUserId(ownerUserId);
         String requestedDefault = StringUtils.defaultIfBlank(markPlatformTemplate.getIsDefault(), "0");
@@ -122,7 +126,12 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
         markPlatformTemplate.setIsDefault("1".equals(requestedDefault) || ownerDefault == null ? "1" : "0");
         markPlatformTemplate.setCreateBy(SecurityUtils.getUsername());
         markPlatformTemplate.setCreateTime(DateUtils.getNowDate());
-        int rows = markPlatformTemplateMapper.insertMarkPlatformTemplate(markPlatformTemplate);
+        int rows;
+        try {
+            rows = markPlatformTemplateMapper.insertMarkPlatformTemplate(markPlatformTemplate);
+        } catch (DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
         if (rows > 0 && "1".equals(markPlatformTemplate.getIsDefault())) {
             markPlatformTemplateMapper.clearOwnerDefaultTemplate(ownerUserId, markPlatformTemplate.getId());
         }
@@ -141,13 +150,23 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
         }
         assertTemplateAccessible(stored);
         Long ownerUserId = stored.getOwnerUserId();
+        String templateName = markPlatformTemplate.getTemplateName() == null
+                ? stored.getTemplateName()
+                : normalizeTemplateName(markPlatformTemplate.getTemplateName());
+        markPlatformTemplate.setTemplateName(templateName);
+        checkTemplateNameUnique(ownerUserId, templateName, markPlatformTemplate.getId());
         markPlatformTemplate.setOwnerUserId(ownerUserId);
         markPlatformTemplate.setIsDefault(normalizeDefaultFlag(
                 StringUtils.defaultIfBlank(markPlatformTemplate.getIsDefault(), stored.getIsDefault())
         ));
         markPlatformTemplate.setUpdateBy(SecurityUtils.getUsername());
         markPlatformTemplate.setUpdateTime(DateUtils.getNowDate());
-        int rows = markPlatformTemplateMapper.updateMarkPlatformTemplate(markPlatformTemplate);
+        int rows;
+        try {
+            rows = markPlatformTemplateMapper.updateMarkPlatformTemplate(markPlatformTemplate);
+        } catch (DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
         if (rows > 0 && "1".equals(markPlatformTemplate.getIsDefault())) {
             markPlatformTemplateMapper.clearOwnerDefaultTemplate(ownerUserId, markPlatformTemplate.getId());
         }
@@ -167,6 +186,11 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
                 continue;
             }
             assertTemplateAccessible(stored);
+            long bindingCount = markPlatformTemplateMapper.countActiveUserBindingsByTemplateId(id);
+            if (bindingCount > 0) {
+                String templateName = StringUtils.defaultIfBlank(stored.getTemplateName(), String.valueOf(id));
+                throw new ServiceException("模板【" + templateName + "】已绑定" + bindingCount + "个用户，请先迁移用户模板后再删除");
+            }
             if (stored.getOwnerUserId() != null) {
                 affectedOwnerIds.add(stored.getOwnerUserId());
             }
@@ -293,6 +317,49 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
             }
         }
         return null;
+    }
+
+    private String normalizeTemplateName(String templateName) {
+        String normalized = StringUtils.trimToEmpty(templateName);
+        if (StringUtils.isBlank(normalized)) {
+            throw new ServiceException("模板名称不能为空");
+        }
+        return normalized;
+    }
+
+    private void checkTemplateNameUnique(Long ownerUserId, String templateName, Long currentId) {
+        if (ownerUserId == null) {
+            throw new ServiceException("模板归属用户不能为空");
+        }
+        MarkPlatformTemplate same = markPlatformTemplateMapper
+                .selectMarkPlatformTemplateByOwnerAndName(ownerUserId, templateName);
+        if (same == null) {
+            return;
+        }
+        if (currentId == null || !same.getId().equals(currentId)) {
+            throw new ServiceException("模板名称已存在");
+        }
+    }
+
+    private RuntimeException convertPersistenceException(RuntimeException exception) {
+        if (isDuplicateTemplateNameException(exception)) {
+            return new ServiceException("模板名称已存在");
+        }
+        return exception;
+    }
+
+    private boolean isDuplicateTemplateNameException(Throwable throwable) {
+        if (throwable == null) {
+            return false;
+        }
+        String message = StringUtils.defaultString(throwable.getMessage());
+        if (StringUtils.containsIgnoreCase(message, "uk_mark_platform_template_owner_name")
+                || StringUtils.containsIgnoreCase(message, "uk_mark_platform_template_name")
+                || (StringUtils.containsIgnoreCase(message, "duplicate entry")
+                    && StringUtils.containsIgnoreCase(message, "mark_platform_template"))) {
+            return true;
+        }
+        return isDuplicateTemplateNameException(throwable.getCause());
     }
     private String normalizeDefaultFlag(String value) {
         return "1".equals(StringUtils.trimToEmpty(value)) ? "1" : "0";

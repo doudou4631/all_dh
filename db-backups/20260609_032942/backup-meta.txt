@@ -1,0 +1,4 @@
+time=20260609_032942
+db=verifynum
+operator=ubuntu
+note=before deploy/full backup

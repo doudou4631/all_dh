@@ -11,6 +11,8 @@ import java.util.List;
 public interface MarkPlatformTemplateMapper {
 
     MarkPlatformTemplate selectMarkPlatformTemplateById(Long id);
+    MarkPlatformTemplate selectMarkPlatformTemplateByOwnerAndName(@Param("ownerUserId") Long ownerUserId,
+                                                                  @Param("templateName") String templateName);
     MarkPlatformTemplate selectOwnerDefaultTemplate(@Param("ownerUserId") Long ownerUserId);
 
     List<MarkPlatformTemplate> selectMarkPlatformTemplateList(MarkPlatformTemplate markPlatformTemplate);
@@ -19,6 +21,7 @@ public interface MarkPlatformTemplateMapper {
 
     int updateMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate);
     int clearOwnerDefaultTemplate(@Param("ownerUserId") Long ownerUserId, @Param("excludeId") Long excludeId);
+    long countActiveUserBindingsByTemplateId(@Param("templateId") Long templateId);
 
     int deleteMarkPlatformTemplateByIds(Long[] ids);
 }

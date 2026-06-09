@@ -89,6 +89,9 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 .like(SysUser::getPhonenumber, user.getPhonenumber())
                 .ge(SysUser::getCreateTime, user.getParams().get("beginTime"))
                 .le(SysUser::getCreateTime, user.getParams().get("endTime"));
+        if (StringUtils.isNotBlank(user.getCreateBy())) {
+            queryChain.eq(SysUser::getCreateBy, user.getCreateBy());
+        }
         if (user.getDeptId() != null) {
             queryChain.and(SYS_DEPT.DEPT_ID.eq(user.getDeptId())
                     .or(SYS_USER.DEPT_ID.in(QueryWrapper.create().from(SYS_DEPT)
@@ -96,7 +99,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                             .where(SqlUtil.findInSet(user.getDeptId().toString(), "ancestors")))));
         }
         if (StringUtils.isNotBlank(user.getRoleKey())) {
-            List<Long> scopedUserIds = selectUserIdsByRoleKey(user.getRoleKey());
+            List<Long> scopedUserIds = selectUserIdsByRoleKeys(user.getRoleKey());
             if (CollectionUtils.isEmpty(scopedUserIds)) {
                 queryChain.eq(SysUser::getUserId, -1L);
             } else {
@@ -104,7 +107,7 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
             }
         }
         if (StringUtils.isNotBlank(user.getExcludeRoleKey())) {
-            List<Long> excludedUserIds = selectUserIdsByRoleKey(user.getExcludeRoleKey());
+            List<Long> excludedUserIds = selectUserIdsByRoleKeys(user.getExcludeRoleKey());
             if (!CollectionUtils.isEmpty(excludedUserIds)) {
                 queryChain.notIn(SysUser::getUserId, excludedUserIds);
             }
@@ -118,11 +121,15 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         return queryChain;
     }
 
-    private List<Long> selectUserIdsByRoleKey(String roleKey) {
+    private List<Long> selectUserIdsByRoleKeys(String roleKeys) {
+        List<String> roleKeyList = StringUtils.str2List(roleKeys, ",", true, true);
+        if (CollectionUtils.isEmpty(roleKeyList)) {
+            return List.of();
+        }
         return QueryChain.of(SysUserRole.class)
                 .leftJoin(SysRole.class)
                 .on(SysUserRole::getRoleId, SysRole::getRoleId)
-                .eq(SysRole::getRoleKey, roleKey)
+                .in(SysRole::getRoleKey, roleKeyList)
                 .list()
                 .stream()
                 .map(SysUserRole::getUserId)

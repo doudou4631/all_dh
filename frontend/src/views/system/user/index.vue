@@ -100,7 +100,7 @@
                         <span>{{ parseTime(scope.row.createTime) }}</span>
                      </template>
                   </el-table-column>
-                  <el-table-column label="操作" align="center" width="500" class-name="small-padding fixed-width"
+                  <el-table-column label="操作" align="center" width="620" class-name="small-padding fixed-width"
                      fixed="right">
 
                      <template #default="scope">
@@ -129,6 +129,9 @@
                         <el-button type="danger" @click="handleDeductPoints(scope.row)"
                            v-hasPermi="['server:pointRecord:add']"
                            v-if="Number(scope.row.userId) !== 1" round>扣减</el-button>
+                        <el-button type="info" @click="handleToggleOwnedAccounts(scope.row)"
+                           v-if="isAgentAccountPage && Number(scope.row.userId) !== 1"
+                           round>{{ isCurrentOwner(scope.row) ? '收起名下账户' : '查看名下账户' }}</el-button>
                         <el-button type="primary" @click="handleBindService(scope.row)"
                            v-hasPermi="['system:user:edit']"
                            v-if="Number(scope.row.userId) !== 1 && !isAgent" round>绑定服务</el-button>
@@ -137,6 +140,40 @@
                </el-table>
                <pagination v-show="total > 0" :total="total" v-model:page="queryParams.pageNum"
                   v-model:limit="queryParams.pageSize" @pagination="getList" />
+            </el-card>
+
+            <el-card shadow="never" class="mt10" v-if="isAgentAccountPage && ownedAccountPanelVisible">
+               <template #header>
+                  <div class="owned-account-header">
+                     <span>{{ ownedAccountPanelTitle }}</span>
+                     <el-button link type="primary" @click="closeOwnedAccountPanel">收起</el-button>
+                  </div>
+               </template>
+               <el-table v-loading="ownedAccountLoading" :data="ownedAccountList">
+                  <el-table-column label="用户编号" align="center" prop="userId" width="120" />
+                  <el-table-column label="用户名称" align="center" prop="userName" :show-overflow-tooltip="true" width="120" />
+                  <el-table-column label="用户昵称" align="center" prop="nickName" :show-overflow-tooltip="true" width="120" />
+                  <el-table-column label="角色" align="center" width="100">
+                     <template #default>
+                        <el-tag type="success">标记下单</el-tag>
+                     </template>
+                  </el-table-column>
+                  <el-table-column label="手机号码" align="center" prop="phonenumber" width="120" />
+                  <el-table-column label="状态" align="center" width="100">
+                     <template #default="scope">
+                        <el-tag :type="scope.row.status === '0' ? 'success' : 'danger'">
+                           {{ scope.row.status === '0' ? '启用' : '停用' }}
+                        </el-tag>
+                     </template>
+                  </el-table-column>
+                  <el-table-column label="创建时间" align="center" prop="createTime">
+                     <template #default="scope">
+                        <span>{{ parseTime(scope.row.createTime) }}</span>
+                     </template>
+                  </el-table-column>
+               </el-table>
+               <pagination v-show="ownedAccountTotal > 0" :total="ownedAccountTotal" v-model:page="ownedAccountQuery.pageNum"
+                  v-model:limit="ownedAccountQuery.pageSize" @pagination="loadOwnedAccounts" />
             </el-card>
          </el-col>
       </el-row>
@@ -384,6 +421,8 @@ const isAgent = computed(() => {
 });
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
 const useAgentQuotaAdjust = computed(() => isAgentAccountPage.value);
+const AGENT_ROLE_KEYS = ["agent", "mark_agent"];
+const DOWNSTREAM_ROLE_KEYS = ["user", "mark_user"];
 
 const userList = ref([]);
 const open = ref(false);
@@ -400,6 +439,22 @@ const deptOptions = ref(undefined);
 const initPassword = ref(undefined);
 const postOptions = ref([]);
 const roleOptions = ref([]);
+const ownedAccountPanelVisible = ref(false);
+const ownedAccountLoading = ref(false);
+const ownedAccountList = ref([]);
+const ownedAccountTotal = ref(0);
+const selectedAgentOwner = ref(null);
+const ownedAccountQuery = reactive({
+   pageNum: 1,
+   pageSize: 10
+});
+const ownedAccountPanelTitle = computed(() => {
+   if (!selectedAgentOwner.value) {
+      return "名下标记下单账户";
+   }
+   const ownerName = selectedAgentOwner.value.nickName || selectedAgentOwner.value.userName;
+   return `${ownerName}（${selectedAgentOwner.value.userName}）名下标记下单账户（${ownedAccountTotal.value}）`;
+});
 
 // 服务绑定相关状态
 const serviceDialog = reactive({
@@ -634,37 +689,95 @@ function applyAccountScope() {
    queryParams.value.roleKey = undefined;
    queryParams.value.excludeRoleKey = "agent";
 }
-
-async function loadAgentAccountUsers() {
-   const scopeParams = proxy.addDateRange({
-      ...queryParams.value,
+function buildScopedListParams(extra = {}) {
+   return proxy.addDateRange({
+      ...extra,
       pageNum: 1,
       pageSize: 5000,
       roleKey: undefined,
       excludeRoleKey: undefined
    }, dateRange.value);
-   const [markUserRes, markUserV2Res, markAgentRes, markAgentV2Res] = await Promise.all([
-      listUser({ ...scopeParams, roleKey: "user" }),
-      listUser({ ...scopeParams, roleKey: "mark_user" }),
-      listUser({ ...scopeParams, roleKey: "agent" }),
-      listUser({ ...scopeParams, roleKey: "mark_agent" })
-   ]);
+}
+
+async function loadUsersByRoleKeys(roleKeys, baseParams = {}) {
+   const scopeParams = buildScopedListParams(baseParams);
+   const responses = await Promise.all(roleKeys.map(roleKey => listUser({ ...scopeParams, roleKey })));
    const mergedMap = new Map();
-   [
-      ...(markUserRes?.rows || []),
-      ...(markUserV2Res?.rows || []),
-      ...(markAgentRes?.rows || []),
-      ...(markAgentV2Res?.rows || [])
-   ].forEach(item => {
-      if (item && item.userId !== undefined && item.userId !== null) {
-         mergedMap.set(item.userId, item);
-      }
+   responses.forEach(res => {
+      (res?.rows || []).forEach(item => {
+         if (item && item.userId !== undefined && item.userId !== null) {
+            mergedMap.set(item.userId, item);
+         }
+      });
    });
-   const mergedRows = Array.from(mergedMap.values()).sort((a, b) => Number(a.userId) - Number(b.userId));
+   return Array.from(mergedMap.values()).sort((a, b) => Number(a.userId) - Number(b.userId));
+}
+
+async function loadAgentAccountUsers() {
+   const mergedRows = await loadUsersByRoleKeys(AGENT_ROLE_KEYS, { ...queryParams.value });
    total.value = mergedRows.length;
    const start = (queryParams.value.pageNum - 1) * queryParams.value.pageSize;
    const end = start + queryParams.value.pageSize;
    userList.value = mergedRows.slice(start, end);
+}
+
+function closeOwnedAccountPanel() {
+   ownedAccountPanelVisible.value = false;
+   selectedAgentOwner.value = null;
+   ownedAccountList.value = [];
+   ownedAccountTotal.value = 0;
+   ownedAccountQuery.pageNum = 1;
+}
+
+function isCurrentOwner(row) {
+   return Boolean(
+      ownedAccountPanelVisible.value &&
+      selectedAgentOwner.value &&
+      row &&
+      Number(selectedAgentOwner.value.userId) === Number(row.userId)
+   );
+}
+
+async function loadOwnedAccounts() {
+   if (!selectedAgentOwner.value?.userName) {
+      ownedAccountList.value = [];
+      ownedAccountTotal.value = 0;
+      return;
+   }
+   ownedAccountLoading.value = true;
+   try {
+      const mergedRows = await loadUsersByRoleKeys(DOWNSTREAM_ROLE_KEYS, {
+         createBy: selectedAgentOwner.value.userName
+      });
+      ownedAccountTotal.value = mergedRows.length;
+      const start = (ownedAccountQuery.pageNum - 1) * ownedAccountQuery.pageSize;
+      const end = start + ownedAccountQuery.pageSize;
+      ownedAccountList.value = mergedRows.slice(start, end);
+   } catch (error) {
+      ownedAccountList.value = [];
+      ownedAccountTotal.value = 0;
+      proxy.$modal.msgError("加载名下账户失败");
+   } finally {
+      ownedAccountLoading.value = false;
+   }
+}
+
+function handleToggleOwnedAccounts(row) {
+   if (!row || row.userId === undefined || row.userId === null) {
+      return;
+   }
+   if (isCurrentOwner(row)) {
+      closeOwnedAccountPanel();
+      return;
+   }
+   selectedAgentOwner.value = {
+      userId: row.userId,
+      userName: row.userName,
+      nickName: row.nickName
+   };
+   ownedAccountQuery.pageNum = 1;
+   ownedAccountPanelVisible.value = true;
+   loadOwnedAccounts();
 }
 
 function getDefaultAgentDownstreamRoleIds() {
@@ -738,6 +851,9 @@ function handleNodeClick(data) {
 /** 搜索按钮操作 */
 function handleQuery() {
    queryParams.value.pageNum = 1;
+   if (isAgentAccountPage.value) {
+      closeOwnedAccountPanel();
+   }
    getList();
 };
 /** 重置按钮操作 */
@@ -746,6 +862,9 @@ function resetQuery() {
    proxy.resetForm("queryRef");
    queryParams.value.deptId = undefined;
    proxy.$refs.tree.setCurrentKey(null);
+   if (isAgentAccountPage.value) {
+      closeOwnedAccountPanel();
+   }
    handleQuery();
 };
 /** 删除按钮操作 */
@@ -760,9 +879,19 @@ function handleDelete(row) {
 };
 /** 导出按钮操作 */
 function handleExport() {
-   applyAccountScope();
+   let exportParams = { ...queryParams.value };
+   if (isAgentAccountPage.value) {
+      exportParams = {
+         ...exportParams,
+         roleKey: AGENT_ROLE_KEYS.join(","),
+         excludeRoleKey: undefined
+      };
+   } else {
+      applyAccountScope();
+      exportParams = { ...queryParams.value };
+   }
    proxy.download("system/user/export", {
-      ...queryParams.value,
+      ...exportParams,
    }, `user_${new Date().getTime()}.xlsx`);
 };
 /** 用户状态修改  */
@@ -1198,5 +1327,11 @@ getList();
    font-size: 14px;
    height: 28px;
    line-height: 1;
+}
+
+.owned-account-header {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
 }
 </style>

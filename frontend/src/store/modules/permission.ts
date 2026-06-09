@@ -66,16 +66,78 @@ function getPlatformCodeFromRoute(route: RouteItem): string {
   const query = parseRouteQuery(route.query)
   return String(query?.platformCode || '').trim()
 }
+function normalizeRouteSegment(rawCode: string): string {
+  return String(rawCode || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^[-_]+|[-_]+$/g, '')
+}
 
-function buildMarkUserPath(index: number, fallbackPath = 'markUser'): string {
-  if (index === 0 && fallbackPath) return String(fallbackPath)
-  return `markUser${index + 1}`
+function buildStableMarkUserPath(platformCode: string, fallbackPath = 'markUser'): string {
+  const safeCode = normalizeRouteSegment(platformCode)
+  if (!safeCode) return String(fallbackPath || 'markUser')
+  return `markUser-${safeCode}`
 }
 function buildMarkUserQuery(platform: MarkPlatformOption): string {
   return JSON.stringify({
     platformCode: platform.platformCode,
     platformName: platform.platformName
   })
+}
+function buildMarkUserRedirect(path: string, platform: MarkPlatformOption) {
+  const targetPath = String(path || '').trim() || buildStableMarkUserPath(platform.platformCode)
+  return (to: any) => {
+    const currentPath = String(to?.path || '')
+    const slashIndex = currentPath.lastIndexOf('/')
+    const parentPath = slashIndex >= 0 ? currentPath.slice(0, slashIndex + 1) : '/'
+    const sourceQuery = to?.query && typeof to.query === 'object'
+      ? to.query as Record<string, any>
+      : {}
+    return {
+      path: `${parentPath}${targetPath}`,
+      query: {
+        ...sourceQuery,
+        platformCode: platform.platformCode,
+        platformName: platform.platformName
+      },
+      replace: true
+    }
+  }
+}
+
+function buildMarkUserLegacyRoutes(
+  baseRoute: RouteItem,
+  fallbackPlatform: MarkPlatformOption,
+  redirectPath: string
+): RouteItem[] {
+  if (!fallbackPlatform) return []
+  const fallbackQuery = buildMarkUserQuery(fallbackPlatform)
+  const redirect = buildMarkUserRedirect(redirectPath, fallbackPlatform)
+  const baseName = typeof baseRoute.name === 'string' && baseRoute.name.length > 0 ? baseRoute.name : 'markUser'
+  const numericLegacyRoute = deepClone(baseRoute)
+  numericLegacyRoute.path = 'markUser:legacy(\\d+)'
+  numericLegacyRoute.hidden = true
+  numericLegacyRoute.redirect = redirect as any
+  numericLegacyRoute.query = fallbackQuery
+  numericLegacyRoute.meta = {
+    ...(numericLegacyRoute.meta || {}),
+    title: fallbackPlatform.platformName
+  }
+  numericLegacyRoute.name = `${baseName}__legacy_numeric`
+
+  const codeLegacyRoute = deepClone(baseRoute)
+  codeLegacyRoute.path = 'markUser-:legacyCode([A-Za-z0-9_-]+)'
+  codeLegacyRoute.hidden = true
+  codeLegacyRoute.redirect = redirect as any
+  codeLegacyRoute.query = fallbackQuery
+  codeLegacyRoute.meta = {
+    ...(codeLegacyRoute.meta || {}),
+    title: fallbackPlatform.platformName
+  }
+  codeLegacyRoute.name = `${baseName}__legacy_code`
+  return [numericLegacyRoute, codeLegacyRoute]
 }
 
 function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatformOption[]): RouteItem[] {
@@ -89,26 +151,27 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
   }
   const baseRoute = markChildren[0]
   const existingByCode = new Map<string, RouteItem>()
-  const existingPaths = new Set<string>()
+  const reservedPaths = new Set<string>()
+  children.forEach(item => {
+    if (!isMarkUserPlatformRoute(item) && item.path) reservedPaths.add(String(item.path))
+  })
   markChildren.forEach(item => {
     const code = getPlatformCodeFromRoute(item)
     if (code) existingByCode.set(code, item)
-    if (item.path) existingPaths.add(String(item.path))
   })
 
-  const rewrittenMarkChildren: RouteItem[] = platformList.map((platform, index) => {
+  const rewrittenMarkChildren: RouteItem[] = platformList.map((platform) => {
     const source = existingByCode.get(platform.platformCode) || baseRoute
-    const existing = existingByCode.get(platform.platformCode)
     const cloned = deepClone(source)
     const pathFallback = typeof source.path === 'string' && source.path ? source.path : 'markUser'
-    const basePath = buildMarkUserPath(index, pathFallback)
-    let newPath = existing?.path || basePath
+    const basePath = buildStableMarkUserPath(platform.platformCode, pathFallback)
+    let newPath = basePath
     let suffix = 1
-    while (existingPaths.has(String(newPath)) && !existing) {
+    while (reservedPaths.has(String(newPath))) {
       newPath = `${basePath}-${suffix}`
       suffix += 1
     }
-    existingPaths.add(String(newPath))
+    reservedPaths.add(String(newPath))
     cloned.path = String(newPath)
     cloned.query = buildMarkUserQuery(platform)
     cloned.meta = {
@@ -122,18 +185,29 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
       .map(item => String(item.path || '').trim())
       .filter(path => path.length > 0)
   )
+  const rewrittenPathByCode = new Map<string, string>()
+  rewrittenMarkChildren.forEach(item => {
+    const code = getPlatformCodeFromRoute(item)
+    const path = String(item.path || '').trim()
+    if (code && path) rewrittenPathByCode.set(code, path)
+  })
   const fallbackPlatform = platformList[0]
+  const fallbackTargetPath = String(rewrittenMarkChildren[0]?.path || '').trim()
   const fallbackRoutes: RouteItem[] = []
   if (fallbackPlatform) {
     markChildren.forEach((item, index) => {
       const itemPath = String(item.path || '').trim()
       if (!itemPath || rewrittenPathSet.has(itemPath)) return
+      const itemPlatformCode = getPlatformCodeFromRoute(item)
+      const targetPlatform = platformList.find(p => p.platformCode === itemPlatformCode) || fallbackPlatform
+      const targetPath = (itemPlatformCode && rewrittenPathByCode.get(itemPlatformCode)) || fallbackTargetPath
       const fallbackRoute = deepClone(item)
       fallbackRoute.hidden = true
-      fallbackRoute.query = buildMarkUserQuery(fallbackPlatform)
+      fallbackRoute.redirect = buildMarkUserRedirect(targetPath, targetPlatform) as any
+      fallbackRoute.query = buildMarkUserQuery(targetPlatform)
       fallbackRoute.meta = {
         ...(fallbackRoute.meta || {}),
-        title: fallbackPlatform.platformName
+        title: targetPlatform.platformName
       }
       if (typeof fallbackRoute.name === 'string' && fallbackRoute.name.length > 0) {
         fallbackRoute.name = `${fallbackRoute.name}__fallback`
@@ -143,6 +217,9 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
       fallbackRoutes.push(fallbackRoute)
     })
   }
+  const legacyRoutes = fallbackPlatform
+    ? buildMarkUserLegacyRoutes(baseRoute, fallbackPlatform, fallbackTargetPath)
+    : []
 
   const rewrittenChildren: RouteItem[] = []
   let injected = false
@@ -151,6 +228,7 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
       if (!injected) {
         rewrittenChildren.push(...rewrittenMarkChildren)
         rewrittenChildren.push(...fallbackRoutes)
+        rewrittenChildren.push(...legacyRoutes)
         injected = true
       }
       return
