@@ -118,6 +118,11 @@ export function getProfileToken() {
 export function isRegisteredUser() {
   return !!getProfileToken()
 }
+function ensureRegisteredUserForTeddySms() {
+  if (!isRegisteredUser()) {
+    throw new Error('请先登录注册用户后再使用短信处理')
+  }
+}
 
 function isTeddyPlatformName(name) {
   return trim(name).indexOf('泰迪') >= 0
@@ -367,6 +372,7 @@ export function isTeddyGetCodeSuccess(result) {
 }
 
 export async function getTeddyVerifyCode(phone, teddyProtocolBase) {
+  ensureRegisteredUserForTeddySms()
   const targetPhone = trim(phone)
   if (!targetPhone) {
     throw new Error('未提供手机号')
@@ -387,6 +393,7 @@ export async function getTeddyVerifyCode(phone, teddyProtocolBase) {
 }
 
 export async function verifyTeddyCode(phone, verifyCode, teddyProtocolBase) {
+  ensureRegisteredUserForTeddySms()
   const targetPhone = trim(phone)
   const targetCode = trim(verifyCode)
   if (!targetPhone || !targetCode) {
@@ -400,18 +407,33 @@ export async function verifyTeddyCode(phone, verifyCode, teddyProtocolBase) {
       verifyCode: targetCode
     })
   )
-
-  const done = Number(response?.code) === 0
+  const data = response?.data
+  const checkResultRaw =
+    data?.checkResult ??
+    data?.check_result ??
+    data?.verifyResult ??
+    data?.verify_result ??
+    data?.status
+  const checkResultText = trim(checkResultRaw)
+  const checkResultNum = checkResultText === '' ? Number.NaN : Number(checkResultText)
+  const doneByCheckResult = Number.isFinite(checkResultNum) && checkResultNum === 0
+  const doneByBooleanFlag = data?.verified === true || data?.success === true
+  const doneByStringStatus =
+    checkResultText.toLowerCase() === 'success' ||
+    checkResultText.toLowerCase() === 'done'
+  const done = doneByCheckResult || doneByBooleanFlag || doneByStringStatus
+  const normalizedCheckResult = Number.isFinite(checkResultNum) ? checkResultNum : (done ? 0 : 1)
   return {
     done,
-    checkResult: done ? 0 : 1,
+    checkResult: normalizedCheckResult,
     captcha: done ? 'protocol-ok' : '',
     msg: trim(response?.msg) || (done ? '校验成功' : '校验中'),
-    raw: response?.data || null
+    raw: data || null
   }
 }
 
 export async function submitTeddyVerification() {
+  ensureRegisteredUserForTeddySms()
   return {
     code: 0,
     msg: '已按协议提交，请稍后查看处理结果'

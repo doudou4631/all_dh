@@ -130,7 +130,7 @@
                            v-hasPermi="['server:pointRecord:add']"
                            v-if="Number(scope.row.userId) !== 1" round>扣减</el-button>
                         <el-button type="info" @click="handleToggleOwnedAccounts(scope.row)"
-                           v-if="isAgentAccountPage && Number(scope.row.userId) !== 1"
+                           v-if="isSuperAdminAgentAccountPage && Number(scope.row.userId) !== 1"
                            round>{{ isCurrentOwner(scope.row) ? '收起名下账户' : '查看名下账户' }}</el-button>
                         <el-button type="primary" @click="handleBindService(scope.row)"
                            v-hasPermi="['system:user:edit']"
@@ -142,7 +142,7 @@
                   v-model:limit="queryParams.pageSize" @pagination="getList" />
             </el-card>
 
-            <el-card shadow="never" class="mt10" v-if="isAgentAccountPage && ownedAccountPanelVisible">
+            <el-card shadow="never" class="mt10" v-if="isSuperAdminAgentAccountPage && ownedAccountPanelVisible">
                <template #header>
                   <div class="owned-account-header">
                      <span>{{ ownedAccountPanelTitle }}</span>
@@ -415,11 +415,11 @@ const { proxy } = getCurrentInstance();
 const userStore = useUserStore();
 const { sys_normal_disable, sys_user_sex } = proxy.useDict("sys_normal_disable", "sys_user_sex");
 const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
-const isAgent = computed(() => {
-   const roleSet = new Set(Array.isArray(userStore.roles) ? userStore.roles : []);
-   return roleSet.has('agent') || roleSet.has('mark_agent');
-});
+const roleSet = computed(() => new Set(Array.isArray(userStore.roles) ? userStore.roles : []));
+const isAgent = computed(() => roleSet.value.has('agent') || roleSet.value.has('mark_agent'));
+const isSuperAdmin = computed(() => roleSet.value.has('admin'));
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
+const isSuperAdminAgentAccountPage = computed(() => isAgentAccountPage.value && isSuperAdmin.value);
 const useAgentQuotaAdjust = computed(() => isAgentAccountPage.value);
 const AGENT_ROLE_KEYS = ["agent", "mark_agent"];
 const DOWNSTREAM_ROLE_KEYS = ["user", "mark_user"];
@@ -824,7 +824,7 @@ function getDeptTree() {
 /** 查询用户列表 */
 function getList() {
    loading.value = true;
-   if (isAgentAccountPage.value) {
+   if (isSuperAdminAgentAccountPage.value) {
       loadAgentAccountUsers()
          .catch(() => {
             userList.value = [];
@@ -851,7 +851,7 @@ function handleNodeClick(data) {
 /** 搜索按钮操作 */
 function handleQuery() {
    queryParams.value.pageNum = 1;
-   if (isAgentAccountPage.value) {
+   if (isSuperAdminAgentAccountPage.value) {
       closeOwnedAccountPanel();
    }
    getList();
@@ -862,7 +862,7 @@ function resetQuery() {
    proxy.resetForm("queryRef");
    queryParams.value.deptId = undefined;
    proxy.$refs.tree.setCurrentKey(null);
-   if (isAgentAccountPage.value) {
+   if (isSuperAdminAgentAccountPage.value) {
       closeOwnedAccountPanel();
    }
    handleQuery();
@@ -880,7 +880,7 @@ function handleDelete(row) {
 /** 导出按钮操作 */
 function handleExport() {
    let exportParams = { ...queryParams.value };
-   if (isAgentAccountPage.value) {
+   if (isSuperAdminAgentAccountPage.value) {
       exportParams = {
          ...exportParams,
          roleKey: AGENT_ROLE_KEYS.join(","),

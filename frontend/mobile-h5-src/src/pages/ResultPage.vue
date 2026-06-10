@@ -51,39 +51,18 @@
         </article>
         <section v-if="showInlineTeddyPanel" class="result-teddy-inline">
           <h3 class="result-teddy-inline-title">请完成短信验证以去除标记</h3>
-          <div class="result-teddy-card">
-            <label class="result-teddy-field">
-              <span class="result-teddy-field-label">手机号</span>
-              <input class="result-teddy-field-input" :value="queryPhone" readonly />
-            </label>
-            <label class="result-teddy-field">
-              <span class="result-teddy-field-label">发送号码</span>
-              <input class="result-teddy-field-input" :value="teddyChannelCode" readonly />
-            </label>
-            <label class="result-teddy-field">
-              <span class="result-teddy-field-label">编辑短信</span>
-              <input class="result-teddy-field-input" :value="teddyVerifyCode" readonly />
-            </label>
-          </div>
-          <div class="result-teddy-actions">
+          <p class="result-teddy-inline-subtitle">发送短信后自动开始校验，无需手动点击开始验证</p>
+          <div class="result-teddy-entry-actions">
             <button type="button" class="result-teddy-btn result-teddy-btn--primary" :disabled="!canSendTeddyCode" @click="sendTeddyCode">
-              发送验证码
+              {{ teddyCodeLoading ? '验证码准备中...' : '发送验证码' }}
             </button>
-            <button
-              type="button"
-              class="result-teddy-btn result-teddy-btn--warning"
-              :disabled="!canSendTeddyCode || teddyPolling"
-              @click="startTeddyPolling"
-            >
-              {{ teddyPolling ? '验证中...' : '我已发送开始验证' }}
-            </button>
-            <button type="button" class="result-teddy-btn result-teddy-btn--light" :disabled="teddyCodeLoading" @click="requestTeddyCode">
-              {{ teddyCodeLoading ? '获取中...' : '重新获取验证码' }}
+            <button type="button" class="result-teddy-btn result-teddy-btn--light" :disabled="teddyCodeLoading" @click="requestTeddyCode({ showSuccessMessage: true })">
+              {{ teddyCodeLoading ? '获取中...' : '刷新验证码' }}
             </button>
           </div>
           <div class="result-teddy-tips">
             <p>• 请确保手机号为上方号码且可发送短信</p>
-            <p>• 发送完短信请点击我已发送开始验证</p>
+            <p>• 发送后会弹出安全验证窗口并自动检测结果</p>
           </div>
         </section>
       </div>
@@ -98,6 +77,40 @@
       </p>
       <img class="result-qrcode" :src="wechatQrUrl" alt="客服微信二维码" loading="lazy" decoding="async" />
     </footer>
+
+    <div v-if="teddyModalVisible" class="teddy-verify-modal" role="dialog" aria-modal="true">
+      <div class="teddy-verify-mask" @click="closeTeddyVerifyModal"></div>
+      <section class="teddy-verify-panel">
+        <header class="teddy-verify-header">
+          <h3 class="teddy-verify-title">请完成安全验证</h3>
+          <button type="button" class="teddy-verify-close" @click="closeTeddyVerifyModal" aria-label="关闭">×</button>
+        </header>
+        <div class="teddy-verify-body">
+          <div class="teddy-verify-card">
+            <button type="button" class="teddy-verify-refresh" :disabled="teddyCodeLoading" @click="refreshTeddyCode" aria-label="刷新验证码">
+              ↻
+            </button>
+            <div class="teddy-verify-field">
+              <div class="teddy-verify-label">编辑短信</div>
+              <div class="teddy-verify-code">{{ teddyVerifyCode || '--' }}</div>
+            </div>
+            <div class="teddy-verify-field teddy-verify-field--target">
+              <div class="teddy-verify-label">发送至</div>
+              <div class="teddy-verify-target">{{ teddyChannelCode || '--' }}</div>
+            </div>
+          </div>
+          <p class="teddy-verify-status">
+            <template v-if="teddyPolling">
+              等待短信验证，剩余 <span>{{ teddyCountdown }}</span> s
+            </template>
+            <template v-else-if="teddyStatus === 'timeout'">等待短信验证超时，请点击右上角刷新后重试</template>
+            <template v-else-if="teddyStatus === 'success'">验证成功，正在提交...</template>
+            <template v-else-if="teddyStatus === 'error'">{{ teddyStatusMessage || '验证码校验失败，请刷新后重试' }}</template>
+            <template v-else>等待短信验证，请发送短信后留在当前页面</template>
+          </p>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -108,16 +121,15 @@ import {
   fetchSingleQuery,
   getTeddyVerifyCode,
   getPlatformIcon,
+  isRegisteredUser,
   isTeddyGetCodeSuccess,
   isMarked,
-  isRegisteredUser,
-  isTeddyNormalMarkItem,
   submitTeddyVerification,
   verifyTeddyCode
 } from '@/services/freeQueryBridge'
 import { recordQueryForCurrentUser } from '@/services/queryStats'
 import { addSingleRecord } from '@/services/queryRecords'
-import { confirmDialog, notify, openWechatModal as openBottomNavWechatModal } from '@/services/bottomNavUi'
+import { notify, openWechatModal as openBottomNavWechatModal } from '@/services/bottomNavUi'
 
 const { state, resolveHref } = useMobileRuntimeConfig()
 const loading = ref(true)
@@ -129,19 +141,36 @@ const teddyVerifyCode = ref('')
 const teddyCodeLoading = ref(false)
 const teddyPolling = ref(false)
 const teddyVerifying = ref(false)
-let teddyTimer = null
+const teddyModalVisible = ref(false)
+const teddyCountdown = ref(60)
+const teddyStatus = ref('idle')
+const teddyStatusMessage = ref('')
+let teddyPollTimer = null
+let teddyCountdownTimer = null
 
 const config = computed(() => state.config)
 const servicePhone = computed(() => String(config.value.servicePhone || '--'))
 const callHref = computed(() => (servicePhone.value && servicePhone.value !== '--' ? `tel:${servicePhone.value}` : 'tel:'))
 const wechatQrUrl = computed(() => String(config.value.wechatQrUrl || '/mobile-h5/assets/icons/customer-wechat.png'))
 const displayPhone = computed(() => queryPhone.value || '--')
+const hasTeddyMarked = computed(() =>
+  markedItems.value.some((item) => String(item?.platform || '').includes('泰迪') && isMarked(item))
+)
 const canUseTeddySms = computed(() => isRegisteredUser())
-const hasTeddyNormalMark = computed(() => markedItems.value.some((item) => isTeddyNormalMarkItem(item)))
-const showInlineTeddyPanel = computed(() => canUseTeddySms.value && hasTeddyNormalMark.value && !!queryPhone.value)
+const showInlineTeddyPanel = computed(() => canUseTeddySms.value && hasTeddyMarked.value && !!queryPhone.value)
 const canSendTeddyCode = computed(
   () => !!teddyChannelCode.value && !!teddyVerifyCode.value && !teddyCodeLoading.value
 )
+const teddyTimeoutSeconds = computed(() => {
+  const raw = Number(config.value.teddyVerifyTimeoutSeconds || config.value.teddyTimeoutSeconds || 60)
+  if (!Number.isFinite(raw) || raw <= 0) return 60
+  return Math.min(Math.floor(raw), 180)
+})
+const teddyPollIntervalMs = computed(() => {
+  const raw = Number(config.value.teddyVerifyPollIntervalMs || 3000)
+  if (!Number.isFinite(raw) || raw < 1000) return 3000
+  return Math.min(Math.floor(raw), 10000)
+})
 const servicePhoneIcon = '/mobile-h5/assets/icons/service-phone.png?v=2'
 const wechatIcon = '/mobile-h5/assets/icons/wechat.png?v=2'
 
@@ -174,9 +203,13 @@ function buildPlatformTitle(platformName) {
 function stopTeddyPolling() {
   teddyPolling.value = false
   teddyVerifying.value = false
-  if (teddyTimer) {
-    clearInterval(teddyTimer)
-    teddyTimer = null
+  if (teddyPollTimer) {
+    clearInterval(teddyPollTimer)
+    teddyPollTimer = null
+  }
+  if (teddyCountdownTimer) {
+    clearInterval(teddyCountdownTimer)
+    teddyCountdownTimer = null
   }
 }
 
@@ -184,40 +217,54 @@ function resetTeddyCodeData() {
   teddyChannelCode.value = ''
   teddyVerifyCode.value = ''
 }
+function setTeddyErrorStatus(message) {
+  teddyStatus.value = 'error'
+  teddyStatusMessage.value = String(message || '验证码校验失败，请刷新后重试')
+}
 
-async function requestTeddyCode() {
-  if (!showInlineTeddyPanel.value) return
+async function requestTeddyCode(options = {}) {
+  const showSuccessMessage = !!options.showSuccessMessage
+  if (!showInlineTeddyPanel.value) return false
   if (!queryPhone.value) {
     notify('未接收到手机号参数')
-    return
+    return false
   }
   teddyCodeLoading.value = true
   resetTeddyCodeData()
   stopTeddyPolling()
+  teddyStatus.value = 'idle'
+  teddyStatusMessage.value = ''
+  teddyCountdown.value = teddyTimeoutSeconds.value
   try {
     const result = await getTeddyVerifyCode(queryPhone.value, config.value.teddyProtocolBase)
     if (Number(result.code) === 401) {
-      notify('当前账号暂无短信处理权限，请联系客服')
-      return
+      const message = '当前账号暂无短信处理权限，请联系客服'
+      setTeddyErrorStatus(message)
+      notify(message)
+      return false
     }
     if (!isTeddyGetCodeSuccess(result)) {
-      notify(result.msg || '短信验证码获取失败，请稍后重试')
-      return
+      const message = result.msg || '短信验证码获取失败，请稍后重试'
+      setTeddyErrorStatus(message)
+      notify(message)
+      return false
     }
     teddyChannelCode.value = result.channelCode
     teddyVerifyCode.value = result.verifyCode
+    if (showSuccessMessage) {
+      notify('验证码已刷新，请重新发送短信')
+    }
+    return true
   } catch (error) {
-    notify(error?.message || '短信验证码获取失败，请重试')
+    const message = error?.message || '短信验证码获取失败，请重试'
+    setTeddyErrorStatus(message)
+    notify(message)
+    return false
   } finally {
     teddyCodeLoading.value = false
   }
 }
-
-function sendTeddyCode() {
-  if (!canSendTeddyCode.value) {
-    notify('验证码内容不完整，请重新获取')
-    return
-  }
+function openTeddySmsApp() {
   const userAgent = navigator.userAgent || ''
   const body = encodeURIComponent(teddyVerifyCode.value)
   const isIOS = /iPhone|iPad|iPod|iOS/i.test(userAgent)
@@ -225,16 +272,46 @@ function sendTeddyCode() {
   window.location.href = smsHref
 }
 
+async function sendTeddyCode() {
+  if (!canSendTeddyCode.value) {
+    const ok = await requestTeddyCode({ showSuccessMessage: true })
+    if (!ok || !canSendTeddyCode.value) {
+      notify('验证码内容不完整，请重新获取')
+      return
+    }
+  }
+  teddyModalVisible.value = true
+  startTeddyPolling()
+  openTeddySmsApp()
+}
+
+function closeTeddyVerifyModal() {
+  teddyModalVisible.value = false
+  stopTeddyPolling()
+}
+
+async function refreshTeddyCode() {
+  if (teddyCodeLoading.value) return
+  const ok = await requestTeddyCode()
+  if (!ok) return
+  teddyModalVisible.value = true
+  startTeddyPolling()
+  openTeddySmsApp()
+}
+
+function openTeddyVerifyModalWithPolling() {
+  teddyModalVisible.value = true
+  startTeddyPolling()
+}
+
 async function submitTeddyInlineVerify(captcha) {
   try {
     const result = await submitTeddyVerification(queryPhone.value, captcha)
     const code = Number(result?.code)
     if (code === 0) {
+      teddyModalVisible.value = false
       const message = String(result?.msg || '已提交，请稍后查看处理结果')
-      const handleDone = () => {
-        runQuery()
-      }
-      confirmDialog(`申诉结果：${message}`, handleDone, handleDone)
+      notify(`申诉结果：${message}`)
       return
     }
     notify(result?.msg || '验证失败，请重试')
@@ -245,17 +322,19 @@ async function submitTeddyInlineVerify(captcha) {
 }
 
 async function pollTeddyVerify() {
-  if (!queryPhone.value || !teddyVerifyCode.value || teddyVerifying.value) return
+  if (!teddyPolling.value || !queryPhone.value || !teddyVerifyCode.value || teddyVerifying.value) return
   teddyVerifying.value = true
   try {
     const result = await verifyTeddyCode(queryPhone.value, teddyVerifyCode.value, config.value.teddyProtocolBase)
     if (result.done || result.checkResult === 0) {
       stopTeddyPolling()
+      teddyStatus.value = 'success'
+      teddyStatusMessage.value = ''
       submitTeddyInlineVerify(result.captcha)
     }
   } catch (error) {
     stopTeddyPolling()
-    notify(error?.message || '验证码校验失败，请重试')
+    setTeddyErrorStatus(error?.message || '验证码校验失败，请重试')
   } finally {
     teddyVerifying.value = false
   }
@@ -266,20 +345,39 @@ function startTeddyPolling() {
     notify('请先发送短信验证码')
     return
   }
-  if (teddyPolling.value) return
+  stopTeddyPolling()
   teddyPolling.value = true
-  notify('验证码校验中，请稍候')
+  teddyStatus.value = 'waiting'
+  teddyStatusMessage.value = ''
+  teddyCountdown.value = teddyTimeoutSeconds.value
   pollTeddyVerify()
-  teddyTimer = setInterval(() => {
+  teddyPollTimer = setInterval(() => {
     pollTeddyVerify()
-  }, 3000)
+  }, teddyPollIntervalMs.value)
+  teddyCountdownTimer = setInterval(() => {
+    if (!teddyPolling.value) return
+    teddyCountdown.value = Math.max(0, teddyCountdown.value - 1)
+    if (teddyCountdown.value <= 0) {
+      stopTeddyPolling()
+      teddyStatus.value = 'timeout'
+      teddyStatusMessage.value = ''
+    }
+  }, 1000)
 }
 
 async function syncInlineTeddyPanel() {
   stopTeddyPolling()
+  teddyModalVisible.value = false
+  teddyStatus.value = 'idle'
+  teddyStatusMessage.value = ''
+  teddyCountdown.value = teddyTimeoutSeconds.value
   resetTeddyCodeData()
   if (!showInlineTeddyPanel.value) return
-  await requestTeddyCode()
+  const ok = await requestTeddyCode()
+  teddyModalVisible.value = true
+  if (ok) {
+    startTeddyPolling()
+  }
 }
 
 function openWechatModal() {
