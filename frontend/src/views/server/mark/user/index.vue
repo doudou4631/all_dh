@@ -251,17 +251,68 @@
                 </el-table-column>
                 <el-table-column label="状态" width="92" align="center">
                   <template #default="scope">
-                    <el-tag :type="orderStatusType(scope.row.orderStatus)" size="small">
-                      {{ orderStatusLabel(scope.row.orderStatus) }}
+                    <el-tag :type="recordStatusType(scope.row)" size="small">
+                      {{ recordStatusLabel(scope.row) }}
                     </el-tag>
                   </template>
                 </el-table-column>
                 <el-table-column label="操作" width="80" align="center">
-                  <template #default>
-                    -
+                  <template #default="scope">
+                    <el-button
+                      link
+                      type="primary"
+                      icon="View"
+                      @click="openRecordDetail(scope.row)"
+                      v-hasPermi="['server:markUser:order:query']"
+                    >
+                      详情
+                    </el-button>
                   </template>
                 </el-table-column>
               </el-table>
+
+              <el-dialog v-model="recordDetailOpen" title="任务详情" width="980px" append-to-body>
+                <div v-loading="recordDetailLoading">
+                  <el-descriptions :column="4" border>
+                    <el-descriptions-item label="订单号">{{ recordDetailData.order?.orderNo || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="平台">{{ recordDetailData.order?.platformName || '-' }}</el-descriptions-item>
+                    <el-descriptions-item label="提交时间">{{ formatDateTime(recordDetailData.order?.createTime) }}</el-descriptions-item>
+                    <el-descriptions-item label="状态">
+                      <el-tag :type="recordStatusType(recordDetailData.order)" size="small">
+                        {{ recordStatusLabel(recordDetailData.order) }}
+                      </el-tag>
+                    </el-descriptions-item>
+                    <el-descriptions-item label="总数">{{ recordDetailData.order?.totalCount ?? 0 }}</el-descriptions-item>
+                    <el-descriptions-item label="成功">{{ recordDetailData.order?.successCount ?? 0 }}</el-descriptions-item>
+                    <el-descriptions-item label="失败">{{ recordDetailData.order?.failedCount ?? 0 }}</el-descriptions-item>
+                    <el-descriptions-item label="退款">{{ recordDetailData.order?.refundAmount ?? 0 }}</el-descriptions-item>
+                  </el-descriptions>
+
+                  <el-table class="mt10" :data="recordDetailData.items || []" max-height="420">
+                    <el-table-column label="序号" type="index" width="56" align="center" />
+                    <el-table-column label="号码" prop="phone" min-width="130" />
+                    <el-table-column label="状态" width="90" align="center">
+                      <template #default="scope">
+                        <el-tag :type="itemStatusType(scope.row.processStatus)" size="small">
+                          {{ itemStatusLabel(scope.row.processStatus) }}
+                        </el-tag>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="处理结果" prop="processResult" min-width="160" show-overflow-tooltip />
+                    <el-table-column label="处理备注" prop="processNote" min-width="180" show-overflow-tooltip />
+                    <el-table-column label="处理时间" width="160" align="center">
+                      <template #default="scope">
+                        {{ formatDateTime(scope.row.processedTime) }}
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </div>
+                <template #footer>
+                  <div class="dialog-footer">
+                    <el-button @click="recordDetailOpen = false">关 闭</el-button>
+                  </div>
+                </template>
+              </el-dialog>
 
               <pagination
                 v-show="total > 0"
@@ -283,6 +334,7 @@ import {
   listMarkUserOrder,
   createMarkUserClearOrder,
   precheckMarkUserOrder,
+  getMarkUserOrderDetail,
   listMarkUserPlatformPrice
 } from '@/api/server/markUser'
 import { useRoute, useRouter } from 'vue-router'
@@ -308,6 +360,9 @@ const precheckSourcePayload = ref(null)
 const precheckKeyword = ref('')
 const precheckQueryStatus = ref('')
 const precheckMarkStatus = ref('')
+const recordDetailOpen = ref(false)
+const recordDetailLoading = ref(false)
+const recordDetailData = ref({ order: {}, items: [] })
 
 function createEmptyPrecheckData() {
   return {
@@ -322,6 +377,20 @@ function createEmptyPrecheckData() {
     failedPhones: [],
     items: []
   }
+}
+
+function openRecordDetail(row) {
+  const orderId = row?.id
+  if (!orderId) return
+  recordDetailOpen.value = true
+  recordDetailLoading.value = true
+  getMarkUserOrderDetail(orderId).then((res) => {
+    recordDetailData.value = res.data || { order: {}, items: [] }
+  }).catch((error) => {
+    proxy.$modal.msgError(error?.message || '加载详情失败')
+  }).finally(() => {
+    recordDetailLoading.value = false
+  })
 }
 
 const precheckDialogData = ref(createEmptyPrecheckData())
@@ -674,16 +743,32 @@ async function copyPrecheckPhones() {
   await copyText(phones.join('\n'))
 }
 
-function orderStatusLabel(status) {
-  const map = { '0': '待处理', '1': '处理中', '2': '已完成', '3': '已取消' }
+function recordStatusLabel(row) {
+  const status = String(row?.orderStatus ?? '')
+  const successCount = Number(row?.successCount ?? 0)
+  const failedCount = Number(row?.failedCount ?? 0)
+  if (status === '0' || status === '1') return '待处理'
+  if (status === '2') return failedCount > 0 && successCount <= 0 ? '失败' : (failedCount > 0 ? '失败' : '成功')
+  if (status === '3') return '失败'
+  return '待处理'
+}
+
+function recordStatusType(row) {
+  const label = recordStatusLabel(row)
+  if (label === '成功') return 'success'
+  if (label === '失败') return 'danger'
+  return 'warning'
+}
+
+function itemStatusLabel(status) {
+  const map = { '0': '待处理', '1': '成功', '2': '失败' }
   return map[status] || '-'
 }
 
-function orderStatusType(status) {
-  if (status === '2') return 'success'
-  if (status === '1') return 'warning'
-  if (status === '3') return 'info'
-  return ''
+function itemStatusType(status) {
+  if (status === '1') return 'success'
+  if (status === '2') return 'danger'
+  return 'warning'
 }
 
 function formatDateTime(value) {
@@ -936,7 +1021,7 @@ function exportRecordRows() {
     item.phonePreview || '',
     item.platformName || '',
     formatDateTime(item.createTime),
-    orderStatusLabel(item.orderStatus)
+    recordStatusLabel(item)
   ])
   downloadCsv(`mark-record-${Date.now()}.csv`, [header, ...body])
 }

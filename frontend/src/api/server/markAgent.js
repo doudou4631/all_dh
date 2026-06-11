@@ -26,11 +26,12 @@ export function feedbackMarkOrderItem(itemId, data) {
   })
 }
 
-// 代理完成整单
-export function completeMarkOrder(orderId) {
+// 代理整单处理（可传 processStatus=1成功/2失败）
+export function completeMarkOrder(orderId, data) {
   return request({
     url: '/server/markAgent/order/' + orderId + '/complete',
-    method: 'post'
+    method: 'post',
+    data
   })
 }
 

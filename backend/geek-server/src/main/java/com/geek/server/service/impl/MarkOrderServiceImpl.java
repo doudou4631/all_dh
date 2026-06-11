@@ -417,6 +417,48 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarkOrderDetailVO completeOrder(Long orderId, MarkOrderItemProcessRequest request) {
+        if (request == null || StringUtils.isBlank(request.getProcessStatus())) {
+            return completeOrder(orderId);
+        }
+        String processStatus = StringUtils.trimToEmpty(request.getProcessStatus());
+        if (!"1".equals(processStatus) && !"2".equals(processStatus)) {
+            throw new ServiceException("处理状态仅支持 1(成功) 或 2(失败)");
+        }
+        MarkOrder order = requireOrder(orderId);
+        assertAgentReadable(order, true);
+        List<MarkOrderItem> itemList = markOrderItemMapper.selectMarkOrderItemsByOrderId(orderId);
+        Date now = DateUtils.getNowDate();
+        String currentUserName = SecurityUtils.getUsername();
+        String processResult = StringUtils.trimToNull(request.getProcessResult());
+        if (StringUtils.isBlank(processResult)) {
+            processResult = "1".equals(processStatus) ? "代理整单标记成功" : "代理整单标记失败";
+        }
+        String processNote = StringUtils.trimToNull(request.getProcessNote());
+        for (MarkOrderItem item : itemList) {
+            if (!"0".equals(item.getProcessStatus())) {
+                continue;
+            }
+            item.setProcessStatus(processStatus);
+            item.setProcessResult(processResult);
+            item.setProcessNote(processNote);
+            item.setProcessedBy(currentUserName);
+            item.setProcessedTime(now);
+            item.setUpdateBy(currentUserName);
+            item.setUpdateTime(now);
+
+            if ("2".equals(processStatus) && !"1".equals(item.getRefunded())) {
+                refundOrderItem(order, item, currentUserName, now);
+                item.setRefunded("1");
+            }
+            markOrderItemMapper.updateMarkOrderItem(item);
+        }
+        refreshOrderStats(orderId, currentUserName);
+        return buildOrderDetail(orderId);
+    }
+
+    @Override
     public List<MarkOrder> selectAdminAuditOrderList(MarkOrder query) {
         if (!isAdminRole()) {
             throw new ServiceException("仅管理员可查看订单审计");

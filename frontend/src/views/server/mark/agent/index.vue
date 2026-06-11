@@ -5,9 +5,6 @@
         <el-form-item label="订单号" prop="orderNo">
           <el-input v-model="queryParams.orderNo" placeholder="请输入订单号" clearable @keyup.enter="handleQuery" />
         </el-form-item>
-        <el-form-item label="幂等号" prop="requestNo">
-          <el-input v-model="queryParams.requestNo" placeholder="请输入幂等号" clearable @keyup.enter="handleQuery" />
-        </el-form-item>
         <el-form-item label="号码" prop="phone">
           <el-input v-model="queryParams.phone" placeholder="请输入号码" clearable @keyup.enter="handleQuery" />
         </el-form-item>
@@ -29,9 +26,23 @@
       </el-row>
       <el-table v-loading="loading" :data="orderList">
         <el-table-column label="序号" type="index" width="56" align="center" />
-        <el-table-column label="订单号" prop="orderNo" min-width="160" show-overflow-tooltip />
+        <el-table-column label="订单号" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            <el-tooltip
+              :content="scope.row.orderNo || '-'"
+              placement="top"
+              :disabled="!scope.row.orderNo || String(scope.row.orderNo).length <= 14"
+            >
+              <span>{{ shortOrderNo(scope.row.orderNo) }}</span>
+            </el-tooltip>
+          </template>
+        </el-table-column>
+        <el-table-column label="手机号" min-width="150" show-overflow-tooltip>
+          <template #default="scope">
+            {{ scope.row.phonePreview || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="平台" prop="platformName" min-width="120" show-overflow-tooltip />
-        <el-table-column label="总数" prop="totalCount" width="80" align="center" />
         <el-table-column label="成功" prop="successCount" width="80" align="center" />
         <el-table-column label="失败" prop="failedCount" width="80" align="center" />
         <el-table-column label="状态" width="92" align="center">
@@ -47,19 +58,28 @@
             {{ formatDateTime(scope.row.createTime) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" fixed="right" width="160" align="center">
+        <el-table-column label="操作" fixed="right" width="220" align="center">
           <template #default="scope">
             <el-button link type="primary" icon="View" @click="openDetail(scope.row)" v-hasPermi="['server:markAgent:order:query']">
               详情
             </el-button>
             <el-button
+              v-if="canQuickProcess(scope.row)"
               link
               type="success"
-              icon="Select"
-              @click="handleComplete(scope.row)"
+              @click="handleQuickProcess(scope.row, '1')"
               v-hasPermi="['server:markAgent:order:complete']"
             >
-              完成
+              成功
+            </el-button>
+            <el-button
+              v-if="canQuickProcess(scope.row)"
+              link
+              type="danger"
+              @click="handleQuickProcess(scope.row, '2')"
+              v-hasPermi="['server:markAgent:order:complete']"
+            >
+              失败
             </el-button>
           </template>
         </el-table-column>
@@ -126,10 +146,19 @@
         <div class="dialog-footer">
           <el-button
             type="success"
-            @click="handleComplete(detailData.order)"
+            @click="handleQuickProcess(detailData.order, '1')"
+            v-if="canQuickProcess(detailData.order)"
             v-hasPermi="['server:markAgent:order:complete']"
           >
-            完成整单
+            整单成功
+          </el-button>
+          <el-button
+            type="danger"
+            @click="handleQuickProcess(detailData.order, '2')"
+            v-if="canQuickProcess(detailData.order)"
+            v-hasPermi="['server:markAgent:order:complete']"
+          >
+            整单失败
           </el-button>
           <el-button @click="detailOpen = false">关 闭</el-button>
         </div>
@@ -232,6 +261,13 @@ function itemStatusType(status) {
   return 'info'
 }
 
+function shortOrderNo(orderNo) {
+  const value = String(orderNo || '').trim()
+  if (!value) return '-'
+  if (value.length <= 14) return value
+  return `${value.slice(0, 8)}...${value.slice(-6)}`
+}
+
 function formatDateTime(value) {
   if (!value) return '-'
   const d = new Date(value)
@@ -274,6 +310,11 @@ function refreshDetailIfOpened(orderId) {
   })
 }
 
+function canQuickProcess(row) {
+  const status = row?.orderStatus
+  return status === '0' || status === '1'
+}
+
 function openFeedback(item) {
   feedbackForm.value = {
     itemId: item.id,
@@ -305,13 +346,19 @@ function submitFeedback() {
   })
 }
 
-function handleComplete(row) {
+function handleQuickProcess(row, processStatus) {
   const id = row?.id
   if (!id) return
-  proxy.$modal.confirm('确认将该订单标记为已完成？').then(() => {
-    return completeMarkOrder(id)
+  const actionLabel = processStatus === '1' ? '成功' : '失败'
+  const defaultResult = processStatus === '1' ? '代理整单标记成功' : '代理整单标记失败'
+  proxy.$modal.confirm(`确认将该订单剩余待处理明细全部标记为${actionLabel}并完成整单？`).then(() => {
+    return completeMarkOrder(id, {
+      processStatus,
+      processResult: defaultResult,
+      processNote: ''
+    })
   }).then((res) => {
-    proxy.$modal.msgSuccess(res.msg || '整单已完成')
+    proxy.$modal.msgSuccess(res.msg || `${actionLabel}处理完成`)
     getList()
     refreshDetailIfOpened(id)
   }).catch(() => {})

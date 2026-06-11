@@ -54,7 +54,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 select moi.phone
                 from mark_order_item moi
                 where moi.order_id = mo.id
-                order by moi.id asc
+                order by case when moi.process_status = '0' then 0 else 1 end, moi.id asc
                 limit 1
             ) as phone_preview
         from mark_order mo
@@ -181,7 +181,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
                 select moi.phone
                 from mark_order_item moi
                 where moi.order_id = mo.id
-                order by moi.id asc
+                order by case when moi.process_status = '0' then 0 else 1 end, moi.id asc
                 limit 1
             ) as phone_preview
         from mark_order mo

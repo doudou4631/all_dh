@@ -39,6 +39,7 @@ public interface IMarkOrderService {
     MarkOrderDetailVO feedbackOrderItem(Long itemId, MarkOrderItemProcessRequest request);
 
     MarkOrderDetailVO completeOrder(Long orderId);
+    MarkOrderDetailVO completeOrder(Long orderId, MarkOrderItemProcessRequest request);
 
     List<MarkOrder> selectAdminAuditOrderList(MarkOrder query);
 

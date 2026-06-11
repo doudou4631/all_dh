@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -59,11 +60,14 @@ public class MarkAgentController extends BaseController {
         return AjaxResult.success("回填成功", markOrderService.feedbackOrderItem(itemId, request));
     }
 
-    @Operation(summary = "代理完成整单")
+    @Operation(summary = "代理整单处理（完成/成功/失败）")
     @PreAuthorize("@ss.hasPermi('server:markAgent:order:complete')")
-    @Log(title = "代理完成整单", businessType = BusinessType.UPDATE)
+    @Log(title = "代理整单处理", businessType = BusinessType.UPDATE)
     @PostMapping("/order/{orderId}/complete")
-    public AjaxResult complete(@PathVariable Long orderId) {
+    public AjaxResult complete(@PathVariable Long orderId, @RequestBody(required = false) MarkOrderItemProcessRequest request) {
+        if (request != null && StringUtils.isNotBlank(request.getProcessStatus())) {
+            return AjaxResult.success("整单处理完成", markOrderService.completeOrder(orderId, request));
+        }
         return AjaxResult.success("整单已完成", markOrderService.completeOrder(orderId));
     }
 
