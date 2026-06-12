@@ -120,7 +120,7 @@ public class MarkAdminController extends BaseController {
     }
 
     @Operation(summary = "流水审计列表")
-    @PreAuthorize("@ss.hasPermi('server:markAdmin:audit:wallet:list')")
+    @PreAuthorize("@ss.hasAnyPermi('server:markAdmin:audit:wallet:list,server:markAdmin:audit:order:list')")
     @GetMapping("/audit/wallet/list")
     public TableDataInfo auditWalletList(MarkWalletLog query) {
         startPage();

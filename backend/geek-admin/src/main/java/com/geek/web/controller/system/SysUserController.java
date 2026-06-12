@@ -61,8 +61,15 @@ public class SysUserController extends BaseController {
     private static final String ROLE_KEY_MARK_AGENT = "mark_agent";
     private static final String ROLE_KEY_USER = "user";
     private static final String ROLE_KEY_MARK_USER = "mark_user";
+    private static final String ROLE_KEY_MARK_ADMIN = "mark_admin";
     private static final List<String> AGENT_SELF_ROLE_KEYS = Arrays.asList(ROLE_KEY_AGENT, ROLE_KEY_MARK_AGENT);
     private static final List<String> AGENT_DOWNSTREAM_ROLE_KEYS = Arrays.asList(ROLE_KEY_USER, ROLE_KEY_MARK_USER);
+    private static final List<String> MARK_ADMIN_MANAGED_ROLE_KEYS = Arrays.asList(
+            ROLE_KEY_AGENT,
+            ROLE_KEY_MARK_AGENT,
+            ROLE_KEY_USER,
+            ROLE_KEY_MARK_USER
+    );
 
     @Autowired
     private ISysUserService userService;
@@ -136,7 +143,7 @@ public class SysUserController extends BaseController {
         List<SysRole> roles;
         if (SecurityUtils.isAdmin()) {
             roles = roleService.selectRoleAll();
-        } else if (isAgentOperator()) {
+        } else if (isAgentOperator() || isMarkAdminOperator()) {
             roles = selectEnabledRolesByKeys(resolveAllowedRoleKeysForTarget(userId));
         } else {
             roles = roleService.selectRoleAll().stream().filter(r -> !r.isAdmin()).collect(Collectors.toList());
@@ -156,6 +163,7 @@ public class SysUserController extends BaseController {
     public AjaxResult add(@Validated @RequestBody SysUser user) {
         try {
             checkAssignableRoleKeys(null, user.getRoleIds());
+            enforceMarkAdminTemplateIsolation(user, true);
             applyAgentMarkTemplate(user, true);
             userService.checkUserAllowedBeforeUpdate(user);
         } catch (Exception e) {
@@ -178,6 +186,7 @@ public class SysUserController extends BaseController {
         userService.checkUserDataScope(user.getUserId());
         try {
             checkAssignableRoleKeys(user.getUserId(), user.getRoleIds());
+            enforceMarkAdminTemplateIsolation(user, false);
             applyAgentMarkTemplate(user, false);
             userService.checkUserAllowedBeforeUpdate(user);
         } catch (Exception e) {
@@ -188,54 +197,105 @@ public class SysUserController extends BaseController {
     }
 
     private void applyAgentMarkTemplate(SysUser user, boolean isCreate) {
-        if (user == null || !isAgentOperator()) {
+        if (user == null || (!isAgentOperator() && !isMarkAdminOperator())) {
             return;
         }
         Long currentUserId = getUserId();
         if (currentUserId == null) {
             return;
         }
-        boolean isSelf = !isCreate && currentUserId.equals(user.getUserId());
-        if (user.getRelMarkTemplate() == null && !isSelf) {
-            Long defaultTemplateId = resolveAgentDefaultMarkTemplateId(currentUserId);
-            if (defaultTemplateId != null) {
-                user.setRelMarkTemplate(defaultTemplateId);
+        if (isDownstreamRoleSelection(user.getRoleIds())) {
+            Long processorUserId = resolveProcessorUserIdForDownstream(user, isCreate);
+            if (processorUserId != null) {
+                applyDownstreamInheritedTemplate(user, processorUserId);
+                return;
+            }
+            if (isAgentOperator()) {
+                throw new IllegalArgumentException("无法识别处理账号，不能继承标记模板");
             }
         }
+        boolean isSelf = !isCreate && currentUserId.equals(user.getUserId());
         if (user.getRelMarkTemplate() == null) {
             if (!isSelf) {
                 throw new IllegalArgumentException("请选择标记模板");
             }
             return;
         }
-        MarkPlatformTemplate template = markPlatformTemplateService.selectMarkPlatformTemplateById(user.getRelMarkTemplate());
+        validateTemplateAvailable(user.getRelMarkTemplate());
+    }
+    private void enforceMarkAdminTemplateIsolation(SysUser user, boolean isCreate) {
+        if (user == null || !isMarkAdminOperator()) {
+            return;
+        }
+        if (isCreate || user.getUserId() == null) {
+            user.setRelTemplate(null);
+            return;
+        }
+        SysUser stored = userService.selectUserById(user.getUserId());
+        user.setRelTemplate(stored == null ? null : stored.getRelTemplate());
+    }
+    private boolean isDownstreamRoleSelection(List<Long> roleIds) {
+        if (CollectionUtils.isEmpty(roleIds)) {
+            return false;
+        }
+        Set<Long> distinctRoleIds = roleIds.stream()
+                .filter(Objects::nonNull)
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+        if (distinctRoleIds.isEmpty()) {
+            return false;
+        }
+        return QueryChain.of(SysRole.class)
+                .in(SysRole::getRoleId, distinctRoleIds)
+                .in(SysRole::getRoleKey, AGENT_DOWNSTREAM_ROLE_KEYS)
+                .list()
+                .size() > 0;
+    }
+
+    private Long resolveProcessorUserIdForDownstream(SysUser user, boolean isCreate) {
+        if (isAgentOperator()) {
+            return getUserId();
+        }
+        if (isCreate || user == null || user.getUserId() == null) {
+            return null;
+        }
+        SysUser stored = userService.selectUserById(user.getUserId());
+        if (stored == null || StringUtils.isBlank(stored.getCreateBy())) {
+            return null;
+        }
+        SysUser processor = userService.selectUserByUserName(stored.getCreateBy());
+        if (!isAgentProcessor(processor)) {
+            return null;
+        }
+        return processor.getUserId();
+    }
+
+    private boolean isAgentProcessor(SysUser user) {
+        if (user == null || CollectionUtils.isEmpty(user.getRoles())) {
+            return false;
+        }
+        return user.getRoles().stream()
+                .map(SysRole::getRoleKey)
+                .anyMatch(AGENT_SELF_ROLE_KEYS::contains);
+    }
+
+    private void applyDownstreamInheritedTemplate(SysUser user, Long processorUserId) {
+        SysUser processor = userService.selectUserById(processorUserId);
+        if (processor == null) {
+            throw new IllegalArgumentException("处理账号不存在，无法继承标记模板");
+        }
+        Long inheritedTemplateId = processor.getRelMarkTemplate();
+        if (inheritedTemplateId == null) {
+            throw new IllegalArgumentException("处理账号未绑定标记模板，请先完成绑定");
+        }
+        validateTemplateAvailable(inheritedTemplateId);
+        user.setRelMarkTemplate(inheritedTemplateId);
+    }
+
+    private void validateTemplateAvailable(Long templateId) {
+        MarkPlatformTemplate template = markPlatformTemplateService.selectMarkPlatformTemplateById(templateId);
         if (template == null || !"0".equals(template.getStatus())) {
             throw new IllegalArgumentException("所选标记模板不可用");
         }
-    }
-
-    private Long resolveAgentDefaultMarkTemplateId(Long currentUserId) {
-        MarkPlatformTemplate ownerDefaultTemplate = markPlatformTemplateService.selectOwnerDefaultTemplate(currentUserId);
-        if (ownerDefaultTemplate != null) {
-            return ownerDefaultTemplate.getId();
-        }
-        SysUser currentUser = userService.selectUserById(currentUserId);
-        if (currentUser != null && currentUser.getRelMarkTemplate() != null) {
-            return currentUser.getRelMarkTemplate();
-        }
-        MarkPlatformTemplate query = new MarkPlatformTemplate();
-        query.setStatus("0");
-        query.setIsDefault("1");
-        List<MarkPlatformTemplate> ownTemplates = markPlatformTemplateService.selectMarkPlatformTemplateList(query);
-        if (!ownTemplates.isEmpty()) {
-            return ownTemplates.get(0).getId();
-        }
-        query.setIsDefault(null);
-        ownTemplates = markPlatformTemplateService.selectMarkPlatformTemplateList(query);
-        if (ownTemplates.size() == 1) {
-            return ownTemplates.get(0).getId();
-        }
-        return null;
     }
 
     /**
@@ -297,7 +357,7 @@ public class SysUserController extends BaseController {
         List<SysRole> visibleRoles;
         if (SecurityUtils.isAdmin()) {
             visibleRoles = roles;
-        } else if (isAgentOperator()) {
+        } else if (isAgentOperator() || isMarkAdminOperator()) {
             List<String> allowedRoleKeys = resolveAllowedRoleKeysForTarget(userId);
             visibleRoles = roles.stream()
                     .filter(r -> allowedRoleKeys.contains(r.getRoleKey()))
@@ -327,14 +387,20 @@ public class SysUserController extends BaseController {
     private boolean isAgentOperator() {
         return !SecurityUtils.isAdmin() && (SecurityUtils.hasRole(ROLE_KEY_AGENT) || SecurityUtils.hasRole(ROLE_KEY_MARK_AGENT));
     }
+    private boolean isMarkAdminOperator() {
+        return !SecurityUtils.isAdmin() && SecurityUtils.hasRole(ROLE_KEY_MARK_ADMIN);
+    }
 
     private List<String> resolveAllowedRoleKeysForTarget(Long targetUserId) {
-        if (!isAgentOperator()) {
-            return List.of();
+        if (isMarkAdminOperator()) {
+            return MARK_ADMIN_MANAGED_ROLE_KEYS;
         }
-        Long currentUserId = getUserId();
-        boolean targetIsSelf = targetUserId != null && currentUserId != null && currentUserId.equals(targetUserId);
-        return targetIsSelf ? AGENT_SELF_ROLE_KEYS : AGENT_DOWNSTREAM_ROLE_KEYS;
+        if (isAgentOperator()) {
+            Long currentUserId = getUserId();
+            boolean targetIsSelf = targetUserId != null && currentUserId != null && currentUserId.equals(targetUserId);
+            return targetIsSelf ? AGENT_SELF_ROLE_KEYS : AGENT_DOWNSTREAM_ROLE_KEYS;
+        }
+        return List.of();
     }
 
     private List<SysRole> selectEnabledRolesByKeys(List<String> roleKeys) {
@@ -348,7 +414,7 @@ public class SysUserController extends BaseController {
     }
 
     private void checkAssignableRoleKeys(Long targetUserId, List<Long> roleIds) {
-        if (!isAgentOperator()) {
+        if (!isAgentOperator() && !isMarkAdminOperator()) {
             return;
         }
         if (CollectionUtils.isEmpty(roleIds)) {
@@ -372,6 +438,9 @@ public class SysUserController extends BaseController {
                 .map(SysRole::getRoleKey)
                 .anyMatch(roleKey -> !allowedRoleKeys.contains(roleKey));
         if (hasIllegalRole) {
+            if (isMarkAdminOperator()) {
+                throw new IllegalArgumentException("仅允许分配标记域角色");
+            }
             boolean targetIsSelf = targetUserId != null && targetUserId.equals(getUserId());
             throw new IllegalArgumentException(targetIsSelf ? "仅允许分配标记代理角色" : "仅允许分配标记用户角色");
         }

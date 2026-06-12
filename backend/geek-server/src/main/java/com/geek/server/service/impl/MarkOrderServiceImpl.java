@@ -460,8 +460,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Override
     public List<MarkOrder> selectAdminAuditOrderList(MarkOrder query) {
-        if (!isAdminRole()) {
-            throw new ServiceException("仅管理员可查看订单审计");
+        if (!hasAuditReadPermission()) {
+            throw new ServiceException("无权查看订单审计");
         }
         MarkOrder orderQuery = query == null ? new MarkOrder() : query;
         return markOrderMapper.selectMarkOrderList(orderQuery);
@@ -469,8 +469,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Override
     public List<MarkWalletLog> selectAdminWalletLogList(MarkWalletLog query) {
-        if (!isAdminRole()) {
-            throw new ServiceException("仅管理员可查看流水审计");
+        if (!hasAuditReadPermission()) {
+            throw new ServiceException("无权查看流水审计");
         }
         MarkWalletLog walletLogQuery = query == null ? new MarkWalletLog() : query;
         return markWalletLogMapper.selectMarkWalletLogList(walletLogQuery);
@@ -1389,5 +1389,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     private boolean isAgentRole() {
         return SecurityUtils.hasRole("agent");
+    }
+
+    private boolean hasAuditReadPermission() {
+        return SecurityUtils.hasPermi("server:markAdmin:audit:order:list")
+                || SecurityUtils.hasPermi("server:markAdmin:audit:wallet:list");
     }
 }

@@ -112,11 +112,26 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
                 queryChain.notIn(SysUser::getUserId, excludedUserIds);
             }
         }
-        if (!SecurityUtils.isAdmin() && (SecurityUtils.hasRole("agent") || SecurityUtils.hasRole("mark_agent"))) {
-            queryChain.and(
-                    SYS_USER.CREATE_BY.eq(SecurityUtils.getUsername())
-                            .or(SYS_USER.USER_ID.eq(SecurityUtils.getUserId()))
-            );
+        if (!SecurityUtils.isAdmin()) {
+            if (SecurityUtils.hasRole("mark_admin")) {
+                List<Long> markDomainUserIds = new ArrayList<>(
+                        selectUserIdsByRoleKeys("agent,mark_agent,user,mark_user"));
+                Long currentUserId = SecurityUtils.getUserId();
+                if (currentUserId != null) {
+                    markDomainUserIds.add(currentUserId);
+                }
+                markDomainUserIds = markDomainUserIds.stream().distinct().collect(Collectors.toList());
+                if (CollectionUtils.isEmpty(markDomainUserIds)) {
+                    queryChain.eq(SysUser::getUserId, -1L);
+                } else {
+                    queryChain.in(SysUser::getUserId, markDomainUserIds);
+                }
+            } else if (SecurityUtils.hasRole("agent") || SecurityUtils.hasRole("mark_agent")) {
+                queryChain.and(
+                        SYS_USER.CREATE_BY.eq(SecurityUtils.getUsername())
+                                .or(SYS_USER.USER_ID.eq(SecurityUtils.getUserId()))
+                );
+            }
         }
         return queryChain;
     }

@@ -409,6 +409,8 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
     }
 
     private boolean isAdminRole() {
-        return SecurityUtils.isAdmin() || SecurityUtils.hasRole("admin");
+        return SecurityUtils.isAdmin()
+                || SecurityUtils.hasRole("admin")
+                || SecurityUtils.hasRole("mark_admin");
     }
 }

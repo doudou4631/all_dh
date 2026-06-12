@@ -5,6 +5,8 @@ import com.geek.common.core.controller.BaseController;
 import com.geek.common.core.domain.AjaxResult;
 import com.geek.common.core.page.TableDataInfo;
 import com.geek.common.enums.BusinessType;
+import com.geek.common.exception.ServiceException;
+import com.geek.common.utils.SecurityUtils;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.service.IMarkPlatformTemplateService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -69,6 +71,7 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@RequestBody MarkPlatformTemplate markPlatformTemplate) {
+        ensureMarkAdminManagePermission();
         return toAjax(markPlatformTemplateService.insertMarkPlatformTemplate(markPlatformTemplate));
     }
 
@@ -77,6 +80,7 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody MarkPlatformTemplate markPlatformTemplate) {
+        ensureMarkAdminManagePermission();
         return toAjax(markPlatformTemplateService.updateMarkPlatformTemplate(markPlatformTemplate));
     }
 
@@ -85,6 +89,15 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ids}")
     public AjaxResult remove(@PathVariable Long[] ids) {
+        ensureMarkAdminManagePermission();
         return toAjax(markPlatformTemplateService.deleteMarkPlatformTemplateByIds(ids));
+    }
+
+    private void ensureMarkAdminManagePermission() {
+        boolean markAdminOperator = SecurityUtils.hasRole("mark_admin");
+        boolean adminOperator = SecurityUtils.hasRole("admin");
+        if (!markAdminOperator || adminOperator) {
+            throw new ServiceException("仅标记业务管理员可管理标记模板");
+        }
     }
 }
