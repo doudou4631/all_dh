@@ -5,6 +5,8 @@ public class FreeSingleQueryRequest {
     private String phone;
     private String deviceId;
     private String sourceType;
+    private String platformCode;
+    private String platformName;
 
     public String getPhone() {
         return phone;
@@ -28,6 +30,22 @@ public class FreeSingleQueryRequest {
 
     public void setSourceType(String sourceType) {
         this.sourceType = sourceType;
+    }
+
+    public String getPlatformCode() {
+        return platformCode;
+    }
+
+    public void setPlatformCode(String platformCode) {
+        this.platformCode = platformCode;
+    }
+
+    public String getPlatformName() {
+        return platformName;
+    }
+
+    public void setPlatformName(String platformName) {
+        this.platformName = platformName;
     }
 }
 

@@ -73,7 +73,7 @@
                               type="success"
                               size="small"
                               icon="CircleCheck"
-                              :disabled="precheckMarkedSelectedCount === 0 || clearSubmitLoading || precheckLoading"
+                              :disabled="precheckSubmittableSelectedCount === 0 || clearSubmitLoading || precheckLoading"
                               :loading="clearSubmitLoading"
                               @click="submitSelectedMarkedPhones"
                             >
@@ -509,17 +509,23 @@ const precheckFilteredTableData = computed(() => {
 })
 
 const precheckSelectedPhones = computed(() => normalizePhoneList(precheckSelectedRows.value.map((item) => item.phone)))
-const precheckMarkedSelectedPhones = computed(() => {
-  const markedSet = new Set(normalizePhoneList(precheckDialogData.value.markedPhones))
-  return precheckSelectedPhones.value.filter((phone) => markedSet.has(phone))
+const precheckMarkedVisibleRows = computed(() => {
+  return precheckFilteredTableData.value.filter((row) => row?.querySuccess === true && row?.marked === true)
 })
-const precheckMarkedSelectedCount = computed(() => precheckMarkedSelectedPhones.value.length)
+const precheckSubmittableSelectedPhones = computed(() => {
+  return normalizePhoneList(
+    precheckSelectedRows.value
+      .filter((row) => row?.querySuccess === true)
+      .map((item) => item.phone)
+  )
+})
+const precheckSubmittableSelectedCount = computed(() => precheckSubmittableSelectedPhones.value.length)
 
-const allVisiblePrecheckSelected = computed(() => {
-  const visible = normalizePhoneList(precheckFilteredTableData.value.map((item) => item.phone))
-  if (visible.length === 0) return false
+const allVisibleMarkedPrecheckSelected = computed(() => {
+  const visibleMarked = normalizePhoneList(precheckMarkedVisibleRows.value.map((item) => item.phone))
+  if (visibleMarked.length === 0) return false
   const selectedSet = new Set(precheckSelectedPhones.value)
-  return visible.every((phone) => selectedSet.has(phone))
+  return visibleMarked.every((phone) => selectedSet.has(phone))
 })
 
 function toSafeNumber(value, fallback = 0) {
@@ -662,11 +668,16 @@ function handlePrecheckSelectionChange(rows) {
 
 function togglePrecheckSelectAll() {
   if (!hasPrecheckResult.value) return
-  if (allVisiblePrecheckSelected.value) {
+  const markedRows = precheckMarkedVisibleRows.value
+  if (allVisibleMarkedPrecheckSelected.value) {
     precheckTableRef.value?.clearSelection?.()
     return
   }
-  precheckTableRef.value?.toggleAllSelection?.()
+  precheckTableRef.value?.clearSelection?.()
+  if (!markedRows.length) return
+  markedRows.forEach((row) => {
+    precheckTableRef.value?.toggleRowSelection?.(row, true)
+  })
 }
 
 async function copyText(text) {
@@ -941,9 +952,9 @@ async function afterCreateOrderSuccess(res) {
 }
 
 async function submitSelectedMarkedPhones() {
-  const selectedPhones = precheckMarkedSelectedPhones.value
+  const selectedPhones = precheckSubmittableSelectedPhones.value
   if (!selectedPhones.length) {
-    proxy.$modal.msgWarning('请先勾选可提交的已标记号码')
+    proxy.$modal.msgWarning('请先勾选可提交号码（仅支持查询成功记录）')
     return
   }
   if (!precheckSourcePayload.value) {

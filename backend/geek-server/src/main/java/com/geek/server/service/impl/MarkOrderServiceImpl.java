@@ -220,7 +220,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
         MarkOrderPrecheckResultVO resultVO = new MarkOrderPrecheckResultVO();
         resultVO.setPlatformCode(request.getPlatformCode());
-        resultVO.setPlatformName(resolvePlatformName(request.getPlatformCode(), request.getPlatformName()));
+        String resolvedPlatformName = resolvePlatformName(request.getPlatformCode(), request.getPlatformName());
+        resultVO.setPlatformName(resolvedPlatformName);
 
         List<String> markedPhones = new ArrayList<>();
         List<String> unmarkedPhones = new ArrayList<>();
@@ -234,6 +235,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 FreeSingleQueryRequest singleQueryRequest = new FreeSingleQueryRequest();
                 singleQueryRequest.setPhone(phone);
                 singleQueryRequest.setDeviceId("mark-user-" + currentUserId);
+                singleQueryRequest.setPlatformCode(request.getPlatformCode());
+                singleQueryRequest.setPlatformName(resolvedPlatformName);
                 Map<String, Object> queryResult = freeQueryService.singleQuery(singleQueryRequest, sourceIp);
                 int code = parseInt(queryResult == null ? null : queryResult.get("code"), -1);
                 if (code != 0) {
@@ -725,12 +728,20 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             quotaMap.put(quota.getPlatformCode(), sanitizeRemainCount(quota.getRemainCount()));
         }
         Set<String> explicitlyConfiguredCodes = new LinkedHashSet<>(savedMap.keySet());
+        SysUser currentUser = requireUser(userId);
+        Long boundTemplateId = currentUser.getRelMarkTemplate();
         Map<String, String> dynamicPlatformNameMap = resolveMenuPlatformNameMap();
         Map<String, String> platformNameMap = resolvePlatformNameMap(dynamicPlatformNameMap);
-        Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(userId);
-        Set<String> availableCodes = resolveAvailablePlatformCodes(explicitlyConfiguredCodes, dynamicPlatformNameMap, templateConfigMap);
-        log.info("mark platform candidates resolved userId={}, menuCodes={}, templateCodes={}, explicitCodes={}, availableCodes={}",
+        Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(currentUser);
+        Set<String> availableCodes = resolveAvailablePlatformCodes(
+                boundTemplateId != null,
+                explicitlyConfiguredCodes,
+                dynamicPlatformNameMap,
+                templateConfigMap
+        );
+        log.info("mark platform candidates resolved userId={}, boundTemplateId={}, menuCodes={}, templateCodes={}, explicitCodes={}, availableCodes={}",
                 userId,
+                boundTemplateId,
                 dynamicPlatformNameMap.keySet(),
                 templateConfigMap.keySet(),
                 explicitlyConfiguredCodes,
@@ -766,10 +777,18 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return result;
     }
 
-    private Set<String> resolveAvailablePlatformCodes(Set<String> explicitlyConfiguredCodes,
+    private Set<String> resolveAvailablePlatformCodes(boolean hasBoundTemplate,
+                                                      Set<String> explicitlyConfiguredCodes,
                                                       Map<String, String> dynamicPlatformNameMap,
                                                       Map<String, TemplatePlatformConfig> templateConfigMap) {
         Set<String> availableCodes = new LinkedHashSet<>();
+        if (hasBoundTemplate) {
+            if (templateConfigMap != null && !templateConfigMap.isEmpty()) {
+                availableCodes.addAll(templateConfigMap.keySet());
+            }
+            availableCodes.removeIf(StringUtils::isBlank);
+            return availableCodes;
+        }
         if (dynamicPlatformNameMap != null && !dynamicPlatformNameMap.isEmpty()) {
             availableCodes.addAll(dynamicPlatformNameMap.keySet());
         }
@@ -786,8 +805,18 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return new LinkedHashSet<>(LEGACY_PLATFORM_NAME_MAP.keySet());
     }
     private Map<String, TemplatePlatformConfig> resolveTemplatePlatformConfigMapByUser(Long userId) {
+        if (userId == null) {
+            return new LinkedHashMap<>();
+        }
+        return resolveTemplatePlatformConfigMapByUser(requireUser(userId));
+    }
+
+    private Map<String, TemplatePlatformConfig> resolveTemplatePlatformConfigMapByUser(SysUser user) {
         Map<String, TemplatePlatformConfig> configMap = new LinkedHashMap<>();
-        SysUser user = requireUser(userId);
+        if (user == null || user.getUserId() == null) {
+            return configMap;
+        }
+        Long userId = user.getUserId();
         Long templateId = user.getRelMarkTemplate();
         if (templateId == null) {
             log.info("mark template not bound, fallback to menu platforms. userId={}", userId);
@@ -798,48 +827,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             log.warn("mark template unavailable, fallback to menu platforms. userId={}, templateId={}", userId, templateId);
             return configMap;
         }
-        if (!canUseTemplate(user, template)) {
-            log.warn("mark template inaccessible, fallback to menu platforms. userId={}, templateId={}, ownerUserId={}",
-                    userId, templateId, template.getOwnerUserId());
-            return configMap;
-        }
         Map<String, TemplatePlatformConfig> parsedConfigMap = parseTemplatePlatformConfigs(template.getTemplateInfo());
         log.info("mark template parsed for platform availability. userId={}, templateId={}, platformCodes={}",
                 userId, templateId, parsedConfigMap.keySet());
         return parsedConfigMap;
-    }
-
-    private boolean canUseTemplate(SysUser user, MarkPlatformTemplate template) {
-        if (user == null || template == null) {
-            return false;
-        }
-        Long ownerUserId = template.getOwnerUserId();
-        if (ownerUserId != null) {
-            if (user.getUserId() != null && ownerUserId.equals(user.getUserId())) {
-                return true;
-            }
-            Long creatorUserId = resolveUserIdByUserName(user.getCreateBy());
-            return creatorUserId != null && ownerUserId.equals(creatorUserId);
-        }
-        String userName = StringUtils.trimToNull(user.getUserName());
-        String creatorName = StringUtils.trimToNull(user.getCreateBy());
-        String templateCreatorName = StringUtils.trimToNull(template.getCreateBy());
-        if (templateCreatorName == null) {
-            return false;
-        }
-        return StringUtils.equals(templateCreatorName, userName) || StringUtils.equals(templateCreatorName, creatorName);
-    }
-
-    private Long resolveUserIdByUserName(String userName) {
-        String normalizedUserName = StringUtils.trimToNull(userName);
-        if (normalizedUserName == null) {
-            return null;
-        }
-        SysUser creator = com.mybatisflex.core.query.QueryChain.of(SysUser.class)
-                .select(SysUser::getUserId)
-                .eq(SysUser::getUserName, normalizedUserName)
-                .one();
-        return creator == null ? null : creator.getUserId();
     }
 
     private Map<String, TemplatePlatformConfig> parseTemplatePlatformConfigs(String templateInfo) {

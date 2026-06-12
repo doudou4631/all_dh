@@ -70,6 +70,38 @@
 - 说明：该链路不走本站 `/prod-api/` 反代。
 - 流程标签：兼容流程（保留）
 
+### G. 标记下单角色：一键批量查询链路（本次补齐）
+- 业务定位：`标记下单` 角色在“提交号码”页执行预查询并提交消除。
+- 前端页面：`frontend/src/views/server/mark/user/index.vue`
+- 前端请求封装：`frontend/src/api/server/markUser.js`
+- 请求模型：`MarkOrderCreateRequest`（`platformCode`、`platformName`、`phones`、`requestNo`、`remark`）。
+
+1) 一键批量查询（预查询，不下单）
+- 按钮：`一键批量查询`（`submitBatchOrder`）
+- 接口：`POST /prod-api/server/markUser/order/precheck`
+- 后端入口：`MarkUserController.precheckOrder` -> `MarkOrderServiceImpl.precheckOrder`
+- 实际执行：
+  - 逐号码调用 `freeQueryService.singleQuery`
+  - 传入当前平台 `platformCode/platformName`
+  - 在 `FreeQueryServiceImpl.singleQuery` 内按平台做单平台选择（非全平台轮询）
+- 返回结果：`markedPhones`、`unmarkedPhones`、`failedPhones`、`items`（用于右侧查询结果表格）。
+
+2) 提交消除（当前实现为“创建待处理订单”）
+- 按钮：`提交消除`（`submitSelectedMarkedPhones`）
+- 前端筛选：仅提交“勾选且已标记”的号码。
+- 接口：`POST /prod-api/server/markUser/order/clear`
+- 后端入口：`MarkUserController.createClearOrder` -> `markOrderService.createOrder(request)`
+- 当前行为（关键）：
+  - 创建 `mark_order` + `mark_order_item`
+  - 按平台次数扣减配额并写钱包流水
+  - `mark_order_item.process_status` 初始为 `0`（待处理）
+  - 不在该步骤直接调用外部“消除执行”接口
+
+3) 后续处理（代理链路）
+- 代理逐条回填：`POST /server/markAgent/item/{itemId}/feedback`
+- 代理整单处理：`POST /server/markAgent/order/{orderId}/complete`
+- 失败退款：在代理回填失败路径触发退款逻辑（`feedbackOrderItem` 内部处理）。
+
 ## 3. 主流程与兼容/历史入口
 
 ### 3.1 当前主流程（建议改造优先关注）

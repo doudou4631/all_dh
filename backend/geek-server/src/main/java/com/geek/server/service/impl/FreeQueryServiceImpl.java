@@ -32,6 +32,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -135,6 +136,8 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         NormalizedDeviceId normalizedDeviceId = normalizeDeviceId(request != null ? request.getDeviceId() : null, ip);
         String deviceId = normalizedDeviceId.value();
         String sourceType = normalizeSourceType(request != null ? request.getSourceType() : null);
+        String requestedPlatformCode = request != null ? request.getPlatformCode() : null;
+        String requestedPlatformName = request != null ? request.getPlatformName() : null;
         Long queryUserId = loginUserId == null ? FREE_QUERY_USER_ID : loginUserId;
         String queryCreateBy = StringUtils.isNotEmpty(loginAccount) ? loginAccount.trim() : ("free-ip-" + ip);
         validatePhone(phone);
@@ -223,6 +226,28 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
             fail.put("message", "\u6682\u65e0\u53ef\u7528\u5e73\u53f0");
             fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames, config));
             return fail;
+        }
+        if (StringUtils.isNotEmpty(requestedPlatformCode) || StringUtils.isNotEmpty(requestedPlatformName)) {
+            com.geek.server.domain.UserPlatformUrlConfig selectedPlatform = selectSinglePlatform(
+                    enabledPlatforms,
+                    requestedPlatformCode,
+                    requestedPlatformName
+            );
+            if (selectedPlatform == null) {
+                String targetPlatform = displayTargetPlatform(requestedPlatformCode, requestedPlatformName);
+                String failMessage = StringUtils.isNotEmpty(targetPlatform)
+                        ? ("当前平台未配置可用API: " + targetPlatform)
+                        : "当前平台未配置可用API";
+                saveIpLog(ip, phone, "1", 0L, config.dailyLimit(), decision.usedBefore(), decision.usedAfter(),
+                        failMessage, deviceId, taskId, normalizedDeviceId.deviceSource(), sourceType,
+                        queryUserId, queryCreateBy);
+                Map<String, Object> fail = new HashMap<>();
+                fail.put("code", 500);
+                fail.put("message", failMessage);
+                fail.put("quota", withDisabledPlatformsQuota(ip, config.dailyLimit(), decision.usedAfter(), disabledPlatformNames, config));
+                return fail;
+            }
+            enabledPlatforms = List.of(selectedPlatform);
         }
 
         OptimizedBatchSession session = new OptimizedBatchSession(
@@ -488,6 +513,171 @@ public class FreeQueryServiceImpl implements IFreeQueryService {
         }
         String val = raw.trim().toUpperCase();
         return SOURCE_TYPE_FREE_BATCH.equals(val) ? SOURCE_TYPE_FREE_BATCH : SOURCE_TYPE_FREE_SINGLE;
+    }
+
+    private com.geek.server.domain.UserPlatformUrlConfig selectSinglePlatform(
+            List<com.geek.server.domain.UserPlatformUrlConfig> enabledPlatforms,
+            String platformCode,
+            String platformName) {
+        List<String> candidates = buildPlatformNameCandidates(platformCode, platformName);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        com.geek.server.domain.UserPlatformUrlConfig selected = null;
+        for (com.geek.server.domain.UserPlatformUrlConfig platform : enabledPlatforms) {
+            if (!isPlatformNameMatched(platform == null ? null : platform.getPlatformName(), candidates)) {
+                continue;
+            }
+            if (selected == null || comparePlatformPriority(platform, selected) < 0) {
+                selected = platform;
+            }
+        }
+        return selected;
+    }
+
+    private List<String> buildPlatformNameCandidates(String platformCode, String platformName) {
+        Set<String> candidates = new LinkedHashSet<>();
+        addPlatformNameCandidate(candidates, platformName);
+        addPlatformNameCandidate(candidates, resolvePlatformNameByCode(platformCode));
+        if (candidates.contains("联通管家")) {
+            addPlatformNameCandidate(candidates, "联通安全管家");
+        }
+        if (candidates.contains("联通安全管家")) {
+            addPlatformNameCandidate(candidates, "联通管家");
+        }
+        if (candidates.contains("腾讯")) {
+            addPlatformNameCandidate(candidates, "腾讯平台");
+        }
+        if (candidates.contains("360")) {
+            addPlatformNameCandidate(candidates, "360手机卫士");
+            addPlatformNameCandidate(candidates, "360首次");
+            addPlatformNameCandidate(candidates, "360二次");
+        }
+        if (candidates.contains("搜狗")) {
+            addPlatformNameCandidate(candidates, "搜狗号码通");
+        }
+        if (candidates.contains("移动高频")) {
+            addPlatformNameCandidate(candidates, "高频拦截");
+        }
+        if (candidates.contains("泰迪熊")) {
+            addPlatformNameCandidate(candidates, "泰迪高频");
+            addPlatformNameCandidate(candidates, "泰迪二次");
+            addPlatformNameCandidate(candidates, "泰迪熊平台");
+        }
+        return new ArrayList<>(candidates);
+    }
+
+    private void addPlatformNameCandidate(Set<String> target, String platformName) {
+        if (target == null || StringUtils.isEmpty(platformName)) {
+            return;
+        }
+        String raw = platformName.trim();
+        if (raw.isEmpty()) {
+            return;
+        }
+        target.add(raw);
+        String normalized = normalizePlatformNameAlias(raw);
+        if (!normalized.isEmpty()) {
+            target.add(normalized);
+        }
+    }
+
+    private boolean isPlatformNameMatched(String platformName, List<String> candidates) {
+        if (StringUtils.isEmpty(platformName) || candidates == null || candidates.isEmpty()) {
+            return false;
+        }
+        String raw = platformName.trim();
+        if (raw.isEmpty()) {
+            return false;
+        }
+        String normalizedRaw = normalizePlatformNameAlias(raw);
+        for (String candidate : candidates) {
+            if (StringUtils.isEmpty(candidate)) {
+                continue;
+            }
+            String rawCandidate = candidate.trim();
+            if (raw.equals(rawCandidate)) {
+                return true;
+            }
+            if (normalizedRaw.equals(normalizePlatformNameAlias(rawCandidate))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private int comparePlatformPriority(com.geek.server.domain.UserPlatformUrlConfig left,
+                                        com.geek.server.domain.UserPlatformUrlConfig right) {
+        int leftSort = left != null ? safePlatformSort(left.getSort()) : Integer.MAX_VALUE;
+        int rightSort = right != null ? safePlatformSort(right.getSort()) : Integer.MAX_VALUE;
+        if (leftSort != rightSort) {
+            return Integer.compare(leftSort, rightSort);
+        }
+        long leftId = left != null ? safePlatformId(left.getId()) : Long.MAX_VALUE;
+        long rightId = right != null ? safePlatformId(right.getId()) : Long.MAX_VALUE;
+        return Long.compare(leftId, rightId);
+    }
+
+    private int safePlatformSort(Integer sort) {
+        return sort == null ? Integer.MAX_VALUE : sort;
+    }
+
+    private long safePlatformId(Long id) {
+        return id == null ? Long.MAX_VALUE : id;
+    }
+
+    private String displayTargetPlatform(String platformCode, String platformName) {
+        if (StringUtils.isNotEmpty(platformName)) {
+            return platformName.trim();
+        }
+        String byCode = resolvePlatformNameByCode(platformCode);
+        if (StringUtils.isNotEmpty(byCode)) {
+            return byCode;
+        }
+        if (StringUtils.isNotEmpty(platformCode)) {
+            return platformCode.trim();
+        }
+        return "";
+    }
+
+    private String resolvePlatformNameByCode(String platformCode) {
+        if (StringUtils.isEmpty(platformCode)) {
+            return null;
+        }
+        String code = platformCode.trim();
+        return switch (code) {
+            case "taidixiong", "td_gaopin", "td_second" -> "泰迪熊";
+            case "tengxun", "tencent_mark" -> "腾讯";
+            case "sanliuling", "qihu_first", "qihu_second" -> "360";
+            case "baidu" -> "百度";
+            case "sghmt" -> "搜狗";
+            case "yidonggaopin", "mobile_gaopin" -> "移动高频";
+            case "dianhuabang" -> "电话邦";
+            case "ltgj" -> "联通管家";
+            case "xiaomi" -> "小米手机";
+            default -> null;
+        };
+    }
+
+    private String normalizePlatformNameAlias(String platformName) {
+        if (StringUtils.isEmpty(platformName)) {
+            return "";
+        }
+        String normalized = platformName.trim().replaceAll("\\s+", "");
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        return switch (normalized) {
+            case "腾讯平台" -> "腾讯";
+            case "360手机卫士", "360首次", "360二次", "360平台查询" -> "360";
+            case "搜狗号码通" -> "搜狗";
+            case "高频拦截" -> "移动高频";
+            case "联通安全管家" -> "联通管家";
+            case "泰迪高频", "泰迪二次", "泰迪熊平台" -> "泰迪熊";
+            default -> normalized.endsWith("平台") && normalized.length() > 2
+                    ? normalized.substring(0, normalized.length() - 2)
+                    : normalized;
+        };
     }
 
     private UserApiQueryRecord buildLogQueryCondition(String ip, String phone, String requestStatus, String taskId,

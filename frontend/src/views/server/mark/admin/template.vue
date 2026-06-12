@@ -131,7 +131,7 @@
           </div>
           <div class="platform-custom-tip">新增平台会加入当前模板候选并自动勾选，且可设置每号码扣积分。</div>
           <div v-if="selectedPlatformCodes.length > 0" class="platform-unit-editor">
-            <div v-for="code in selectedPlatformCodes" :key="`unit-${code}`" class="platform-unit-row">
+            <div v-for="(code, index) in selectedPlatformCodes" :key="`unit-${code}`" class="platform-unit-row">
               <el-input
                 v-model="platformDisplayNameMap[code]"
                 class="platform-unit-name-input"
@@ -146,6 +146,17 @@
                 controls-position="right"
               />
               <span class="platform-unit-suffix">积分/号码</span>
+              <span class="platform-order-label">排序</span>
+              <el-input-number
+                :model-value="index + 1"
+                :min="1"
+                :max="selectedPlatformCodes.length"
+                :step="1"
+                :precision="0"
+                controls-position="right"
+                class="platform-order-input"
+                @change="(value) => handlePlatformOrderChange(code, value)"
+              />
               <el-button
                 v-if="canRemoveCustomOption(code)"
                 link
@@ -398,6 +409,22 @@ function handleAddCustomPlatform() {
 function canRemoveCustomOption(code) {
   return !isSystemCode(code)
 }
+function handlePlatformOrderChange(code, inputOrder) {
+  const targetCode = String(code || '').trim()
+  if (!targetCode) return
+  const list = [...(selectedPlatformCodes.value || [])]
+  const currentIndex = list.indexOf(targetCode)
+  if (currentIndex < 0) return
+  const parsedOrder = Number(inputOrder)
+  if (!Number.isFinite(parsedOrder)) return
+  const maxOrder = list.length
+  const normalizedOrder = Math.min(maxOrder, Math.max(1, Math.floor(parsedOrder)))
+  const targetIndex = normalizedOrder - 1
+  if (targetIndex === currentIndex) return
+  list.splice(currentIndex, 1)
+  list.splice(targetIndex, 0, targetCode)
+  selectedPlatformCodes.value = list
+}
 
 function handleRemoveCustomPlatform(code) {
   const targetCode = String(code || '').trim()
@@ -621,6 +648,13 @@ onMounted(() => {
 .platform-unit-suffix {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+}
+.platform-order-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.platform-order-input {
+  width: 106px;
 }
 
 .platform-option-label {

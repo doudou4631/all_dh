@@ -11,6 +11,7 @@ import { dynamicRoutes } from '@/router/routes/asyncRoutes'
 import { deepClone } from '@/utils'
 import { getRouters } from '@/api/login'
 import { listMarkUserPlatformPrice } from '@/api/server/markUser'
+import useUserStore from '@/store/modules/user'
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob(['../../**/views/**/*.vue', '../../**/view/**/*.vue'])
@@ -244,10 +245,13 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
 async function rewriteMarkUserRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
   if (!Array.isArray(routes) || routes.length === 0) return routes
   if (!auth.hasPermi('server:markUser:price:list')) return routes
+  const hasBoundMarkTemplate = String(useUserStore().relMarkTemplate || '').trim().length > 0
   try {
     const resp: any = await listMarkUserPlatformPrice()
     const platformList = normalizeMarkPlatformOptions(resp?.data)
-    if (platformList.length === 0) return routes
+    if (platformList.length === 0) {
+      return hasBoundMarkTemplate ? rewriteMarkUserChildren(routes, []) : routes
+    }
     return rewriteMarkUserChildren(routes, platformList)
   } catch (e) {
     return routes
