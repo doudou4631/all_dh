@@ -20,14 +20,22 @@
 - 如果是业务功能改动，额外备份对应业务表（如 `mark_*`、`user_*`、`batch_task_record` 等）
 
 ## 3. 项目内备份目录规范
-在项目根目录下统一存放：
-
-`db-backups/<时间戳>/`
+本项目只允许以下两类备份目录（均在项目根目录）：
+- 数据库备份：`db-backups/<时间戳>/`
+- 整机备份（全库 + 服务器资产）：`server-backups/<时间戳>/`
 
 示例：
 - `db-backups/20260601_123000/verifynum_full.sql.gz`
 - `db-backups/20260601_123000/key_tables.sql.gz`
 - `db-backups/20260601_123000/backup-meta.txt`
+- `server-backups/20260613_073641/mysql_all_databases.sql.gz`
+- `server-backups/20260613_073641/server_assets.tar.gz`
+- `server-backups/20260613_073641/backup-meta.txt`
+
+### 3.1 强制规则（避免目录混乱）
+- 不再新建其他顶层备份目录（如 `server-sync/`、`backup-temp/` 等）。
+- 历史临时目录若存在，迁移到上述两类目录后删除原目录。
+- 后续所有备份仅允许落盘到 `db-backups/` 或 `server-backups/`。
 ## 4. 当前项目固定服务器信息
 - SSH 用户：`ubuntu`
 - 服务器地址：`43.142.125.17`

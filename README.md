@@ -61,7 +61,7 @@ all/
 │  └─ .vscode/                  # VS Code 本地配置
 ├─ docs/                        # 部署与维护文档
 ├─ db-backups/                  # 数据库备份归档（按时间戳分目录）
-├─ server-sync/                 # 服务器同步快照（按时间戳分目录）
+├─ server-backups/              # 整机备份归档（按时间戳分目录）
 └─ README.md                    # 当前说明文档
 ```
 

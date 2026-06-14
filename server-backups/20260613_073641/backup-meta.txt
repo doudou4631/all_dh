@@ -1,0 +1,3 @@
+time=20260613_073641
+backup_type=full_machine
+operator=ubuntu

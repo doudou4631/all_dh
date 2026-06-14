@@ -1,4 +1,0 @@
-165	daily_limit	20	0	NULL
-166	over_limit_msg	当前IP今日免费查询次数已达上限，请添加客服微信查询。	0	NULL
-167	daily_all_limit	2000	0	NULL
-168	disabled_platforms	联通管家	0	2026-06-01 13:54:46
