@@ -8,6 +8,8 @@ import com.geek.common.enums.BusinessType;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
+import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
+import com.geek.server.domain.dto.MarkTencentSubmitRequest;
 import com.geek.server.service.IMarkOrderService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -63,6 +65,21 @@ public class MarkUserController extends BaseController {
     @PostMapping("/order/precheck")
     public AjaxResult precheckOrder(@Valid @RequestBody MarkOrderCreateRequest request) {
         return AjaxResult.success("预查询完成", markOrderService.precheckOrder(request));
+    }
+
+    @Operation(summary = "腾讯手机号验证码提交")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:add')")
+    @Log(title = "腾讯手机号验证码提交", businessType = BusinessType.OTHER)
+    @PostMapping("/tencent/submit")
+    public AjaxResult submitTencent(@Valid @RequestBody MarkTencentSubmitRequest request) {
+        return AjaxResult.success("提交完成", markOrderService.submitTencent(request));
+    }
+
+    @Operation(summary = "腾讯号码实时状态查询")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:precheck')")
+    @PostMapping("/tencent/status/query")
+    public AjaxResult queryTencentStatus(@Valid @RequestBody MarkTencentStatusQueryRequest request) {
+        return AjaxResult.success("查询完成", markOrderService.queryTencentStatus(request));
     }
 
     @Operation(summary = "用户订单详情")

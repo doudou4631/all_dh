@@ -125,17 +125,53 @@
                             @selection-change="handlePrecheckSelectionChange"
                           >
                             <el-table-column type="selection" width="48" reserve-selection />
-                            <el-table-column label="手机号码" prop="phone" min-width="150" />
-                            <el-table-column label="状态" width="100" align="center">
+                            <el-table-column label="手机号码" prop="phone" min-width="130" />
+                            <el-table-column label="状态" width="80" align="center">
                               <template #default="scope">
                                 <el-tag :type="queryStatusType(scope.row)" size="small">
                                   {{ queryStatusLabel(scope.row) }}
                                 </el-tag>
                               </template>
                             </el-table-column>
-                            <el-table-column :label="`查询结果(${activePlatformName})`" min-width="220" show-overflow-tooltip>
+                            <el-table-column :label="`查询结果(${activePlatformName})`" min-width="180" show-overflow-tooltip>
                               <template #default="scope">
                                 {{ precheckResultLabel(scope.row) }}
+                              </template>
+                            </el-table-column>
+                            <el-table-column v-if="isTencentPlatform" label="验证码" width="190" align="center">
+                              <template #default="scope">
+                                <template v-if="canSubmitTencentByRow(scope.row)">
+                                  <el-input
+                                    class="tencent-row-sms-input"
+                                    :model-value="getTencentRowSmsCode(scope.row.phone)"
+                                    maxlength="6"
+                                    placeholder="请输入 6 位验证码"
+                                    @update:model-value="(value) => handleTencentRowSmsCodeChange(scope.row.phone, value)"
+                                  />
+                                </template>
+                                <span v-else class="tencent-row-disabled">-</span>
+                              </template>
+                            </el-table-column>
+                            <el-table-column v-if="isTencentPlatform" label="提交" width="90" align="center">
+                              <template #default="scope">
+                                <template v-if="canSubmitTencentByRow(scope.row)">
+                                  <el-button
+                                    type="primary"
+                                    size="small"
+                                    :loading="getTencentRowLoading(scope.row.phone)"
+                                    :disabled="activeRemainCount < 1 || !isTencentRowSmsCodeValid(scope.row.phone)"
+                                    @click="submitTencentPhoneByRow(scope.row)"
+                                    v-hasPermi="['server:markUser:order:add']"
+                                  >
+                                    提交
+                                  </el-button>
+                                </template>
+                                <span v-else class="tencent-row-disabled">不可提交</span>
+                              </template>
+                            </el-table-column>
+                            <el-table-column v-if="isTencentPlatform" label="显示结果" min-width="150" show-overflow-tooltip>
+                              <template #default="scope">
+                                {{ getTencentRowResultText(scope.row.phone) }}
                               </template>
                             </el-table-column>
                           </el-table>
@@ -298,8 +334,16 @@
                         </el-tag>
                       </template>
                     </el-table-column>
-                    <el-table-column label="处理结果" prop="processResult" min-width="160" show-overflow-tooltip />
-                    <el-table-column label="处理备注" prop="processNote" min-width="180" show-overflow-tooltip />
+                    <el-table-column label="处理结果" min-width="220">
+                      <template #default="scope">
+                        <div class="record-detail-text">{{ scope.row.processResult || '-' }}</div>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="处理备注" min-width="320">
+                      <template #default="scope">
+                        <div class="record-detail-text">{{ scope.row.processNote || '-' }}</div>
+                      </template>
+                    </el-table-column>
                     <el-table-column label="处理时间" width="160" align="center">
                       <template #default="scope">
                         {{ formatDateTime(scope.row.processedTime) }}
@@ -335,7 +379,8 @@ import {
   createMarkUserClearOrder,
   precheckMarkUserOrder,
   getMarkUserOrderDetail,
-  listMarkUserPlatformPrice
+  listMarkUserPlatformPrice,
+  submitMarkUserTencent
 } from '@/api/server/markUser'
 import { useRoute, useRouter } from 'vue-router'
 
@@ -363,6 +408,7 @@ const precheckMarkStatus = ref('')
 const recordDetailOpen = ref(false)
 const recordDetailLoading = ref(false)
 const recordDetailData = ref({ order: {}, items: [] })
+const tencentRowStateMap = ref({})
 
 function createEmptyPrecheckData() {
   return {
@@ -444,6 +490,11 @@ const activeRemainCount = computed(() => {
 const activePlatformHint = computed(() => {
   if (!activePlatform.value) return '请选择平台后提交号码。'
   return platformHintMap[activePlatform.value.platformCode] || `${activePlatformName.value}支持号码标记处理，请按行输入号码。`
+})
+const isTencentPlatform = computed(() => {
+  const code = String(activePlatform.value?.platformCode || '').toLowerCase()
+  const name = String(activePlatform.value?.platformName || '')
+  return ['tencent_mark', 'tencent', 'tx', 'txwz'].includes(code) || name.includes('腾讯')
 })
 
 const routePlatformCode = computed(() => String(route.query?.platformCode || '').trim())
@@ -533,6 +584,12 @@ function toSafeNumber(value, fallback = 0) {
   return Number.isFinite(num) ? num : fallback
 }
 
+function displayValue(value) {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'boolean') return value ? 'true' : 'false'
+  return String(value)
+}
+
 function normalizePhoneList(source) {
   if (!Array.isArray(source)) return []
   const set = new Set()
@@ -544,6 +601,77 @@ function normalizePhoneList(source) {
     result.push(phone)
   })
   return result
+}
+
+function resetTencentRowStates() {
+  tencentRowStateMap.value = {}
+}
+
+function getTencentRowState(phone, createIfMissing = false) {
+  const normalizedPhone = normalizeTencentPhone(phone)
+  if (!normalizedPhone) {
+    return null
+  }
+  let state = tencentRowStateMap.value[normalizedPhone]
+  if (!state && createIfMissing) {
+    state = {
+      smsCode: '',
+      loading: false,
+      resultText: '-'
+    }
+    tencentRowStateMap.value[normalizedPhone] = state
+  }
+  return state
+}
+
+function resolveTencentRowSubmitMode(row) {
+  if (!isTencentPlatform.value || row?.querySuccess !== true) {
+    return ''
+  }
+  const resultText = `${row?.status || ''} ${row?.detail || ''}`.replace(/\s+/g, '')
+  if (resultText.includes('多人标记') || resultText.includes('多人举报') || resultText.includes('多人投诉')) {
+    return 'tamper'
+  }
+  if (resultText.includes('骚扰电话') || resultText.includes('骚扰')) {
+    return 'normal'
+  }
+  return ''
+}
+
+function canSubmitTencentByRow(row) {
+  return !!resolveTencentRowSubmitMode(row)
+}
+
+function getTencentRowSmsCode(phone) {
+  return getTencentRowState(phone, false)?.smsCode || ''
+}
+
+function handleTencentRowSmsCodeChange(phone, value) {
+  const state = getTencentRowState(phone, true)
+  if (!state) {
+    return
+  }
+  state.smsCode = normalizeTencentPhone(value).slice(0, 6)
+}
+
+function getTencentRowLoading(phone) {
+  return getTencentRowState(phone, false)?.loading === true
+}
+
+function isTencentRowSmsCodeValid(phone) {
+  return /^\d{6}$/.test(getTencentRowSmsCode(phone))
+}
+
+function getTencentRowResultText(phone) {
+  return getTencentRowState(phone, false)?.resultText || '-'
+}
+
+function buildTencentRowResultText(result, mode) {
+  const accepted = result?.accepted === true
+  const reCode = displayValue(result?.submitReCode)
+  const data = displayValue(result?.submitData)
+  const modeText = mode === 'tamper' ? '篡改' : '直提'
+  return `${accepted ? '成功' : '失败'}（${modeText}，reCode=${reCode}，data=${data}）`
 }
 
 function queryStatusLabel(row) {
@@ -597,6 +725,7 @@ function resetPrecheckPanel() {
   precheckKeyword.value = ''
   precheckQueryStatus.value = ''
   precheckMarkStatus.value = ''
+  resetTencentRowStates()
   precheckDialogData.value = createEmptyPrecheckData()
   precheckSelectedRows.value = []
   precheckTableRef.value?.clearSelection?.()
@@ -633,6 +762,7 @@ async function executePrecheck(payload, { silentWarning = false } = {}) {
     precheckKeyword.value = ''
     precheckQueryStatus.value = ''
     precheckMarkStatus.value = ''
+    resetTencentRowStates()
     precheckSelectedRows.value = []
     precheckTableRef.value?.clearSelection?.()
 
@@ -919,6 +1049,53 @@ function clearSubmitPhones() {
   submitForm.phonesText = ''
 }
 
+function normalizeTencentPhone(value) {
+  return String(value || '').replace(/[^\d]/g, '')
+}
+async function submitTencentPhoneByRow(row) {
+  if (!canSubmitTencentByRow(row)) {
+    proxy.$modal.msgWarning('该查询结果不支持短信提交')
+    return
+  }
+  const phone = normalizeTencentPhone(row?.phone)
+  if (!/^\d{7,15}$/.test(phone)) {
+    proxy.$modal.msgError('手机号格式不正确，请输入 7-15 位数字')
+    return
+  }
+  const state = getTencentRowState(phone, true)
+  if (!state) {
+    proxy.$modal.msgError('初始化行状态失败')
+    return
+  }
+  const smsCode = normalizeTencentPhone(state.smsCode)
+  state.smsCode = smsCode
+  if (!/^\d{6}$/.test(smsCode)) {
+    proxy.$modal.msgError('验证码应为 6 位数字')
+    return
+  }
+  const mode = resolveTencentRowSubmitMode(row)
+  const forceTamper = mode === 'tamper'
+  state.loading = true
+  try {
+    const res = await submitMarkUserTencent({ phone, smsCode, forceTamper })
+    const result = res?.data || null
+    state.resultText = buildTencentRowResultText(result, mode)
+    if (result?.accepted === true) {
+      await Promise.all([loadSummaryAndPrice(), getList()])
+      proxy.$modal.msgSuccess(forceTamper ? '腾讯篡改提交受理成功' : '腾讯受理成功')
+    } else {
+      await getList()
+      proxy.$modal.msgWarning('腾讯受理失败，请查看显示结果')
+    }
+  } catch (error) {
+    state.resultText = `提交异常（${String(error?.message || '未知错误')}）`
+    console.error('腾讯提交失败:', error)
+    proxy.$modal.msgError(error?.message || '腾讯提交失败')
+  } finally {
+    state.loading = false
+  }
+}
+
 async function submitBatchOrder() {
   if (!activePlatform.value) {
     proxy.$modal.msgError('当前未选择平台')
@@ -1041,6 +1218,9 @@ watch(routePlatformCode, () => {
   loadSummaryAndPrice().then(() => {
     handlePlatformTabChange()
   })
+})
+watch(activePlatformCode, () => {
+  resetTencentRowStates()
 })
 
 onMounted(async () => {
@@ -1192,6 +1372,22 @@ onMounted(async () => {
   flex-wrap: wrap;
 }
 
+.tencent-row-sms-input {
+  width: 150px;
+}
+
+.tencent-row-disabled {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+
+.record-detail-text {
+  white-space: pre-wrap;
+  line-height: 1.45;
+  color: var(--el-text-color-regular);
+  word-break: break-word;
+}
+
 .query-result-panel {
   border: 1px solid var(--el-border-color-light);
   border-radius: 8px;
@@ -1241,6 +1437,10 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   padding: 12px;
+}
+
+.query-result-table :deep(.el-scrollbar__bar.is-horizontal) {
+  display: none !important;
 }
 
 .query-result-summary {

@@ -6,6 +6,7 @@ import com.geek.common.core.domain.entity.SysMenu;
 import com.geek.common.exception.ServiceException;
 import com.geek.common.utils.DateUtils;
 import com.geek.common.utils.SecurityUtils;
+import com.geek.common.utils.http.HttpUtils;
 import com.geek.common.utils.ip.IpUtils;
 import com.geek.common.core.domain.entity.SysUser;
 import com.geek.server.domain.MarkOrder;
@@ -18,11 +19,16 @@ import com.geek.server.domain.entity.BatchTask;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
+import com.geek.server.domain.dto.MarkTencentSubmitRequest;
 import com.geek.server.domain.vo.FreeSingleQueryRequest;
 import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.domain.vo.MarkPhoneCheckItemVO;
+import com.geek.server.domain.vo.MarkTencentStatusItemVO;
+import com.geek.server.domain.vo.MarkTencentStatusQueryResultVO;
+import com.geek.server.domain.vo.MarkTencentSubmitResultVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
 import com.geek.server.mapper.MarkOrderItemMapper;
 import com.geek.server.mapper.MarkOrderMapper;
@@ -38,6 +44,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -49,6 +57,8 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 迁移订单/钱包服务实现
@@ -59,6 +69,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     private static final Long MARK_ROOT_MENU_ID = 900100000001L;
     private static final String MARK_USER_MENU_COMPONENT = "server/mark/user/index";
+    private static final String TENCENT_BASE_URL = "https://yun.m.qq.com";
+    private static final String TENCENT_REFERER = TENCENT_BASE_URL + "/shouguan/audit/index.html";
+    private static final String TENCENT_USER_AGENT = "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+    private static final Pattern JSONP_WRAPPER_PATTERN = Pattern.compile("^[\\w$]+\\((.*)\\)\\s*;?$", Pattern.DOTALL);
     private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
 
     static {
@@ -280,6 +294,151 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         resultVO.setUnmarkedPhones(unmarkedPhones);
         resultVO.setFailedPhones(failedPhones);
         resultVO.setItems(items);
+        return resultVO;
+    }
+    @Override
+    public MarkTencentStatusQueryResultVO queryTencentStatus(MarkTencentStatusQueryRequest request) {
+        if (request == null || request.getPhones() == null || request.getPhones().isEmpty()) {
+            throw new ServiceException("号码列表不能为空");
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        resolveTencentPlatformCodeForUser(currentUserId);
+        List<String> phones = normalizePhones(request.getPhones());
+        if (phones.isEmpty()) {
+            throw new ServiceException("没有可用号码");
+        }
+
+        List<MarkTencentStatusItemVO> items = new ArrayList<>();
+        int successCount = 0;
+        int failedCount = 0;
+
+        for (String phone : phones) {
+            MarkTencentStatusItemVO item = new MarkTencentStatusItemVO();
+            item.setPhone(phone);
+            try {
+                Map<String, Object> phoneTypeResponse = callTencentJsonp(
+                        "/core/sjg/moblie_phone_type",
+                        Map.of("phone", phone)
+                );
+                item.setPhoneTypeResponse(phoneTypeResponse);
+                if (phoneTypeResponse == null) {
+                    item.setSuccess(false);
+                    item.setErrorMessage("phone_type 查询失败");
+                    item.setDetail("复查失败：phone_type 查询失败");
+                    failedCount++;
+                    items.add(item);
+                    continue;
+                }
+
+                Integer phoneType = parseNullableInt(phoneTypeResponse.get("data"));
+                item.setPhoneType(phoneType);
+
+                Map<String, Object> complainStatusResponse = callTencentJsonp(
+                        "/core/sjg/phone_complain_status",
+                        Map.of("phone", phone)
+                );
+                item.setComplainStatusResponse(complainStatusResponse);
+                String complainStatus = complainStatusResponse == null ? null : asString(complainStatusResponse.get("data"));
+                item.setComplainStatus(complainStatus);
+
+                item.setSuccess(true);
+                item.setDetail(buildTencentRealtimeStatusText(phoneType, complainStatus));
+                successCount++;
+            } catch (Exception e) {
+                item.setSuccess(false);
+                item.setErrorMessage(StringUtils.defaultIfBlank(e.getMessage(), "复查异常"));
+                item.setDetail("复查失败：" + item.getErrorMessage());
+                failedCount++;
+            }
+            items.add(item);
+        }
+
+        MarkTencentStatusQueryResultVO resultVO = new MarkTencentStatusQueryResultVO();
+        resultVO.setTotalCount(phones.size());
+        resultVO.setSuccessCount(successCount);
+        resultVO.setFailedCount(failedCount);
+        resultVO.setItems(items);
+        return resultVO;
+    }
+
+    @Override
+    public MarkTencentSubmitResultVO submitTencent(MarkTencentSubmitRequest request) {
+        if (request == null) {
+            throw new ServiceException("请求参数不能为空");
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        String currentUserName = SecurityUtils.getUsername();
+        String phone = normalizeSinglePhone(request.getPhone());
+        if (StringUtils.isBlank(phone)) {
+            throw new ServiceException("手机号格式不正确");
+        }
+        String smsCode = StringUtils.trimToEmpty(request.getSmsCode());
+        if (!smsCode.matches("\\d{6}")) {
+            throw new ServiceException("验证码应为6位数字");
+        }
+        String tencentPlatformCode = resolveTencentPlatformCodeForUser(currentUserId);
+        String tencentPlatformName = resolvePlatformNameByUser(currentUserId, tencentPlatformCode, "腾讯");
+        if (getPlatformRemainCountByUser(currentUserId, tencentPlatformCode) < 1) {
+            throw new ServiceException("当前腾讯平台剩余次数不足");
+        }
+
+        MarkTencentSubmitResultVO resultVO = new MarkTencentSubmitResultVO();
+        resultVO.setPhone(phone);
+
+        Map<String, Object> phoneTypeResponse = callTencentJsonp(
+                "/core/sjg/moblie_phone_type",
+                Map.of("phone", phone)
+        );
+        if (phoneTypeResponse == null) {
+            throw new ServiceException("无法获取 phone_type");
+        }
+        resultVO.setPhoneTypeResponse(phoneTypeResponse);
+        Integer originalPhoneType = parseNullableInt(phoneTypeResponse.get("data"));
+        resultVO.setOriginalPhoneType(originalPhoneType);
+        boolean forceTamper = Boolean.TRUE.equals(request.getForceTamper());
+        int submittedPhoneType = forceTamper
+                ? 2
+                : ((originalPhoneType != null && (originalPhoneType == 1 || originalPhoneType == 2))
+                ? originalPhoneType
+                : 2);
+        resultVO.setSubmittedPhoneType(submittedPhoneType);
+
+        Map<String, Object> complainStatusResponse = callTencentJsonp(
+                "/core/sjg/phone_complain_status",
+                Map.of("phone", phone)
+        );
+        resultVO.setComplainStatusResponse(complainStatusResponse);
+        if (complainStatusResponse != null) {
+            resultVO.setComplainStatus(asString(complainStatusResponse.get("data")));
+        }
+
+        Map<String, Object> verifyResponse = callTencentJsonp(
+                "/core/txwz/get_phone_type",
+                Map.of("phone", phone, "code", smsCode)
+        );
+        resultVO.setVerifyResponse(verifyResponse);
+        if (verifyResponse != null) {
+            resultVO.setVerifyReCode(parseNullableInt(verifyResponse.get("reCode")));
+            resultVO.setVerifyData(asString(verifyResponse.get("data")));
+        }
+
+        Map<String, Object> submitResponse = callTencentJsonp(
+                "/core/txwz/complian_phone",
+                Map.of("phone", phone, "phone_type", submittedPhoneType, "code", smsCode, "src", 2)
+        );
+        if (submitResponse == null) {
+            throw new ServiceException("提交请求失败");
+        }
+        resultVO.setSubmitResponse(submitResponse);
+        Integer submitReCode = parseNullableInt(submitResponse.get("reCode"));
+        resultVO.setSubmitReCode(submitReCode);
+        resultVO.setSubmitData(asString(submitResponse.get("data")));
+        boolean accepted = submitReCode != null && submitReCode == 0;
+        resultVO.setAccepted(accepted);
+        if (accepted) {
+            deductTencentQuotaOnSuccess(currentUserId, currentUserName, tencentPlatformCode, tencentPlatformName);
+        }
+        recordTencentSubmitOrder(currentUserId, currentUserName, tencentPlatformCode, tencentPlatformName, phone, resultVO);
         return resultVO;
     }
 
@@ -599,6 +758,120 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 currentUserName,
                 now
         );
+    }
+
+    private void recordTencentSubmitOrder(Long userId,
+                                          String operator,
+                                          String platformCode,
+                                          String platformName,
+                                          String phone,
+                                          MarkTencentSubmitResultVO resultVO) {
+        if (resultVO == null || StringUtils.isBlank(phone)) {
+            return;
+        }
+        boolean accepted = Boolean.TRUE.equals(resultVO.getAccepted());
+        long deductAmount = accepted ? 1L : 0L;
+        Date now = DateUtils.getNowDate();
+        String resolvedPlatformName = StringUtils.defaultIfBlank(
+                platformName,
+                resolvePlatformNameByUser(userId, platformCode, "腾讯")
+        );
+        Integer submitReCode = resultVO.getSubmitReCode();
+        String submitData = StringUtils.trimToNull(resultVO.getSubmitData());
+        Integer verifyReCode = resultVO.getVerifyReCode();
+        String verifyData = StringUtils.trimToNull(resultVO.getVerifyData());
+
+        MarkOrder order = new MarkOrder();
+        order.setOrderNo(generateOrderNo());
+        order.setUserId(userId);
+        order.setPlatformCode(platformCode);
+        order.setPlatformName(resolvedPlatformName);
+        order.setTotalCount(1);
+        order.setSuccessCount(accepted ? 1 : 0);
+        order.setFailedCount(accepted ? 0 : 1);
+        order.setTotalAmount(deductAmount);
+        order.setRefundAmount(0L);
+        order.setOrderStatus("2");
+        order.setCompletedTime(now);
+        order.setRemark(accepted
+                ? "腾讯验证码提交成功"
+                : buildTencentRecordText("腾讯验证码提交失败", submitReCode, submitData));
+        order.setCreateBy(operator);
+        order.setCreateTime(now);
+        order.setUpdateBy(operator);
+        order.setUpdateTime(now);
+        markOrderMapper.insertMarkOrder(order);
+
+        MarkOrderItem item = new MarkOrderItem();
+        item.setOrderId(order.getId());
+        item.setPhone(phone);
+        item.setUnitPrice(1L);
+        item.setItemAmount(deductAmount);
+        item.setProcessStatus(accepted ? "1" : "2");
+        item.setProcessResult(buildTencentRecordText(accepted ? "腾讯受理成功" : "腾讯受理失败", submitReCode, submitData));
+        item.setProcessNote(buildTencentSubmitChainDetailText(resultVO));
+        item.setProcessedBy(operator);
+        item.setProcessedTime(now);
+        item.setRefunded("0");
+        item.setCreateBy(operator);
+        item.setCreateTime(now);
+        item.setUpdateBy(operator);
+        item.setUpdateTime(now);
+        markOrderItemMapper.insertMarkOrderItem(item);
+    }
+
+    private String buildTencentRecordText(String prefix, Integer reCode, String data) {
+        String safePrefix = StringUtils.defaultIfBlank(prefix, "腾讯提交");
+        String codeText = reCode == null ? "-" : String.valueOf(reCode);
+        String dataText = StringUtils.defaultIfBlank(StringUtils.trimToNull(data), "-");
+        return StringUtils.abbreviate(safePrefix + "（reCode=" + codeText + "，data=" + dataText + "）", 200);
+    }
+
+    private String buildTencentSubmitChainDetailText(MarkTencentSubmitResultVO resultVO) {
+        if (resultVO == null) {
+            return "-";
+        }
+        String summaryLine = "链路：phone_type 查询 -> 申诉状态查询 -> 验证码校验 -> 提交受理";
+        String phoneTypeLine = "phone_type：原始=" + safeTencentText(resultVO.getOriginalPhoneType())
+                + "，提交=" + safeTencentText(resultVO.getSubmittedPhoneType())
+                + "（" + resolveTencentSubmitModeText(resultVO.getOriginalPhoneType(), resultVO.getSubmittedPhoneType()) + "）";
+        String complainLine = "申诉状态：data=" + safeTencentText(resultVO.getComplainStatus());
+        String verifyLine = "验证码校验：reCode=" + safeTencentText(resultVO.getVerifyReCode())
+                + "，data=" + safeTencentText(resultVO.getVerifyData());
+        String submitLine = "提交受理：reCode=" + safeTencentText(resultVO.getSubmitReCode())
+                + "，data=" + safeTencentText(resultVO.getSubmitData());
+        String finalLine = "最终结果：" + (Boolean.TRUE.equals(resultVO.getAccepted())
+                ? "腾讯受理成功（已扣次数 1）"
+                : "腾讯受理失败（未扣次数）");
+        return StringUtils.abbreviate(String.join("\n",
+                summaryLine,
+                phoneTypeLine,
+                complainLine,
+                verifyLine,
+                submitLine,
+                finalLine
+        ), 500);
+    }
+
+    private String safeTencentText(Object value) {
+        String text = value == null ? null : StringUtils.trimToNull(String.valueOf(value));
+        return StringUtils.defaultIfBlank(text, "-");
+    }
+
+    private String resolveTencentSubmitModeText(Integer originalPhoneType, Integer submittedPhoneType) {
+        if (submittedPhoneType == null) {
+            return "提交类型未知";
+        }
+        if (originalPhoneType == null) {
+            return "兜底提交";
+        }
+        return originalPhoneType.equals(submittedPhoneType) ? "原样提交" : "篡改提交";
+    }
+
+    private String buildTencentRealtimeStatusText(Integer phoneType, String complainStatus) {
+        String typeText = phoneType == null ? "-" : String.valueOf(phoneType);
+        String complainText = StringUtils.defaultIfBlank(StringUtils.trimToNull(complainStatus), "-");
+        return "phone_type=" + typeText + "｜申诉状态=" + complainText;
     }
 
     private void refreshOrderStats(Long orderId, String updateBy) {
@@ -1155,6 +1428,209 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             return false;
         }
         return true;
+    }
+    private Map<String, Object> callTencentJsonp(String path, Map<String, ?> params) {
+        Map<String, Object> requestParams = new LinkedHashMap<>();
+        if (params != null && !params.isEmpty()) {
+            requestParams.putAll(params);
+        }
+        requestParams.putIfAbsent("callback", "cb");
+        String url = buildTencentUrl(path, requestParams);
+        Map<String, String> headers = new LinkedHashMap<>();
+        headers.put("Referer", TENCENT_REFERER);
+        headers.put("User-Agent", TENCENT_USER_AGENT);
+        headers.put("Accept", "*/*");
+        headers.put("X-Requested-With", "XMLHttpRequest");
+        String body;
+        try {
+            body = HttpUtils.get(url, headers);
+        } catch (Exception e) {
+            log.warn("Tencent request failed. url={}", url, e);
+            return null;
+        }
+        if (StringUtils.isBlank(body)) {
+            return null;
+        }
+        return parseTencentJsonp(body);
+    }
+
+    private String buildTencentUrl(String path, Map<String, ?> params) {
+        String normalizedPath = StringUtils.startsWith(path, "/") ? path : "/" + StringUtils.trimToEmpty(path);
+        String query = buildQueryString(params);
+        if (StringUtils.isBlank(query)) {
+            return TENCENT_BASE_URL + normalizedPath;
+        }
+        return TENCENT_BASE_URL + normalizedPath + "?" + query;
+    }
+
+    private String buildQueryString(Map<String, ?> params) {
+        if (params == null || params.isEmpty()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<String, ?> entry : params.entrySet()) {
+            if (StringUtils.isBlank(entry.getKey()) || entry.getValue() == null) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append("&");
+            }
+            builder.append(urlEncode(entry.getKey()))
+                    .append("=")
+                    .append(urlEncode(String.valueOf(entry.getValue())));
+        }
+        return builder.toString();
+    }
+
+    private String urlEncode(String value) {
+        return URLEncoder.encode(StringUtils.defaultString(value), StandardCharsets.UTF_8)
+                .replace("+", "%20");
+    }
+
+    private Map<String, Object> parseTencentJsonp(String body) {
+        String jsonPayload = extractJsonPayload(body);
+        if (StringUtils.isBlank(jsonPayload)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(jsonPayload, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception e) {
+            log.warn("Tencent JSONP parse failed. body={}", body, e);
+            return null;
+        }
+    }
+
+    private String extractJsonPayload(String body) {
+        String trimmed = StringUtils.trimToEmpty(body);
+        if (StringUtils.isBlank(trimmed)) {
+            return null;
+        }
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            return trimmed;
+        }
+        if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+            return StringUtils.trimToNull(trimmed.substring(1, trimmed.length() - 1));
+        }
+        Matcher matcher = JSONP_WRAPPER_PATTERN.matcher(trimmed);
+        if (matcher.matches()) {
+            return StringUtils.trimToNull(matcher.group(1));
+        }
+        int firstBrace = trimmed.indexOf('{');
+        int lastBrace = trimmed.lastIndexOf('}');
+        if (firstBrace >= 0 && lastBrace > firstBrace) {
+            return trimmed.substring(firstBrace, lastBrace + 1);
+        }
+        return null;
+    }
+
+    private Integer parseNullableInt(Object value) {
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        String text = StringUtils.trimToNull(String.valueOf(value));
+        if (text == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(text);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private String normalizeSinglePhone(String phone) {
+        if (StringUtils.isBlank(phone)) {
+            return null;
+        }
+        String clean = phone.replaceAll("[^0-9]", "");
+        if (clean.length() < 7 || clean.length() > 15) {
+            return null;
+        }
+        return clean;
+    }
+
+    private String resolveTencentPlatformCodeForUser(Long userId) {
+        List<MarkUserPlatformPrice> platformPrices = buildPlatformPriceListByUser(userId);
+        for (MarkUserPlatformPrice platformPrice : platformPrices) {
+            if (platformPrice == null || StringUtils.isBlank(platformPrice.getPlatformCode())) {
+                continue;
+            }
+            String platformCode = StringUtils.trimToEmpty(platformPrice.getPlatformCode());
+            String platformName = StringUtils.trimToEmpty(platformPrice.getPlatformName());
+            if (isTencentPlatformCode(platformCode) || StringUtils.contains(platformName, "腾讯")) {
+                return platformCode;
+            }
+        }
+        throw new ServiceException("当前账号未开通腾讯平台");
+    }
+
+    private boolean isTencentPlatformCode(String platformCode) {
+        String normalizedCode = StringUtils.lowerCase(StringUtils.trimToEmpty(platformCode));
+        return "tencent_mark".equals(normalizedCode)
+                || "tencent".equals(normalizedCode)
+                || "tx".equals(normalizedCode)
+                || "txwz".equals(normalizedCode);
+    }
+
+    private long getPlatformRemainCountByUser(Long userId, String platformCode) {
+        if (userId == null || StringUtils.isBlank(platformCode)) {
+            return 0L;
+        }
+        List<MarkUserPlatformPrice> platformPrices = buildPlatformPriceListByUser(userId);
+        for (MarkUserPlatformPrice platformPrice : platformPrices) {
+            if (platformPrice == null) {
+                continue;
+            }
+            if (StringUtils.equals(platformCode, platformPrice.getPlatformCode())) {
+                return sanitizeRemainCount(platformPrice.getRemainCount());
+            }
+        }
+        return 0L;
+    }
+
+    private void deductTencentQuotaOnSuccess(Long userId,
+                                             String operator,
+                                             String platformCode,
+                                             String platformName) {
+        Date now = DateUtils.getNowDate();
+        String resolvedPlatformName = StringUtils.defaultIfBlank(
+                platformName,
+                resolvePlatformNameByUser(userId, platformCode, "腾讯")
+        );
+        MarkUserPlatformQuota quota = lockUserPlatformQuota(
+                userId,
+                platformCode,
+                resolvedPlatformName,
+                operator,
+                now
+        );
+        long balanceBefore = sanitizeRemainCount(quota.getRemainCount());
+        if (balanceBefore < 1) {
+            throw new ServiceException("当前腾讯平台剩余次数不足");
+        }
+        long balanceAfter = balanceBefore - 1;
+        quota.setPlatformName(resolvedPlatformName);
+        quota.setRemainCount(balanceAfter);
+        quota.setUpdateBy(operator);
+        quota.setUpdateTime(now);
+        markUserPlatformQuotaMapper.updateMarkUserPlatformQuota(quota);
+        insertWalletLog(
+                userId,
+                null,
+                null,
+                platformCode,
+                resolvedPlatformName,
+                "DEDUCT",
+                -1L,
+                balanceBefore,
+                balanceAfter,
+                "腾讯验证码提交成功扣次",
+                operator,
+                now
+        );
     }
 
     private int parseInt(Object value, int defaultValue) {

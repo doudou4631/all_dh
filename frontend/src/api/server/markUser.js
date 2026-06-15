@@ -35,6 +35,15 @@ export function precheckMarkUserOrder(data) {
   })
 }
 
+// 腾讯手机号验证码提交
+export function submitMarkUserTencent(data) {
+  return request({
+    url: '/server/markUser/tencent/submit',
+    method: 'post',
+    data
+  })
+}
+
 // 用户订单详情
 export function getMarkUserOrderDetail(orderId) {
   return request({
