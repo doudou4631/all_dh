@@ -16,6 +16,14 @@ export function getMarkAgentOrderDetail(orderId) {
     method: 'get'
   })
 }
+// 代理查询下线账号流水
+export function listMarkAgentWalletLog(query) {
+  return request({
+    url: '/server/markAgent/wallet/log/list',
+    method: 'get',
+    params: query
+  })
+}
 
 // 代理回填处理结果
 export function feedbackMarkOrderItem(itemId, data) {

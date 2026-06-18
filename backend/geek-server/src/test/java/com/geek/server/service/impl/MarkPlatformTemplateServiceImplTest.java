@@ -7,6 +7,7 @@ import com.geek.common.core.domain.model.LoginUser;
 import com.geek.common.exception.ServiceException;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.mapper.MarkPlatformTemplateMapper;
+import com.geek.system.mapper.SysUserMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +38,8 @@ class MarkPlatformTemplateServiceImplTest {
 
     @Mock
     private MarkPlatformTemplateMapper markPlatformTemplateMapper;
+    @Mock
+    private SysUserMapper sysUserMapper;
 
     @Mock
     private ObjectMapper objectMapper;
@@ -158,6 +161,52 @@ class MarkPlatformTemplateServiceImplTest {
                 .isInstanceOf(ServiceException.class)
                 .hasMessage("模板【测试模板】已绑定2个用户，请先迁移用户模板后再删除");
         verify(markPlatformTemplateMapper, never()).deleteMarkPlatformTemplateByIds(any(Long[].class));
+    }
+
+    @Test
+    void selectByIdShouldAllowBoundCrossOwnerTemplateForAgent() {
+        Long currentUserId = 20001L;
+        Long templateId = 17L;
+        setLoginUser(currentUserId, "ceshi888", "agent");
+
+        MarkPlatformTemplate template = new MarkPlatformTemplate();
+        template.setId(templateId);
+        template.setOwnerUserId(OWNER_USER_ID);
+        template.setStatus("0");
+
+        SysUser currentUser = new SysUser();
+        currentUser.setUserId(currentUserId);
+        currentUser.setRelMarkTemplate(templateId);
+
+        when(markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId)).thenReturn(template);
+        when(sysUserMapper.selectOneById(currentUserId)).thenReturn(currentUser);
+
+        MarkPlatformTemplate result = markPlatformTemplateService.selectMarkPlatformTemplateById(templateId);
+
+        assertThat(result).isSameAs(template);
+    }
+
+    @Test
+    void selectByIdShouldRejectUnboundCrossOwnerTemplateForAgent() {
+        Long currentUserId = 20001L;
+        Long templateId = 17L;
+        setLoginUser(currentUserId, "ceshi888", "agent");
+
+        MarkPlatformTemplate template = new MarkPlatformTemplate();
+        template.setId(templateId);
+        template.setOwnerUserId(OWNER_USER_ID);
+        template.setStatus("0");
+
+        SysUser currentUser = new SysUser();
+        currentUser.setUserId(currentUserId);
+        currentUser.setRelMarkTemplate(18L);
+
+        when(markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId)).thenReturn(template);
+        when(sysUserMapper.selectOneById(currentUserId)).thenReturn(currentUser);
+
+        assertThatThrownBy(() -> markPlatformTemplateService.selectMarkPlatformTemplateById(templateId))
+                .isInstanceOf(ServiceException.class)
+                .hasMessage("无权访问该模板");
     }
 
     private void setLoginUser(Long userId, String username, String roleKey) {

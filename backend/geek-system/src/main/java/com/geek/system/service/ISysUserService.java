@@ -137,6 +137,15 @@ public interface ISysUserService extends IService<SysUser> {
      * @return 结果
      */
     public boolean updateUser(SysUser user);
+    /**
+     * 同步代理名下活跃下游账号的标记模板
+     *
+     * @param creatorUserName 代理账号
+     * @param templateId 目标模板ID
+     * @param updateBy 更新人
+     * @return 受影响用户数量
+     */
+    public int syncActiveDownstreamMarkTemplate(String creatorUserName, Long templateId, String updateBy);
 
     /**
      * 用户授权角色

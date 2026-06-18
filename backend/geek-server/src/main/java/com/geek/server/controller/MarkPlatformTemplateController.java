@@ -54,9 +54,7 @@ public class MarkPlatformTemplateController extends BaseController {
     @Operation(summary = "启用标记模板选项")
     @GetMapping("/options")
     public AjaxResult options() {
-        MarkPlatformTemplate query = new MarkPlatformTemplate();
-        query.setStatus("0");
-        return success(markPlatformTemplateService.selectMarkPlatformTemplateList(query));
+        return success(markPlatformTemplateService.selectEnabledTemplateOptionsForCurrentUser());
     }
 
     @Operation(summary = "标记平台候选")

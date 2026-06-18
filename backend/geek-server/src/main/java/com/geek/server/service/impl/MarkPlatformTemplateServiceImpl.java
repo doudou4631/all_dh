@@ -2,6 +2,7 @@ package com.geek.server.service.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.geek.common.core.domain.entity.SysMenu;
+import com.geek.common.core.domain.entity.SysUser;
 import com.geek.common.exception.ServiceException;
 
 import com.geek.common.utils.DateUtils;
@@ -9,6 +10,7 @@ import com.geek.common.utils.SecurityUtils;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.mapper.MarkPlatformTemplateMapper;
 import com.geek.server.service.IMarkPlatformTemplateService;
+import com.geek.system.mapper.SysUserMapper;
 import com.mybatisflex.core.query.QueryChain;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,6 +46,8 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
     @Autowired
     private MarkPlatformTemplateMapper markPlatformTemplateMapper;
     @Autowired
+    private SysUserMapper sysUserMapper;
+    @Autowired
     private ObjectMapper objectMapper;
 
     @Override
@@ -74,6 +78,40 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
         MarkPlatformTemplate scopedQuery = query == null ? new MarkPlatformTemplate() : query;
         applyOwnerScope(scopedQuery);
         return markPlatformTemplateMapper.selectMarkPlatformTemplateList(scopedQuery);
+    }
+    @Override
+    public List<MarkPlatformTemplate> selectEnabledTemplateOptionsForCurrentUser() {
+        MarkPlatformTemplate query = new MarkPlatformTemplate();
+        query.setStatus("0");
+        List<MarkPlatformTemplate> scopedTemplates = selectMarkPlatformTemplateList(query);
+        if (isAdminRole()) {
+            return scopedTemplates;
+        }
+        Map<Long, MarkPlatformTemplate> templateMap = new LinkedHashMap<>();
+        for (MarkPlatformTemplate template : scopedTemplates) {
+            if (template != null && template.getId() != null) {
+                templateMap.put(template.getId(), template);
+            }
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId == null) {
+            return new ArrayList<>(templateMap.values());
+        }
+        SysUser currentUser = sysUserMapper.selectOneById(currentUserId);
+        Long boundTemplateId = currentUser == null ? null : currentUser.getRelMarkTemplate();
+        if (boundTemplateId == null || templateMap.containsKey(boundTemplateId)) {
+            return new ArrayList<>(templateMap.values());
+        }
+        MarkPlatformTemplate boundTemplate = markPlatformTemplateMapper.selectMarkPlatformTemplateById(boundTemplateId);
+        if (boundTemplate != null && "0".equals(boundTemplate.getStatus())) {
+            try {
+                assertTemplateAccessible(boundTemplate);
+                templateMap.put(boundTemplate.getId(), boundTemplate);
+            } catch (ServiceException ignored) {
+                // 无权模板不加入候选
+            }
+        }
+        return new ArrayList<>(templateMap.values());
     }
 
     @Override
@@ -403,9 +441,24 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
         }
         Long ownerUserId = template.getOwnerUserId();
         Long currentUserId = SecurityUtils.getUserId();
-        if (ownerUserId == null || currentUserId == null || !ownerUserId.equals(currentUserId)) {
+        if (currentUserId == null) {
             throw new ServiceException("无权访问该模板");
         }
+        if (ownerUserId != null && ownerUserId.equals(currentUserId)) {
+            return;
+        }
+        if (isCurrentUserBoundTemplate(currentUserId, template.getId())) {
+            return;
+        }
+        throw new ServiceException("无权访问该模板");
+    }
+
+    private boolean isCurrentUserBoundTemplate(Long currentUserId, Long templateId) {
+        if (currentUserId == null || templateId == null) {
+            return false;
+        }
+        SysUser currentUser = sysUserMapper.selectOneById(currentUserId);
+        return currentUser != null && templateId.equals(currentUser.getRelMarkTemplate());
     }
 
     private boolean isAdminRole() {

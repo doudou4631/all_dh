@@ -56,6 +56,37 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </where>
         order by mwl.create_time desc, mwl.id desc
     </select>
+    <select id="selectAgentWalletLogList" resultMap="MarkWalletLogResult">
+        <include refid="selectMarkWalletLogVo"/>
+        left join sys_user su on su.user_id = mwl.user_id
+        <where>
+            <if test="!isAdmin">
+                and su.create_by = #{agentUsername}
+            </if>
+            <if test="query != null and query.userId != null">
+                and mwl.user_id = #{query.userId}
+            </if>
+            <if test="query != null and query.orderId != null">
+                and mwl.order_id = #{query.orderId}
+            </if>
+            <if test="query != null and query.orderItemId != null">
+                and mwl.order_item_id = #{query.orderItemId}
+            </if>
+            <if test="query != null and query.platformCode != null and query.platformCode != ''">
+                and mwl.platform_code = #{query.platformCode}
+            </if>
+            <if test="query != null and query.bizType != null and query.bizType != ''">
+                and mwl.biz_type = #{query.bizType}
+            </if>
+            <if test="query != null and query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                and mwl.create_time &gt;= #{query.params.beginTime}
+            </if>
+            <if test="query != null and query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                and mwl.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mwl.create_time desc, mwl.id desc
+    </select>
 
     <insert id="insertMarkWalletLog" parameterType="MarkWalletLog" useGeneratedKeys="true" keyProperty="id">
         insert into mark_wallet_log

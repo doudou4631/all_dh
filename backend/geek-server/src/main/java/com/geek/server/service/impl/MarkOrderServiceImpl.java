@@ -521,6 +521,23 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         assertAgentReadable(order, false);
         return buildOrderDetail(orderId);
     }
+    @Override
+    public List<MarkWalletLog> selectAgentWalletLogList(MarkWalletLog query) {
+        String currentUsername = SecurityUtils.getUsername();
+        boolean isAdmin = isAdminRole();
+        if (!isAdmin && !isAgentRole()) {
+            throw new ServiceException("仅代理或管理员可操作");
+        }
+        MarkWalletLog walletLogQuery = query == null ? new MarkWalletLog() : query;
+        if (!isAdmin && walletLogQuery.getUserId() != null) {
+            SysUser targetUser = requireUser(walletLogQuery.getUserId());
+            String owner = StringUtils.trimToEmpty(targetUser.getCreateBy());
+            if (!StringUtils.equals(owner, currentUsername)) {
+                throw new ServiceException("仅可查看自己下线用户流水");
+            }
+        }
+        return markWalletLogMapper.selectAgentWalletLogList(walletLogQuery, currentUsername, isAdmin);
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -831,41 +848,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (resultVO == null) {
             return "-";
         }
-        String summaryLine = "链路：phone_type 查询 -> 申诉状态查询 -> 验证码校验 -> 提交受理";
-        String phoneTypeLine = "phone_type：原始=" + safeTencentText(resultVO.getOriginalPhoneType())
-                + "，提交=" + safeTencentText(resultVO.getSubmittedPhoneType())
-                + "（" + resolveTencentSubmitModeText(resultVO.getOriginalPhoneType(), resultVO.getSubmittedPhoneType()) + "）";
-        String complainLine = "申诉状态：data=" + safeTencentText(resultVO.getComplainStatus());
-        String verifyLine = "验证码校验：reCode=" + safeTencentText(resultVO.getVerifyReCode())
-                + "，data=" + safeTencentText(resultVO.getVerifyData());
-        String submitLine = "提交受理：reCode=" + safeTencentText(resultVO.getSubmitReCode())
-                + "，data=" + safeTencentText(resultVO.getSubmitData());
-        String finalLine = "最终结果：" + (Boolean.TRUE.equals(resultVO.getAccepted())
-                ? "腾讯受理成功（已扣次数 1）"
-                : "腾讯受理失败（未扣次数）");
-        return StringUtils.abbreviate(String.join("\n",
-                summaryLine,
-                phoneTypeLine,
-                complainLine,
-                verifyLine,
-                submitLine,
-                finalLine
-        ), 500);
-    }
-
-    private String safeTencentText(Object value) {
-        String text = value == null ? null : StringUtils.trimToNull(String.valueOf(value));
-        return StringUtils.defaultIfBlank(text, "-");
-    }
-
-    private String resolveTencentSubmitModeText(Integer originalPhoneType, Integer submittedPhoneType) {
-        if (submittedPhoneType == null) {
-            return "提交类型未知";
-        }
-        if (originalPhoneType == null) {
-            return "兜底提交";
-        }
-        return originalPhoneType.equals(submittedPhoneType) ? "原样提交" : "篡改提交";
+        return Boolean.TRUE.equals(resultVO.getAccepted()) ? "最终结果：成功（已扣1次）" : "最终结果：失败（未扣次）";
     }
 
     private String buildTencentRealtimeStatusText(Integer phoneType, String complainStatus) {

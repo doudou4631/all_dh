@@ -5,6 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Date;
 import java.util.stream.Collectors;
 
 import com.mybatisflex.core.query.QueryChain;
@@ -184,7 +185,12 @@ public class SysUserController extends BaseController {
     public AjaxResult edit(@Validated @RequestBody SysUser user) {
         userService.checkUserAllowed(user);
         userService.checkUserDataScope(user.getUserId());
+        SysUser storedBeforeUpdate = userService.selectUserById(user.getUserId());
+        if (storedBeforeUpdate == null) {
+            return error("修改用户'" + user.getUserName() + "'失败，用户不存在");
+        }
         try {
+            ensureEditRequestNotStale(user, storedBeforeUpdate);
             checkAssignableRoleKeys(user.getUserId(), user.getRoleIds());
             enforceMarkAdminTemplateIsolation(user, false);
             applyAgentMarkTemplate(user, false);
@@ -193,7 +199,11 @@ public class SysUserController extends BaseController {
             return error("修改用户'" + user.getUserName() + "'失败，" + e.getMessage());
         }
         user.setUpdateBy(getUsername());
-        return toAjax(userService.updateUser(user));
+        boolean updated = userService.updateUser(user);
+        if (updated) {
+            syncDownstreamMarkTemplateIfNeeded(user, storedBeforeUpdate);
+        }
+        return toAjax(updated);
     }
 
     private void applyAgentMarkTemplate(SysUser user, boolean isCreate) {
@@ -235,18 +245,26 @@ public class SysUserController extends BaseController {
         user.setRelTemplate(stored == null ? null : stored.getRelTemplate());
     }
     private boolean isDownstreamRoleSelection(List<Long> roleIds) {
+        return isRoleSelection(roleIds, AGENT_DOWNSTREAM_ROLE_KEYS);
+    }
+
+    private boolean isAgentSelfRoleSelection(List<Long> roleIds) {
+        return isRoleSelection(roleIds, AGENT_SELF_ROLE_KEYS);
+    }
+
+    private boolean isRoleSelection(List<Long> roleIds, List<String> expectedRoleKeys) {
         if (CollectionUtils.isEmpty(roleIds)) {
             return false;
         }
         Set<Long> distinctRoleIds = roleIds.stream()
                 .filter(Objects::nonNull)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
-        if (distinctRoleIds.isEmpty()) {
+        if (distinctRoleIds.isEmpty() || CollectionUtils.isEmpty(expectedRoleKeys)) {
             return false;
         }
         return QueryChain.of(SysRole.class)
                 .in(SysRole::getRoleId, distinctRoleIds)
-                .in(SysRole::getRoleKey, AGENT_DOWNSTREAM_ROLE_KEYS)
+                .in(SysRole::getRoleKey, expectedRoleKeys)
                 .list()
                 .size() > 0;
     }
@@ -295,6 +313,57 @@ public class SysUserController extends BaseController {
         MarkPlatformTemplate template = markPlatformTemplateService.selectMarkPlatformTemplateById(templateId);
         if (template == null || !"0".equals(template.getStatus())) {
             throw new IllegalArgumentException("所选标记模板不可用");
+        }
+    }
+    private void syncDownstreamMarkTemplateIfNeeded(SysUser user, SysUser storedBeforeUpdate) {
+        if (user == null || user.getUserId() == null || user.getRelMarkTemplate() == null) {
+            return;
+        }
+        Long beforeTemplate = storedBeforeUpdate == null ? null : storedBeforeUpdate.getRelMarkTemplate();
+        if (Objects.equals(beforeTemplate, user.getRelMarkTemplate())) {
+            return;
+        }
+        boolean targetIsAgent = isAgentSelfRoleSelection(user.getRoleIds())
+                || hasAnyRoleKey(storedBeforeUpdate, AGENT_SELF_ROLE_KEYS);
+        if (!targetIsAgent) {
+            return;
+        }
+        String creatorUserName = StringUtils.isNotBlank(user.getUserName())
+                ? user.getUserName()
+                : (storedBeforeUpdate == null ? null : storedBeforeUpdate.getUserName());
+        if (StringUtils.isBlank(creatorUserName)) {
+            return;
+        }
+        userService.syncActiveDownstreamMarkTemplate(
+                creatorUserName,
+                user.getRelMarkTemplate(),
+                getUsername()
+        );
+    }
+
+    private boolean hasAnyRoleKey(SysUser user, List<String> roleKeys) {
+        if (user == null || CollectionUtils.isEmpty(user.getRoles()) || CollectionUtils.isEmpty(roleKeys)) {
+            return false;
+        }
+        return user.getRoles().stream()
+                .map(SysRole::getRoleKey)
+                .anyMatch(roleKeys::contains);
+    }
+
+    private void ensureEditRequestNotStale(SysUser user, SysUser stored) {
+        if (user == null || user.getUserId() == null) {
+            return;
+        }
+        Date requestUpdateTime = user.getUpdateTime();
+        if (requestUpdateTime == null) {
+            return;
+        }
+        if (stored == null) {
+            throw new IllegalArgumentException("用户不存在");
+        }
+        Date currentUpdateTime = stored.getUpdateTime();
+        if (currentUpdateTime != null && requestUpdateTime.before(currentUpdateTime)) {
+            throw new IllegalArgumentException("用户信息已被更新，请刷新后重试");
         }
     }
 

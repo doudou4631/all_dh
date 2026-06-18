@@ -5,7 +5,11 @@ import static com.geek.common.core.domain.entity.table.SysUserTableDef.*;
 import static com.geek.system.domain.table.SysPostTableDef.*;
 
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
@@ -414,6 +418,47 @@ public class SysUserServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impl
         // 新增用户与岗位管理
         insertUserPost(user);
         return super.updateById(user);
+    }
+
+    @Override
+    @Transactional
+    public int syncActiveDownstreamMarkTemplate(String creatorUserName, Long templateId, String updateBy) {
+        if (StringUtils.isBlank(creatorUserName) || templateId == null) {
+            return 0;
+        }
+        Set<Long> downstreamUserIds = new LinkedHashSet<>();
+        for (String roleKey : List.of("user", "mark_user")) {
+            SysUser query = new SysUser();
+            query.setCreateBy(creatorUserName);
+            query.setRoleKey(roleKey);
+            query.setStatus("0");
+            query.setDelFlag(0);
+            List<SysUser> users = selectUserList(query).list();
+            users.stream()
+                    .filter(Objects::nonNull)
+                    .filter(item -> item.getUserId() != null)
+                    .filter(item -> !Objects.equals(templateId, item.getRelMarkTemplate()))
+                    .map(SysUser::getUserId)
+                    .forEach(downstreamUserIds::add);
+        }
+        if (CollectionUtils.isEmpty(downstreamUserIds)) {
+            return 0;
+        }
+        int affected = 0;
+        String operator = StringUtils.isNotBlank(updateBy) ? updateBy : SecurityUtils.getUsername();
+        Date now = DateUtils.getNowDate();
+        for (Long downstreamUserId : downstreamUserIds) {
+            boolean updated = this.updateChain()
+                    .eq(SysUser::getUserId, downstreamUserId)
+                    .set(SysUser::getRelMarkTemplate, templateId)
+                    .set(SysUser::getUpdateBy, operator)
+                    .set(SysUser::getUpdateTime, now)
+                    .update();
+            if (updated) {
+                affected++;
+            }
+        }
+        return affected;
     }
 
     /**

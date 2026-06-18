@@ -79,14 +79,20 @@
                      :show-overflow-tooltip="true" width="120"/>
                   <!-- <el-table-column label="部门" align="center" key="deptName" prop="dept.deptName"
                      v-if="columns[3].visible" :show-overflow-tooltip="true" /> -->
-                  <el-table-column label="当前积分" align="center" key="points" prop="points" v-if="columns[3].visible"
-                     :show-overflow-tooltip="true" width="120">
+                  <el-table-column label="当前模板" align="center" key="points" prop="relMarkTemplate"
+                     v-if="columns[3].visible && shouldShowMarkTemplateColumn" :show-overflow-tooltip="true" width="140">
+                     <template #default="scope">
+                        <span style="color: #409EFF; font-weight: bold;">{{ resolveMarkTemplateName(scope.row) }}</span>
+                     </template>
+                  </el-table-column>
+                  <el-table-column label="当前积分" align="center" key="points" prop="points"
+                     v-if="columns[3].visible && !shouldShowMarkTemplateColumn" :show-overflow-tooltip="true" width="120">
                      <template #default="scope">
                         <span style="color: #67C23A; font-weight: bold;">{{ scope.row.points }}</span>
                      </template>
                   </el-table-column>
                   <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber"
-                     v-if="columns[4].visible" width="120" />
+                     v-if="columns[4].visible && !(isAgentAccountPage && isAgent)" width="120" />
                   <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" >
                      <template #default="scope">
                         <el-switch v-model="scope.row.status" active-value="0" inactive-value="1"
@@ -100,7 +106,7 @@
                         <span>{{ parseTime(scope.row.createTime) }}</span>
                      </template>
                   </el-table-column>
-                  <el-table-column label="操作" align="center" :width="isAgentAccountPage ? 520 : 620" class-name="small-padding fixed-width"
+                  <el-table-column label="操作" align="center" :width="620" class-name="small-padding fixed-width"
                      fixed="right">
 
                      <template #default="scope">
@@ -111,6 +117,9 @@
                            <el-button type="danger" @click="handleDeductPoints(scope.row)"
                               v-hasPermi="['server:pointRecord:add']"
                               v-if="Number(scope.row.userId) !== 1" round>扣减</el-button>
+                           <el-button type="primary" plain @click="handleViewAgentPlatformQuota(scope.row)"
+                              v-hasPermi="['server:pointRecord:add']"
+                              v-if="isAgent && Number(scope.row.userId) !== 1" round>平台次数</el-button>
                            <el-button type="info" @click="handleToggleOwnedAccounts(scope.row)"
                               v-if="isSuperAdminAgentAccountPage && Number(scope.row.userId) !== 1"
                               round>{{ isCurrentOwner(scope.row) ? '收起名下账户' : '查看名下账户' }}</el-button>
@@ -411,6 +420,26 @@
             </div>
          </template>
       </el-dialog>
+      <el-dialog :title="platformQuotaDialog.title" v-model="platformQuotaDialog.open" width="520px" append-to-body>
+         <el-table v-loading="platformQuotaLoading" :data="platformQuotaList" empty-text="暂无平台次数数据">
+            <el-table-column label="平台名称" align="center" prop="platformName" :show-overflow-tooltip="true" min-width="180">
+               <template #default="scope">
+                  <span>{{ scope.row.platformName || '-' }}</span>
+               </template>
+            </el-table-column>
+            <el-table-column label="平台编码" align="center" prop="platformCode" min-width="140" />
+            <el-table-column label="剩余次数" align="center" prop="remainCount" width="110">
+               <template #default="scope">
+                  <span style="color: #67C23A; font-weight: 600;">{{ scope.row.remainCount }}</span>
+               </template>
+            </el-table-column>
+         </el-table>
+         <template #footer>
+            <div class="dialog-footer">
+               <el-button @click="platformQuotaDialog.open = false">关 闭</el-button>
+            </div>
+         </template>
+      </el-dialog>
 
       <!-- 用户导入对话框 -->
       <el-dialog :title="upload.title" v-model="upload.open" width="400px" append-to-body>
@@ -462,6 +491,7 @@ const roleSet = computed(() => new Set(Array.isArray(userStore.roles) ? userStor
 const isAgent = computed(() => roleSet.value.has('agent') || roleSet.value.has('mark_agent'));
 const isAccountAdmin = computed(() => roleSet.value.has('admin') || roleSet.value.has('mark_admin'));
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
+const shouldShowMarkTemplateColumn = computed(() => isAgentAccountPage.value && (isAccountAdmin.value || isAgent.value));
 const isSuperAdminAgentAccountPage = computed(() => isAgentAccountPage.value && isAccountAdmin.value);
 const useAgentQuotaAdjust = computed(() => isAgentAccountPage.value);
 const AGENT_ROLE_KEYS = ["agent", "mark_agent"];
@@ -597,6 +627,12 @@ const pointRules = {
 const pointRef = ref(null);
 const pointPlatformOptions = ref([]);
 const pointPlatformLoading = ref(false);
+const platformQuotaDialog = reactive({
+   open: false,
+   title: ""
+});
+const platformQuotaList = ref([]);
+const platformQuotaLoading = ref(false);
 const selectedPointPlatform = computed(() => {
    return pointPlatformOptions.value.find(item => item.platformCode === pointForm.platformCode) || null;
 });
@@ -677,6 +713,28 @@ function normalizeMarkTemplateId(value) {
       return null;
    }
    return String(value).trim();
+}
+
+const markTemplateNameMap = computed(() => {
+   const map = new Map();
+   const options = Array.isArray(markTemplateList.value) ? markTemplateList.value : [];
+   options.forEach(item => {
+      const id = normalizeMarkTemplateId(item?.id);
+      if (id === null) {
+         return;
+      }
+      const name = String(item?.templateName || "").trim();
+      map.set(id, name || `模板#${id}`);
+   });
+   return map;
+});
+
+function resolveMarkTemplateName(row) {
+   const templateId = normalizeMarkTemplateId(row?.relMarkTemplate);
+   if (templateId === null) {
+      return "-";
+   }
+   return markTemplateNameMap.value.get(templateId) || `模板#${templateId}`;
 }
 
 
@@ -973,6 +1031,17 @@ function handlePointPlatformChange(platformCode) {
    const platform = pointPlatformOptions.value.find(item => item.platformCode === platformCode);
    pointForm.platformName = platform?.platformName || "";
 }
+async function fetchMarkAgentPlatformQuotaOptions(userId) {
+   if (!userId) {
+      return [];
+   }
+   const resp = await listMarkAgentQuotaPlatformOptions(userId);
+   const list = Array.isArray(resp?.data) ? resp.data : [];
+   return list.map(item => ({
+      ...item,
+      remainCount: Number.isFinite(Number(item?.remainCount)) ? Number(item.remainCount) : 0
+   }));
+}
 
 async function loadPointPlatformOptions(userId) {
    if (!useAgentQuotaAdjust.value || !userId) {
@@ -983,12 +1052,7 @@ async function loadPointPlatformOptions(userId) {
    }
    pointPlatformLoading.value = true;
    try {
-      const resp = await listMarkAgentQuotaPlatformOptions(userId);
-      const list = Array.isArray(resp?.data) ? resp.data : [];
-      pointPlatformOptions.value = list.map(item => ({
-         ...item,
-         remainCount: Number.isFinite(Number(item?.remainCount)) ? Number(item.remainCount) : 0
-      }));
+      pointPlatformOptions.value = await fetchMarkAgentPlatformQuotaOptions(userId);
       if (pointPlatformOptions.value.length > 0) {
          pointForm.platformCode = pointPlatformOptions.value[0].platformCode;
          pointForm.platformName = pointPlatformOptions.value[0].platformName || "";
@@ -1006,6 +1070,23 @@ async function loadPointPlatformOptions(userId) {
    }
 }
 
+async function handleViewAgentPlatformQuota(row) {
+   if (!row?.userId) {
+      return;
+   }
+   platformQuotaDialog.title = `平台次数 - ${row.userName || row.userId}`;
+   platformQuotaDialog.open = true;
+   platformQuotaLoading.value = true;
+   platformQuotaList.value = [];
+   try {
+      platformQuotaList.value = await fetchMarkAgentPlatformQuotaOptions(row.userId);
+   } catch (error) {
+      platformQuotaList.value = [];
+      proxy.$modal.msgError(error?.message || "加载平台次数失败");
+   } finally {
+      platformQuotaLoading.value = false;
+   }
+}
 /** 积分充值按钮操作 */
 async function handleAddPoints(row) {
    resetPointForm();
@@ -1381,7 +1462,7 @@ function handleUpdate(row) {
       form.value.postIds = response.postIds;
       form.value.roleIds = response.roleIds;
       roleOptions.value = filterAgentRoleOptions(response.roles, form.value.roleIds);
-      ensureAgentDefaultMarkTemplateSelected();
+      form.value.relMarkTemplate = normalizeMarkTemplateId(form.value.relMarkTemplate);
       open.value = true;
       title.value = "修改用户";
       form.value.password = "";

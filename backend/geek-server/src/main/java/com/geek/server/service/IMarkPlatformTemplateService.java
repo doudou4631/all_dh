@@ -14,6 +14,7 @@ public interface IMarkPlatformTemplateService {
     MarkPlatformTemplate selectOwnerDefaultTemplate(Long ownerUserId);
 
     List<MarkPlatformTemplate> selectMarkPlatformTemplateList(MarkPlatformTemplate query);
+    List<MarkPlatformTemplate> selectEnabledTemplateOptionsForCurrentUser();
     List<Map<String, Object>> selectPlatformOptions();
 
     int insertMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate);

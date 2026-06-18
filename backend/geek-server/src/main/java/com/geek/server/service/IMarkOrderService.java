@@ -41,6 +41,7 @@ public interface IMarkOrderService {
     List<MarkOrder> selectAgentOrderList(MarkOrder query);
 
     MarkOrderDetailVO selectAgentOrderDetail(Long orderId);
+    List<MarkWalletLog> selectAgentWalletLogList(MarkWalletLog query);
 
     MarkOrderDetailVO feedbackOrderItem(Long itemId, MarkOrderItemProcessRequest request);
 

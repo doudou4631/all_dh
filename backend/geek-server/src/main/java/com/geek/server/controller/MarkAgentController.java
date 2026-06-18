@@ -7,6 +7,7 @@ import com.geek.common.core.page.TableDataInfo;
 import com.geek.common.enums.BusinessType;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserPlatformPrice;
+import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.service.IMarkOrderService;
@@ -50,6 +51,14 @@ public class MarkAgentController extends BaseController {
     @GetMapping("/order/{orderId}")
     public AjaxResult orderDetail(@PathVariable Long orderId) {
         return success(markOrderService.selectAgentOrderDetail(orderId));
+    }
+    @Operation(summary = "代理查看下线流水")
+    @PreAuthorize("@ss.hasPermi('server:markAgent:wallet:list')")
+    @GetMapping("/wallet/log/list")
+    public TableDataInfo walletLogList(MarkWalletLog query) {
+        startPage();
+        List<MarkWalletLog> list = markOrderService.selectAgentWalletLogList(query);
+        return getDataTable(list);
     }
 
     @Operation(summary = "代理回填处理结果")
