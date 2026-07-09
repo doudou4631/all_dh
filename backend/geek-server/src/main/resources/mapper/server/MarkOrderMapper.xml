@@ -165,14 +165,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
             <if test="orderStatus != null and orderStatus == '0'">
                 and moi.process_status = '0'
-                and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin')
+                and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
             </if>
             <if test="orderStatus != null and orderStatus == '3'">
                 and (
                     moi.process_status = '3'
                     or (
                         moi.process_status = '0'
-                        and lower(mo.platform_code) in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin')
+                        and lower(mo.platform_code) in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
                     )
                 )
             </if>

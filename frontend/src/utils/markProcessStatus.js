@@ -1,4 +1,4 @@
-export const AUTO_PROCESSING_PLATFORMS = ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin']
+export const AUTO_PROCESSING_PLATFORMS = ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz']
 
 export const XIAOMI_PLATFORM_CODE = 'xiaomi'
 
