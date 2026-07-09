@@ -197,9 +197,9 @@
                       placeholder="状态"
                     >
                       <el-option label="待处理" value="0" />
-                      <el-option label="处理中" value="1" />
-                      <el-option label="已完成" value="2" />
-                      <el-option label="已取消" value="3" />
+                      <el-option label="处理中" value="3" />
+                      <el-option label="处理完成" value="1" />
+                      <el-option label="处理失败" value="2" />
                     </el-select>
                   </div>
                   <div class="record-search-field record-search-field--date">
@@ -958,15 +958,16 @@ function recordStatusLabel(row) {
   if (auditStatus === '2') return '已拒绝'
   if (auditStatus === '3') return '已打回'
   const itemStatus = String(row?.itemProcessStatus ?? '')
-  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2') {
+  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2' || itemStatus === '3') {
     return markItemProcessStatusLabel(itemStatus, row)
   }
   const status = String(row?.orderStatus ?? '')
   const successCount = Number(row?.successCount ?? 0)
   const failedCount = Number(row?.failedCount ?? 0)
-  if (status === '0' || status === '1') return '待处理'
-  if (status === '2') return failedCount > 0 && successCount <= 0 ? '失败' : (failedCount > 0 ? '部分失败' : '成功')
-  if (status === '3') return '失败'
+  if (status === '0') return '待处理'
+  if (status === '1') return '处理中'
+  if (status === '2') return failedCount > 0 && successCount <= 0 ? '处理失败' : (failedCount > 0 ? '处理失败' : '处理完成')
+  if (status === '3') return '处理失败'
   return '待处理'
 }
 
@@ -976,7 +977,7 @@ function recordStatusType(row) {
   if (auditStatus === '3') return 'warning'
   if (auditStatus === '0') return 'info'
   const itemStatus = String(row?.itemProcessStatus ?? '')
-  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2') {
+  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2' || itemStatus === '3') {
     return markItemProcessStatusTagType(itemStatus, row)
   }
   const label = recordStatusLabel(row)

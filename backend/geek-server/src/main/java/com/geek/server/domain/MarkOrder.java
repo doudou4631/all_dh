@@ -69,8 +69,8 @@ public class MarkOrder extends BaseEntity {
     @Excel(name = "退款总额")
     private Long refundAmount;
 
-    @Schema(title = "订单状态（0待处理 1处理中 2已完成 3已取消）")
-    @Excel(name = "订单状态", readConverterExp = "0=待处理,1=处理中,2=已完成,3=已取消")
+    @Schema(title = "订单状态（0待处理 1处理中 2处理完成 3处理失败）")
+    @Excel(name = "订单状态", readConverterExp = "0=待处理,1=处理中,2=处理完成,3=处理失败")
     private String orderStatus;
 
     @Schema(title = "审核状态（0待审核 1通过 2拒绝 3打回）")

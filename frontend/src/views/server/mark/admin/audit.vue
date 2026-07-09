@@ -17,8 +17,8 @@
               <el-select v-model="orderQuery.orderStatus" clearable style="width: 150px;">
                 <el-option label="待处理" value="0" />
                 <el-option label="处理中" value="1" />
-                <el-option label="已完成" value="2" />
-                <el-option label="已取消" value="3" />
+                <el-option label="处理完成" value="2" />
+                <el-option label="处理失败" value="3" />
               </el-select>
             </el-form-item>
             <el-form-item>
@@ -156,7 +156,7 @@ const walletQuery = reactive({
 })
 
 function orderStatusLabel(status) {
-  const map = { '0': '待处理', '1': '处理中', '2': '已完成', '3': '已取消' }
+  const map = { '0': '待处理', '1': '处理中', '2': '处理完成', '3': '处理失败' }
   return map[status] || '-'
 }
 

@@ -182,9 +182,7 @@
                 />
               </el-select>
             </div>
-            <span v-else-if="scope.row.processStatus === '0' && isTencentAutoPlatform(scope.row)" class="processed-tip">后台处理中</span>
-            <span v-else-if="scope.row.processStatus === '3'" class="processed-tip">自动检测中</span>
-            <span v-else class="processed-tip">已处理</span>
+            <span v-else class="processed-tip">{{ processStatusLabel(scope.row.processStatus, scope.row) }}</span>
           </template>
         </el-table-column>
         <template #empty>
@@ -265,16 +263,7 @@ const isXiaomiWorkbench = computed(() => {
   const code = String(props.platformCode || '').trim().toLowerCase()
   return code === XIAOMI_PLATFORM_CODE
 })
-const processStatusOptions = computed(() => {
-  if (isXiaomiWorkbench.value) {
-    return MARK_ITEM_PROCESS_STATUS_OPTIONS.filter((item) => item.value !== 'processing')
-  }
-  return [
-    { label: '待处理', value: '0' },
-    { label: '处理成功', value: '1' },
-    { label: '处理失败', value: '2' }
-  ]
-})
+const processStatusOptions = computed(() => MARK_ITEM_PROCESS_STATUS_OPTIONS)
 const emptyDescription = '暂无订单数据'
 const rowFeedbackOptions = MARK_ITEM_FEEDBACK_OPTIONS
 const processStatusLabel = markItemProcessStatusLabel
@@ -370,9 +359,7 @@ function formatAgentDateTime(value) {
 }
 function buildQueryParams(overrides = {}) {
   const raw = { ...queryParams, ...overrides }
-  const params = isXiaomiWorkbench.value
-    ? buildMarkItemProcessStatusQuery(raw)
-    : { ...raw, params: {} }
+  const params = buildMarkItemProcessStatusQuery(raw)
   params.params = params.params || {}
   if (deadlineDate.value) params.params.endTime = deadlineDate.value
   return params
@@ -519,7 +506,7 @@ function handleBatchSuccess() {
     proxy.$modal.msgWarning('请先勾选可标记成功的号码')
     return
   }
-  proxy.$modal.confirm(`确认将选中的 ${itemIds.length} 条号码批量标记为处理成功？`).then(() => {
+  proxy.$modal.confirm(`确认将选中的 ${itemIds.length} 条号码批量标记为处理完成？`).then(() => {
     batchSuccessSubmitting.value = true
     return batchMarkSuccess({ itemIds })
   }).then((res) => {

@@ -3,15 +3,14 @@ export const AUTO_PROCESSING_PLATFORMS = ['tencent_mark', 'tengxun', 'tencent', 
 export const XIAOMI_PLATFORM_CODE = 'xiaomi'
 
 export const MARK_ITEM_PROCESS_STATUS_OPTIONS = [
-  { label: '待处理', value: 'pending' },
+  { label: '待处理', value: '0' },
   { label: '处理中', value: '3' },
-  { label: '后台处理中', value: 'processing' },
-  { label: '处理成功', value: '1' },
+  { label: '处理完成', value: '1' },
   { label: '处理失败', value: '2' }
 ]
 
 export const MARK_ITEM_FEEDBACK_OPTIONS = [
-  { label: '处理成功', value: '1' },
+  { label: '处理完成', value: '1' },
   { label: '处理失败', value: '2' }
 ]
 
@@ -28,9 +27,8 @@ export function isXiaomiPlatform(row) {
 export function markItemProcessStatusLabel(status, row) {
   const code = String(status ?? '')
   if (code === '3') return '处理中'
-  if (code === '0' && row && isXiaomiPlatform(row)) return '待处理'
-  if (code === '0' && row && isAutoProcessingPlatform(row)) return '后台处理中'
-  const map = { '0': '待处理', '1': '处理成功', '2': '处理失败', '3': '处理中' }
+  if (code === '0' && row && isAutoProcessingPlatform(row)) return '处理中'
+  const map = { '0': '待处理', '1': '处理完成', '2': '处理失败', '3': '处理中' }
   return map[code] || '-'
 }
 
@@ -54,15 +52,12 @@ export function buildMarkItemProcessStatusQuery(rawQuery = {}) {
     params: { ...(rawQuery.params || {}) }
   }
   const statusFilter = String(rawQuery.processStatus ?? '').trim()
-  if (statusFilter === 'processing') {
+  if (statusFilter === 'processing' || statusFilter === '3') {
     params.params.processingOnly = '1'
-  } else if (statusFilter === 'pending') {
-    params.processStatus = '0'
+  } else if (statusFilter === 'pending' || statusFilter === '0') {
     params.params.pendingOnly = '1'
-  } else if (statusFilter === '1' || statusFilter === '2' || statusFilter === '3') {
+  } else if (statusFilter === '1' || statusFilter === '2') {
     params.processStatus = statusFilter
-  } else if (statusFilter === '0') {
-    params.processStatus = '0'
   }
   return params
 }

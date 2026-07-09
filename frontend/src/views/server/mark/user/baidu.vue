@@ -102,9 +102,9 @@
                 <el-form-item label="处理状态">
                   <el-select v-model="queryParams.orderStatus" clearable placeholder="状态" style="width: 120px">
                     <el-option label="待处理" value="0" />
-                    <el-option label="处理中" value="1" />
-                    <el-option label="已完成" value="2" />
-                    <el-option label="已取消" value="3" />
+                    <el-option label="处理中" value="3" />
+                    <el-option label="处理完成" value="1" />
+                    <el-option label="处理失败" value="2" />
                   </el-select>
                 </el-form-item>
                 <el-form-item label="提交时间">
@@ -350,21 +350,28 @@ async function copyText(text) {
   }
 }
 
+function isAutoProcessingRecord(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin'].includes(code)
+}
+
 function recordStatusLabel(row) {
   const auditStatus = String(row?.auditStatus ?? '1')
   if (auditStatus === '0') return '待审核'
   if (auditStatus === '2') return '已拒绝'
   if (auditStatus === '3') return '已打回'
   const itemStatus = String(row?.itemProcessStatus ?? '')
-  if (itemStatus === '0') return '待处理'
-  if (itemStatus === '1') return '成功'
-  if (itemStatus === '2') return '失败'
+  if (itemStatus === '3') return '处理中'
+  if (itemStatus === '0') return isAutoProcessingRecord(row) ? '处理中' : '待处理'
+  if (itemStatus === '1') return '处理完成'
+  if (itemStatus === '2') return '处理失败'
   const status = String(row?.orderStatus ?? '')
   const successCount = Number(row?.successCount ?? 0)
   const failedCount = Number(row?.failedCount ?? 0)
-  if (status === '0' || status === '1') return '待处理'
-  if (status === '2') return failedCount > 0 && successCount <= 0 ? '失败' : (failedCount > 0 ? '部分失败' : '成功')
-  if (status === '3') return '失败'
+  if (status === '0') return '待处理'
+  if (status === '1') return '处理中'
+  if (status === '2') return failedCount > 0 && successCount <= 0 ? '处理失败' : (failedCount > 0 ? '处理失败' : '处理完成')
+  if (status === '3') return '处理失败'
   return '待处理'
 }
 
@@ -373,14 +380,11 @@ function recordStatusType(row) {
   if (auditStatus === '2') return 'danger'
   if (auditStatus === '3') return 'warning'
   if (auditStatus === '0') return 'info'
-  const itemStatus = String(row?.itemProcessStatus ?? '')
-  if (itemStatus === '1') return 'success'
-  if (itemStatus === '2') return 'danger'
-  if (itemStatus === '0') return 'warning'
   const label = recordStatusLabel(row)
-  if (label === '成功') return 'success'
-  if (label === '失败' || label === '部分失败') return 'danger'
-  return 'warning'
+  if (label === '处理完成') return 'success'
+  if (label === '处理失败') return 'danger'
+  if (label === '处理中') return 'warning'
+  return 'info'
 }
 
 function recordRowKey(row) {

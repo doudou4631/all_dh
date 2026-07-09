@@ -207,11 +207,16 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="query != null and query.params != null and query.params.pendingOnly != null and query.params.pendingOnly.toString() == '1'">
                 and moi.process_status = '0'
-                and lower(mo.platform_code) not in ('tencent_mark', 'tencent', 'tx', 'txwz', 'td_gaopin')
+                and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin')
             </if>
             <if test="query != null and query.params != null and query.params.processingOnly != null and query.params.processingOnly.toString() == '1'">
-                and moi.process_status = '0'
-                and lower(mo.platform_code) in ('tencent_mark', 'tencent', 'tx', 'txwz', 'td_gaopin')
+                and (
+                    moi.process_status = '3'
+                    or (
+                        moi.process_status = '0'
+                        and lower(mo.platform_code) in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin')
+                    )
+                )
             </if>
             <if test="query != null and query.params != null and query.params.processedOnly != null and query.params.processedOnly == '1'">
                 and moi.process_status in ('1', '2')
