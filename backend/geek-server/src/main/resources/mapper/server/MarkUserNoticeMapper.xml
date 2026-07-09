@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkUserNoticeMapper">
+
+    <resultMap type="MarkUserNotice" id="MarkUserNoticeResult">
+        <result property="id" column="id"/>
+        <result property="userId" column="user_id"/>
+        <result property="noticeType" column="notice_type"/>
+        <result property="title" column="title"/>
+        <result property="content" column="content"/>
+        <result property="bizType" column="biz_type"/>
+        <result property="bizId" column="biz_id"/>
+        <result property="readFlag" column="read_flag"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+    </resultMap>
+
+    <sql id="selectMarkUserNoticeVo">
+        select
+            mun.id,
+            mun.user_id,
+            mun.notice_type,
+            mun.title,
+            mun.content,
+            mun.biz_type,
+            mun.biz_id,
+            mun.read_flag,
+            mun.create_by,
+            mun.create_time,
+            mun.update_by,
+            mun.update_time,
+            mun.remark
+        from mark_user_notice mun
+    </sql>
+
+    <select id="selectMarkUserNoticeById" parameterType="Long" resultMap="MarkUserNoticeResult">
+        <include refid="selectMarkUserNoticeVo"/>
+        where mun.id = #{id}
+    </select>
+
+    <select id="selectMarkUserNoticeList" parameterType="MarkUserNotice" resultMap="MarkUserNoticeResult">
+        <include refid="selectMarkUserNoticeVo"/>
+        <where>
+            <if test="userId != null"> and mun.user_id = #{userId}</if>
+            <if test="noticeType != null and noticeType != ''"> and mun.notice_type = #{noticeType}</if>
+            <if test="readFlag != null and readFlag != ''"> and mun.read_flag = #{readFlag}</if>
+            <if test="title != null and title != ''"> and mun.title like concat('%', #{title}, '%')</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and mun.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and mun.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by mun.create_time desc, mun.id desc
+    </select>
+
+    <select id="countUnreadByUserId" resultType="int">
+        select count(1)
+        from mark_user_notice mun
+        where mun.user_id = #{userId}
+          and mun.read_flag = '0'
+    </select>
+
+    <insert id="insertMarkUserNotice" parameterType="MarkUserNotice" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_user_notice
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="noticeType != null and noticeType != ''">notice_type,</if>
+            <if test="title != null and title != ''">title,</if>
+            <if test="content != null">content,</if>
+            <if test="bizType != null and bizType != ''">biz_type,</if>
+            <if test="bizId != null">biz_id,</if>
+            <if test="readFlag != null and readFlag != ''">read_flag,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="noticeType != null and noticeType != ''">#{noticeType},</if>
+            <if test="title != null and title != ''">#{title},</if>
+            <if test="content != null">#{content},</if>
+            <if test="bizType != null and bizType != ''">#{bizType},</if>
+            <if test="bizId != null">#{bizId},</if>
+            <if test="readFlag != null and readFlag != ''">#{readFlag},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="markReadById">
+        update mark_user_notice
+        set read_flag = '1',
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{id}
+          and user_id = #{userId}
+          and read_flag = '0'
+    </update>
+
+    <update id="markAllReadByUserId">
+        update mark_user_notice
+        set read_flag = '1',
+            update_by = #{updateBy},
+            update_time = now()
+        where user_id = #{userId}
+          and read_flag = '0'
+    </update>
+
+    <select id="selectAgentAuditStats" resultType="com.geek.server.domain.vo.MarkAgentAuditStatsVO">
+        select
+            sum(case when mo.audit_status = '0' then 1 else 0 end) as pendingCount,
+            sum(case when mo.audit_status in ('1','2','3') and date(mo.audit_time) = curdate() then 1 else 0 end) as todayAuditCount,
+            sum(case when mo.audit_status = '1' and date(mo.audit_time) = curdate() then 1 else 0 end) as todayPassCount,
+            sum(case when mo.audit_status = '2' and date(mo.audit_time) = curdate() then 1 else 0 end) as todayRejectCount,
+            sum(case when mo.audit_status = '3' and date(mo.audit_time) = curdate() then 1 else 0 end) as todayReturnCount,
+            sum(case when mo.audit_status in ('1','2','3') then 1 else 0 end) as totalAuditCount,
+            sum(case when mo.audit_status = '1' then 1 else 0 end) as totalPassCount
+        from mark_order mo
+        left join sys_user su on su.user_id = mo.user_id
+        <where>
+            <if test="!isAdmin">
+                and (
+                    mo.assigned_agent_id = #{agentId}
+                    or (mo.assigned_agent_id is null and su.create_by = #{agentUsername})
+                    or exists (
+                        select 1
+                        from sys_user agent_u
+                        inner join sys_user_role aur on aur.user_id = agent_u.user_id
+                        inner join sys_role ar on ar.role_id = aur.role_id and ar.role_key in ('agent', 'mark_agent')
+                        where agent_u.user_id = #{agentId}
+                          and agent_u.del_flag = '0'
+                          and agent_u.rel_mark_template is not null
+                          and agent_u.rel_mark_template &gt; 0
+                          and su.rel_mark_template = agent_u.rel_mark_template
+                    )
+                    or exists (
+                        select 1
+                        from mark_platform_template mpt
+                        where mpt.id = su.rel_mark_template
+                          and mpt.owner_user_id = #{agentId}
+                          and mpt.status = '0'
+                    )
+                )
+            </if>
+        </where>
+    </select>
+</mapper>

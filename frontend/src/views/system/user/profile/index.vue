@@ -92,8 +92,8 @@ function getUser() {
 const route = useRoute();
 
 onMounted(() => {
-   const activeTab = route.params && route.params.activeTab
-   if (activeTab) {
+   const activeTab = route.query?.activeTab || route.params?.activeTab
+   if (activeTab === 'userinfo' || activeTab === 'resetPwd') {
       selectedTab.value = activeTab
    }
    getUser();

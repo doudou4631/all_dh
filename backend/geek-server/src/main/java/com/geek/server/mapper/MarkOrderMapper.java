@@ -25,4 +25,6 @@ public interface MarkOrderMapper {
     int insertMarkOrder(MarkOrder markOrder);
 
     int updateMarkOrder(MarkOrder markOrder);
+
+    Long selectAgentUserIdByMarkTemplate(@Param("templateId") Long templateId);
 }

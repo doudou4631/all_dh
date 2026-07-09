@@ -73,6 +73,20 @@ public class MarkOrder extends BaseEntity {
     @Excel(name = "订单状态", readConverterExp = "0=待处理,1=处理中,2=已完成,3=已取消")
     private String orderStatus;
 
+    @Schema(title = "审核状态（0待审核 1通过 2拒绝 3打回）")
+    @Excel(name = "审核状态", readConverterExp = "0=待审核,1=通过,2=拒绝,3=打回")
+    private String auditStatus;
+
+    @Schema(title = "审核意见")
+    private String auditOpinion;
+
+    @Schema(title = "审核人")
+    private String auditBy;
+
+    @Schema(title = "审核时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date auditTime;
+
     @Schema(title = "完成时间")
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date completedTime;
@@ -85,4 +99,14 @@ public class MarkOrder extends BaseEntity {
 
     @Schema(title = "下单用户名")
     private String userName;
+
+    @Schema(title = "订单明细ID")
+    private Long itemId;
+
+    @Schema(title = "明细处理状态（0待处理 1成功 2失败）")
+    private String itemProcessStatus;
+
+    @Schema(title = "明细处理时间")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private Date itemProcessedTime;
 }

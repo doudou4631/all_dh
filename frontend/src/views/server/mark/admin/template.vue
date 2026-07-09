@@ -50,10 +50,10 @@
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="平台范围" min-width="300" show-overflow-tooltip>
+        <el-table-column label="平台范围" min-width="360" show-overflow-tooltip>
           <template #default="scope">
             <el-tag v-for="item in parseTemplatePlatforms(scope.row.templateInfo)" :key="item.code" size="small" style="margin-right: 6px; margin-bottom: 4px;">
-              {{ item.name || platformNameMap[item.code] || item.code }}（{{ item.unitPrice }}分）
+              {{ item.name || platformNameMap[item.code] || item.code }} [{{ item.code }}]（{{ item.unitPrice }}分）
             </el-tag>
             <span v-if="parseTemplatePlatforms(scope.row.templateInfo).length === 0">-</span>
           </template>
@@ -81,7 +81,7 @@
       />
     </el-card>
 
-    <el-dialog v-model="open" :title="title" width="760px" append-to-body>
+    <el-dialog v-model="open" :title="title" width="980px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
         <el-form-item label="模板名称" prop="templateName">
           <el-input v-model="form.templateName" maxlength="100" />
@@ -94,7 +94,10 @@
               :label="item.code"
               style="margin-right: 18px; margin-bottom: 6px;"
             >
-              <span class="platform-option-label">{{ item.name }}</span>
+              <span class="platform-option-label" :title="`${resolvePlatformCodeRemark(item.code)} (${item.code})`">
+                {{ item.name }}
+                <span class="platform-option-code">[{{ item.code }}]</span>
+              </span>
               <el-button
                 v-if="canRemoveCustomOption(item.code)"
                 link
@@ -129,9 +132,21 @@
             />
             <el-button type="primary" plain icon="Plus" @click="handleAddCustomPlatform">新增平台</el-button>
           </div>
-          <div class="platform-custom-tip">新增平台会加入当前模板候选并自动勾选，且可设置每号码扣积分。</div>
+          <div class="platform-custom-tip">新增平台会加入当前模板候选并自动勾选，且可设置每号码扣积分。绑定平台编码保存后不可在此修改，仅展示名称可调整。</div>
           <div v-if="selectedPlatformCodes.length > 0" class="platform-unit-editor">
             <div v-for="(code, index) in selectedPlatformCodes" :key="`unit-${code}`" class="platform-unit-row">
+              <span class="platform-code-label">绑定编码</span>
+              <el-input
+                :model-value="code"
+                class="platform-unit-code-input"
+                disabled
+              />
+              <span class="platform-code-label">平台备注</span>
+              <el-input
+                :model-value="resolvePlatformCodeRemark(code)"
+                class="platform-unit-remark-input"
+                disabled
+              />
               <el-input
                 v-model="platformDisplayNameMap[code]"
                 class="platform-unit-name-input"
@@ -205,6 +220,30 @@ const customPlatformForm = reactive({
 })
 const platformUnitPriceMap = reactive({})
 const platformDisplayNameMap = reactive({})
+
+const STANDARD_PLATFORM_REMARKS = {
+  taidixiong: '泰迪熊',
+  td_gaopin: '泰迪熊高频',
+  td_second: '泰迪熊二次',
+  tengxun: '腾讯',
+  tencent_mark: '腾讯速解',
+  tencent: '腾讯',
+  tx: '腾讯',
+  txwz: '腾讯',
+  sanliuling: '360',
+  '360': '360',
+  qihu_first: '360首次/覆盖',
+  qihu_second: '360二次',
+  baidu: '百度',
+  sghmt: '搜狗号码通',
+  sougou: '搜狗（编码应为 sghmt）',
+  yidonggaopin: '移动高频',
+  mobile_gaopin: '移动高频',
+  xiaomi: '小米手机',
+  ltgj: '联通管家',
+  liantongguanjia: '联通管家（编码应为 ltgj）',
+  dianhuabang: '电话邦'
+}
 
 const showSearch = ref(true)
 const loading = ref(false)
@@ -280,6 +319,20 @@ function parseTemplatePlatforms(templateInfo) {
 }
 function isSystemCode(code) {
   return !!platformSystemMap.value[String(code || '').trim()]
+}
+
+function resolvePlatformCodeRemark(code) {
+  const normalized = String(code || '').trim()
+  if (!normalized) return ''
+  const fromOptions = String(platformNameMap.value[normalized] || '').trim()
+  if (fromOptions && fromOptions !== normalized) {
+    return fromOptions
+  }
+  const fromStandard = STANDARD_PLATFORM_REMARKS[normalized] || STANDARD_PLATFORM_REMARKS[normalized.toLowerCase()]
+  if (fromStandard) {
+    return fromStandard
+  }
+  return isSystemCode(normalized) ? (fromOptions || normalized) : '自定义平台（请确认编码是否正确）'
 }
 
 function parseTemplateCodes(templateInfo) {
@@ -633,8 +686,36 @@ onMounted(() => {
 .platform-unit-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+.platform-code-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.platform-unit-code-input {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
+.platform-unit-remark-input {
+  width: 170px;
+  flex: 0 0 170px;
+}
+
+.platform-unit-code-input :deep(.el-input__inner) {
+  font-family: Consolas, Monaco, monospace;
+}
+
+.platform-option-code {
+  margin-left: 4px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .platform-unit-row:last-child {
@@ -642,19 +723,21 @@ onMounted(() => {
 }
 
 .platform-unit-name-input {
-  width: 220px;
+  width: 180px;
+  flex: 0 0 180px;
 }
 
-.platform-unit-suffix {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-}
+.platform-unit-suffix,
 .platform-order-label {
   color: var(--el-text-color-secondary);
   font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
+
 .platform-order-input {
   width: 106px;
+  flex: 0 0 106px;
 }
 
 .platform-option-label {

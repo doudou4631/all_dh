@@ -96,7 +96,11 @@ public class UserApiQueryRecordServiceImpl implements IUserApiQueryRecordService
                 .replace("yes", "")
                 .replace("YES", "")
                 .replace("Yes", "");
-            return cleaned.trim();
+            cleaned = cleaned.trim();
+            if (cleaned.equals("普通标记") || cleaned.startsWith("普通标记-") || cleaned.startsWith("普通标记—")) {
+                return "有标记";
+            }
+            return cleaned;
         }
 
         return rawResults;

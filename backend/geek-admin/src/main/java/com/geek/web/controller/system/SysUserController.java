@@ -39,6 +39,7 @@ import com.geek.common.utils.StringUtils;
 import com.geek.common.utils.poi.ExcelUtil;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.service.IMarkPlatformTemplateService;
+import com.geek.system.service.ISysConfigService;
 import com.geek.system.service.ISysDeptService;
 import com.geek.system.service.ISysPostService;
 import com.geek.system.service.ISysRoleService;
@@ -74,6 +75,9 @@ public class SysUserController extends BaseController {
 
     @Autowired
     private ISysUserService userService;
+
+    @Autowired
+    private ISysConfigService configService;
 
     @Autowired
     private ISysRoleService roleService;
@@ -171,7 +175,14 @@ public class SysUserController extends BaseController {
             return error("新增用户'" + user.getUserName() + "'失败，" + e.getMessage());
         }
         user.setCreateBy(getUsername());
-        user.setPassword(SecurityUtils.encryptPassword(user.getPassword()));
+        String password = user.getPassword();
+        if (StringUtils.isEmpty(password)) {
+            password = configService.selectConfigByKey("sys.user.initPassword");
+        }
+        if (StringUtils.isEmpty(password)) {
+            return error("新增用户'" + user.getUserName() + "'失败，初始密码未配置");
+        }
+        user.setPassword(SecurityUtils.encryptPassword(password));
         return toAjax(userService.insertUser(user));
     }
 
@@ -199,10 +210,8 @@ public class SysUserController extends BaseController {
             return error("修改用户'" + user.getUserName() + "'失败，" + e.getMessage());
         }
         user.setUpdateBy(getUsername());
+        user.setPassword(null);
         boolean updated = userService.updateUser(user);
-        if (updated) {
-            syncDownstreamMarkTemplateIfNeeded(user, storedBeforeUpdate);
-        }
         return toAjax(updated);
     }
 
@@ -215,14 +224,11 @@ public class SysUserController extends BaseController {
             return;
         }
         if (isDownstreamRoleSelection(user.getRoleIds())) {
-            Long processorUserId = resolveProcessorUserIdForDownstream(user, isCreate);
-            if (processorUserId != null) {
-                applyDownstreamInheritedTemplate(user, processorUserId);
+            if (user.getRelMarkTemplate() == null) {
                 return;
             }
-            if (isAgentOperator()) {
-                throw new IllegalArgumentException("无法识别处理账号，不能继承标记模板");
-            }
+            validateTemplateAvailable(user.getRelMarkTemplate());
+            return;
         }
         boolean isSelf = !isCreate && currentUserId.equals(user.getUserId());
         if (user.getRelMarkTemplate() == null) {
@@ -248,10 +254,6 @@ public class SysUserController extends BaseController {
         return isRoleSelection(roleIds, AGENT_DOWNSTREAM_ROLE_KEYS);
     }
 
-    private boolean isAgentSelfRoleSelection(List<Long> roleIds) {
-        return isRoleSelection(roleIds, AGENT_SELF_ROLE_KEYS);
-    }
-
     private boolean isRoleSelection(List<Long> roleIds, List<String> expectedRoleKeys) {
         if (CollectionUtils.isEmpty(roleIds)) {
             return false;
@@ -269,85 +271,11 @@ public class SysUserController extends BaseController {
                 .size() > 0;
     }
 
-    private Long resolveProcessorUserIdForDownstream(SysUser user, boolean isCreate) {
-        if (isAgentOperator()) {
-            return getUserId();
-        }
-        if (isCreate || user == null || user.getUserId() == null) {
-            return null;
-        }
-        SysUser stored = userService.selectUserById(user.getUserId());
-        if (stored == null || StringUtils.isBlank(stored.getCreateBy())) {
-            return null;
-        }
-        SysUser processor = userService.selectUserByUserName(stored.getCreateBy());
-        if (!isAgentProcessor(processor)) {
-            return null;
-        }
-        return processor.getUserId();
-    }
-
-    private boolean isAgentProcessor(SysUser user) {
-        if (user == null || CollectionUtils.isEmpty(user.getRoles())) {
-            return false;
-        }
-        return user.getRoles().stream()
-                .map(SysRole::getRoleKey)
-                .anyMatch(AGENT_SELF_ROLE_KEYS::contains);
-    }
-
-    private void applyDownstreamInheritedTemplate(SysUser user, Long processorUserId) {
-        SysUser processor = userService.selectUserById(processorUserId);
-        if (processor == null) {
-            throw new IllegalArgumentException("处理账号不存在，无法继承标记模板");
-        }
-        Long inheritedTemplateId = processor.getRelMarkTemplate();
-        if (inheritedTemplateId == null) {
-            throw new IllegalArgumentException("处理账号未绑定标记模板，请先完成绑定");
-        }
-        validateTemplateAvailable(inheritedTemplateId);
-        user.setRelMarkTemplate(inheritedTemplateId);
-    }
-
     private void validateTemplateAvailable(Long templateId) {
         MarkPlatformTemplate template = markPlatformTemplateService.selectMarkPlatformTemplateById(templateId);
         if (template == null || !"0".equals(template.getStatus())) {
             throw new IllegalArgumentException("所选标记模板不可用");
         }
-    }
-    private void syncDownstreamMarkTemplateIfNeeded(SysUser user, SysUser storedBeforeUpdate) {
-        if (user == null || user.getUserId() == null || user.getRelMarkTemplate() == null) {
-            return;
-        }
-        Long beforeTemplate = storedBeforeUpdate == null ? null : storedBeforeUpdate.getRelMarkTemplate();
-        if (Objects.equals(beforeTemplate, user.getRelMarkTemplate())) {
-            return;
-        }
-        boolean targetIsAgent = isAgentSelfRoleSelection(user.getRoleIds())
-                || hasAnyRoleKey(storedBeforeUpdate, AGENT_SELF_ROLE_KEYS);
-        if (!targetIsAgent) {
-            return;
-        }
-        String creatorUserName = StringUtils.isNotBlank(user.getUserName())
-                ? user.getUserName()
-                : (storedBeforeUpdate == null ? null : storedBeforeUpdate.getUserName());
-        if (StringUtils.isBlank(creatorUserName)) {
-            return;
-        }
-        userService.syncActiveDownstreamMarkTemplate(
-                creatorUserName,
-                user.getRelMarkTemplate(),
-                getUsername()
-        );
-    }
-
-    private boolean hasAnyRoleKey(SysUser user, List<String> roleKeys) {
-        if (user == null || CollectionUtils.isEmpty(user.getRoles()) || CollectionUtils.isEmpty(roleKeys)) {
-            return false;
-        }
-        return user.getRoles().stream()
-                .map(SysRole::getRoleKey)
-                .anyMatch(roleKeys::contains);
     }
 
     private void ensureEditRequestNotStale(SysUser user, SysUser stored) {

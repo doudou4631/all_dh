@@ -9,6 +9,7 @@ import Hamburger from '@/components/Hamburger/index.vue'
 import Screenfull from '@/components/Screenfull/index.vue'
 import SizeSelect from '@/components/SizeSelect/index.vue'
 import HeaderSearch from '@/components/HeaderSearch/index.vue'
+import NoticeMarquee from '../NoticeMarquee.vue'
 import useAppStore from '@/store/modules/app'
 import useUserStore from '@/store/modules/user'
 import useSettingsStore from '@/store/modules/settings'
@@ -61,6 +62,8 @@ function setLayout() {
     <!-- 面包屑导航栏 -->
     <breadcrumb id="breadcrumb-container" v-else />
 
+    <notice-marquee class="navbar-notice" />
+
     <!-- 右侧菜单 -->
     <div class="right-menu">
       <template v-if="appStore.device !== 'mobile'">
@@ -112,6 +115,8 @@ function setLayout() {
   overflow: hidden;
   position: relative;
   background: variables.$navbar-color;
+  display: flex;
+  align-items: center;
 
   @if variables.$navbar-color !=variables.$page-background-color {
     box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
@@ -120,7 +125,7 @@ function setLayout() {
   #hamburger-container {
     line-height: 46px;
     height: 100%;
-    float: left;
+    flex-shrink: 0;
     cursor: pointer;
     transition: background 0.3s;
     -webkit-tap-highlight-color: transparent;
@@ -131,7 +136,16 @@ function setLayout() {
   }
 
   #breadcrumb-container {
-    float: left;
+    flex-shrink: 0;
+    max-width: 42%;
+    overflow: hidden;
+  }
+
+  .navbar-notice {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    margin: 0 8px;
   }
 
   #topmenu-container {
@@ -145,7 +159,8 @@ function setLayout() {
   }
 
   .right-menu {
-    float: right;
+    flex-shrink: 0;
+    margin-left: auto;
     height: 100%;
     line-height: 50px;
     display: flex;

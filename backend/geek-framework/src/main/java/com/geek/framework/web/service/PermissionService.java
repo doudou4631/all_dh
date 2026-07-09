@@ -44,8 +44,11 @@ public class PermissionService implements IPermissionService {
         if (StringUtils.isNull(loginUser) || CollectionUtils.isEmpty(loginUser.getPermissions())) {
             return false;
         }
-        PermissionContextHolder.setContext(permission);
-        return hasPermissions(loginUser.getPermissions(), permission);
+        boolean matched = hasPermissions(loginUser.getPermissions(), permission);
+        if (matched) {
+            PermissionContextHolder.setContext(permission);
+        }
+        return matched;
     }
 
     /**
@@ -62,10 +65,10 @@ public class PermissionService implements IPermissionService {
         if (StringUtils.isNull(loginUser) || CollectionUtils.isEmpty(loginUser.getPermissions())) {
             return false;
         }
-        PermissionContextHolder.setContext(permissions);
         Set<String> authorities = loginUser.getPermissions();
         for (String permission : permissions.split(PERMISSION_DELIMETER)) {
             if (permission != null && hasPermissions(authorities, permission)) {
+                PermissionContextHolder.setContext(permission);
                 return true;
             }
         }

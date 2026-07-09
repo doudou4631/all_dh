@@ -47,13 +47,12 @@ const captchaType = ref<'char' | 'math' | 'clickWord' | 'blockPuzzle'>('math')
 async function handleCheck(data: any) {
   loginForm.value.captcha = data;
   try {
-    try {
-      await userStore.login(loginForm.value, props.method);
-      router.push({ path: redirect.value || "/" });
-    } catch {
-      getCode();
-      throw new Error("验证失败");
-    }
+    await userStore.login(loginForm.value, props.method);
+    router.push({ path: redirect.value || "/" });
+  } catch (error) {
+    loginForm.value.code = '';
+    getCode();
+    throw error;
   } finally {
     loading.value = false;
     if (loginForm.value.rememberMe) {
@@ -83,7 +82,7 @@ function handleLogin() {
       handleCheck({
         ...loginForm.value.captcha,
         captchaType: captchaType.value,
-        wordList: loginForm.value.code.split('')
+        wordList: String(loginForm.value.code || '').trim().split('')
       });
     }
   });
@@ -169,8 +168,8 @@ onMounted(() => {
     </el-form-item>
     <el-form-item prop="code" v-if="captchaEnabled && method === 'password'">
       <div style="width: 100%;" v-if="['char', 'math'].includes(captchaType)">
-        <el-input v-model="loginForm.code" size="large" auto-complete="off" placeholder="验证码" style="width: 63%"
-          @keyup.enter="handleLogin">
+        <el-input v-model="loginForm.code" size="large" auto-complete="off" placeholder="请输入算式计算结果" style="width: 63%"
+          @keyup.enter="handleLogin" @input="loginForm.code = String(loginForm.code || '').replace(/\D/g, '')">
           <template #prefix><svg-icon icon-class="validCode" class="el-input__icon input-icon" /></template>
         </el-input>
         <div class="login-code">

@@ -6,11 +6,13 @@ import com.geek.common.core.domain.AjaxResult;
 import com.geek.common.core.page.TableDataInfo;
 import com.geek.common.enums.BusinessType;
 import com.geek.server.domain.MarkOrder;
+import com.geek.server.domain.MarkUserNotice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
 import com.geek.server.domain.dto.MarkTencentSubmitRequest;
 import com.geek.server.service.IMarkOrderService;
+import com.geek.server.service.IMarkUserNoticeService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,6 +37,16 @@ import java.util.List;
 public class MarkUserController extends BaseController {
 
     private final IMarkOrderService markOrderService;
+    private final IMarkUserNoticeService markUserNoticeService;
+
+    @Operation(summary = "用户提交记录（我的订单）")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:list')")
+    @GetMapping("/submission/list")
+    public TableDataInfo listSubmission(MarkOrder query) {
+        startPage();
+        List<MarkOrder> list = markOrderService.selectMyOrderList(query);
+        return getDataTable(list);
+    }
 
     @Operation(summary = "用户订单列表")
     @PreAuthorize("@ss.hasPermi('server:markUser:order:list')")
@@ -75,6 +87,13 @@ public class MarkUserController extends BaseController {
         return AjaxResult.success("提交完成", markOrderService.submitTencent(request));
     }
 
+    @Operation(summary = "腾讯提交结果查询")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:query')")
+    @GetMapping("/tencent/submit/result/{itemId}")
+    public AjaxResult tencentSubmitResult(@PathVariable Long itemId) {
+        return AjaxResult.success("查询完成", markOrderService.selectMyTencentSubmitResult(itemId));
+    }
+
     @Operation(summary = "腾讯号码实时状态查询")
     @PreAuthorize("@ss.hasPermi('server:markUser:order:precheck')")
     @PostMapping("/tencent/status/query")
@@ -110,5 +129,42 @@ public class MarkUserController extends BaseController {
     @GetMapping("/price/list")
     public AjaxResult myPlatformPriceList() {
         return success(markOrderService.selectMyPlatformPriceList());
+    }
+
+    @Operation(summary = "我的消息列表")
+    @PreAuthorize("@ss.hasPermi('server:markUser:notice:list')")
+    @GetMapping("/notice/list")
+    public TableDataInfo noticeList(MarkUserNotice query) {
+        startPage();
+        List<MarkUserNotice> list = markUserNoticeService.selectMyNoticeList(query);
+        return getDataTable(list);
+    }
+
+    @Operation(summary = "未读消息数量")
+    @PreAuthorize("@ss.hasPermi('server:markUser:notice:list')")
+    @GetMapping("/notice/unread/count")
+    public AjaxResult noticeUnreadCount() {
+        return success(markUserNoticeService.countMyUnread());
+    }
+
+    @Operation(summary = "消息详情")
+    @PreAuthorize("@ss.hasPermi('server:markUser:notice:list')")
+    @GetMapping("/notice/{noticeId}")
+    public AjaxResult noticeDetail(@PathVariable Long noticeId) {
+        return success(markUserNoticeService.selectMyNoticeDetail(noticeId));
+    }
+
+    @Operation(summary = "标记消息已读")
+    @PreAuthorize("@ss.hasPermi('server:markUser:notice:read')")
+    @PostMapping("/notice/{noticeId}/read")
+    public AjaxResult noticeRead(@PathVariable Long noticeId) {
+        return success(markUserNoticeService.markMyNoticeRead(noticeId));
+    }
+
+    @Operation(summary = "全部标记已读")
+    @PreAuthorize("@ss.hasPermi('server:markUser:notice:read')")
+    @PostMapping("/notice/readAll")
+    public AjaxResult noticeReadAll() {
+        return success(markUserNoticeService.markAllMyNoticeRead());
     }
 }

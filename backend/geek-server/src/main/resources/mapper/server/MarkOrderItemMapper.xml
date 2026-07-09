@@ -128,4 +128,152 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </trim>
         where id = #{id}
     </update>
+
+    <resultMap type="com.geek.server.domain.vo.MarkAgentOrderItemVO" id="MarkAgentOrderItemResult">
+        <result property="id" column="id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="platformCode" column="platform_code"/>
+        <result property="platformName" column="platform_name"/>
+        <result property="phone" column="phone"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="processResult" column="process_result"/>
+        <result property="processNote" column="process_note"/>
+        <result property="processedBy" column="processed_by"/>
+        <result property="processedTime" column="processed_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+        <result property="userName" column="user_name"/>
+        <result property="orderRemark" column="order_remark"/>
+    </resultMap>
+
+    <select id="selectAgentOrderItemList" resultMap="MarkAgentOrderItemResult">
+        select
+            moi.id,
+            moi.order_id,
+            mo.order_no,
+            mo.platform_code,
+            mo.platform_name,
+            moi.phone,
+            moi.process_status,
+            moi.process_result,
+            moi.process_note,
+            moi.processed_by,
+            moi.processed_time,
+            moi.create_by,
+            moi.create_time,
+            moi.update_by,
+            moi.update_time,
+            moi.remark,
+            su.user_name as user_name,
+            mo.remark as order_remark
+        from mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        left join sys_user su on su.user_id = mo.user_id
+        <where>
+            and mo.audit_status = '1'
+            <if test="!isAdmin">
+                and (
+                    mo.assigned_agent_id = #{agentId}
+                    or (mo.assigned_agent_id is null and su.create_by = #{agentUsername})
+                    or exists (
+                        select 1
+                        from sys_user agent_u
+                        inner join sys_user_role aur on aur.user_id = agent_u.user_id
+                        inner join sys_role ar on ar.role_id = aur.role_id and ar.role_key in ('agent', 'mark_agent')
+                        where agent_u.user_id = #{agentId}
+                          and agent_u.del_flag = '0'
+                          and agent_u.rel_mark_template is not null
+                          and agent_u.rel_mark_template &gt; 0
+                          and su.rel_mark_template = agent_u.rel_mark_template
+                    )
+                    or exists (
+                        select 1
+                        from mark_platform_template mpt
+                        where mpt.id = su.rel_mark_template
+                          and mpt.owner_user_id = #{agentId}
+                          and mpt.status = '0'
+                    )
+                )
+            </if>
+            <if test="query != null and query.phone != null and query.phone != ''">
+                and moi.phone like concat('%', #{query.phone}, '%')
+            </if>
+            <if test="query != null and query.processStatus != null and query.processStatus != ''">
+                and moi.process_status = #{query.processStatus}
+            </if>
+            <if test="query != null and query.params != null and query.params.pendingOnly != null and query.params.pendingOnly.toString() == '1'">
+                and moi.process_status = '0'
+                and lower(mo.platform_code) not in ('tencent_mark', 'tencent', 'tx', 'txwz', 'td_gaopin')
+            </if>
+            <if test="query != null and query.params != null and query.params.processingOnly != null and query.params.processingOnly.toString() == '1'">
+                and moi.process_status = '0'
+                and lower(mo.platform_code) in ('tencent_mark', 'tencent', 'tx', 'txwz', 'td_gaopin')
+            </if>
+            <if test="query != null and query.params != null and query.params.processedOnly != null and query.params.processedOnly == '1'">
+                and moi.process_status in ('1', '2')
+            </if>
+            <if test="query != null and query.platformCode != null and query.platformCode != ''">
+                and mo.platform_code = #{query.platformCode}
+            </if>
+            <if test="query != null and query.platformCodes != null and query.platformCodes != ''">
+                and find_in_set(mo.platform_code, #{query.platformCodes})
+            </if>
+            <if test="query != null and query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                and moi.create_time &gt;= #{query.params.beginTime}
+            </if>
+            <if test="query != null and query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                and moi.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by moi.create_time desc, moi.id desc
+    </select>
+
+    <select id="selectPendingTdGaopinProcessItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where moi.process_status = '0'
+          and mo.audit_status = '1'
+          and mo.platform_code = 'td_gaopin'
+        order by moi.update_time asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectPendingXiaomiFirstDetectItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where moi.process_status = '0'
+          and mo.audit_status = '1'
+          and lower(mo.platform_code) = 'xiaomi'
+          and (moi.process_result is null or trim(moi.process_result) = '')
+        order by moi.update_time asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectPendingXiaomiRecheckItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where moi.process_status = '3'
+          and mo.audit_status = '1'
+          and lower(mo.platform_code) = 'xiaomi'
+        order by moi.update_time asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectUserPendingTdGaopinPhones" resultType="String">
+        select distinct moi.phone
+        from mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        where mo.user_id = #{userId}
+          and mo.platform_code = 'td_gaopin'
+          and mo.audit_status = '1'
+          and moi.process_status = '0'
+          and moi.phone in
+        <foreach collection="phones" item="phone" open="(" separator="," close=")">
+            #{phone}
+        </foreach>
+    </select>
 </mapper>

@@ -50,6 +50,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class SysLoginController {
     private static final Logger log = LoggerFactory.getLogger(SysLoginController.class);
     private static final String MARK_USER_MENU_COMPONENT = "server/mark/user/index";
+    private static final String MARK_AGENT_PROCESS_MENU_COMPONENT = "server/mark/agent/process/platform";
 
     @Autowired
     private SysLoginService loginService;
@@ -173,8 +174,8 @@ public class SysLoginController {
         if (allowedPlatformCodes == null) {
             return menus;
         }
-        List<SysMenu> filteredMenus = removeDisallowedMarkUserMenus(menus, allowedPlatformCodes);
-        reorderMarkUserMenusByTemplate(filteredMenus, allowedPlatformCodes);
+        List<SysMenu> filteredMenus = removeDisallowedPlatformMenus(menus, allowedPlatformCodes);
+        reorderPlatformMenusByTemplate(filteredMenus, allowedPlatformCodes);
         return filteredMenus;
     }
 
@@ -199,16 +200,16 @@ public class SysLoginController {
         }
     }
 
-    private List<SysMenu> removeDisallowedMarkUserMenus(List<SysMenu> menus, Set<String> allowedPlatformCodes) {
+    private List<SysMenu> removeDisallowedPlatformMenus(List<SysMenu> menus, Set<String> allowedPlatformCodes) {
         List<SysMenu> filtered = new ArrayList<>();
         for (SysMenu menu : menus) {
             if (menu == null) {
                 continue;
             }
             if (StringUtils.isNotEmpty(menu.getChildren())) {
-                menu.setChildren(removeDisallowedMarkUserMenus(menu.getChildren(), allowedPlatformCodes));
+                menu.setChildren(removeDisallowedPlatformMenus(menu.getChildren(), allowedPlatformCodes));
             }
-            if (isMarkUserPlatformMenu(menu)) {
+            if (isPlatformDrivenMenu(menu)) {
                 String platformCode = resolvePlatformCode(menu);
                 if (StringUtils.isNotEmpty(platformCode) && !allowedPlatformCodes.contains(platformCode)) {
                     continue;
@@ -218,14 +219,16 @@ public class SysLoginController {
         }
         return filtered;
     }
-    private void reorderMarkUserMenusByTemplate(List<SysMenu> menus, Set<String> platformCodesInOrder) {
+
+    private void reorderPlatformMenusByTemplate(List<SysMenu> menus, Set<String> platformCodesInOrder) {
         if (StringUtils.isEmpty(menus) || StringUtils.isEmpty(platformCodesInOrder)) {
             return;
         }
         Map<String, Integer> platformOrderMap = buildPlatformOrderMap(platformCodesInOrder);
-        reorderMarkUserMenusRecursively(menus, platformOrderMap);
+        reorderPlatformMenusRecursively(menus, platformOrderMap);
     }
-    private void reorderMarkUserMenusRecursively(List<SysMenu> menus, Map<String, Integer> platformOrderMap) {
+
+    private void reorderPlatformMenusRecursively(List<SysMenu> menus, Map<String, Integer> platformOrderMap) {
         if (StringUtils.isEmpty(menus)) {
             return;
         }
@@ -234,15 +237,16 @@ public class SysLoginController {
             if (menu == null || StringUtils.isEmpty(menu.getChildren())) {
                 continue;
             }
-            reorderMarkUserMenusRecursively(menu.getChildren(), platformOrderMap);
+            reorderPlatformMenusRecursively(menu.getChildren(), platformOrderMap);
         }
     }
+
     private void reorderPlatformMenusInCurrentLevel(List<SysMenu> menus, Map<String, Integer> platformOrderMap) {
         List<Integer> platformPositions = new ArrayList<>();
         List<SysMenu> platformMenus = new ArrayList<>();
         for (int i = 0; i < menus.size(); i++) {
             SysMenu menu = menus.get(i);
-            if (menu == null || !isMarkUserPlatformMenu(menu)) {
+            if (menu == null || !isPlatformDrivenMenu(menu)) {
                 continue;
             }
             String platformCode = resolvePlatformCode(menu);
@@ -282,8 +286,16 @@ public class SysLoginController {
         return platformOrderMap.getOrDefault(platformCode, Integer.MAX_VALUE);
     }
 
+    private boolean isPlatformDrivenMenu(SysMenu menu) {
+        return isMarkUserPlatformMenu(menu) || isMarkAgentProcessPlatformMenu(menu);
+    }
+
     private boolean isMarkUserPlatformMenu(SysMenu menu) {
         return menu != null && StringUtils.equals(MARK_USER_MENU_COMPONENT, menu.getComponent());
+    }
+
+    private boolean isMarkAgentProcessPlatformMenu(SysMenu menu) {
+        return menu != null && StringUtils.equals(MARK_AGENT_PROCESS_MENU_COMPONENT, menu.getComponent());
     }
 
     private String resolvePlatformCode(SysMenu menu) {

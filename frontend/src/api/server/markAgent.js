@@ -1,5 +1,67 @@
 import request from '@/utils/request'
 
+// 代理待审核列表
+export function listMarkAgentAuditPending(query) {
+  return request({
+    url: '/server/markAgent/audit/pending',
+    method: 'get',
+    params: query
+  })
+}
+
+// 代理审核历史
+export function listMarkAgentAuditHistory(query) {
+  return request({
+    url: '/server/markAgent/audit/history',
+    method: 'get',
+    params: query
+  })
+}
+
+// 审核通过
+export function passMarkAgentAudit(orderId, data) {
+  return request({
+    url: '/server/markAgent/audit/' + orderId + '/pass',
+    method: 'post',
+    data
+  })
+}
+
+// 审核拒绝
+export function rejectMarkAgentAudit(orderId, data) {
+  return request({
+    url: '/server/markAgent/audit/' + orderId + '/reject',
+    method: 'post',
+    data
+  })
+}
+
+// 审核打回
+export function returnMarkAgentAudit(orderId, data) {
+  return request({
+    url: '/server/markAgent/audit/' + orderId + '/return',
+    method: 'post',
+    data
+  })
+}
+
+// 审核统计
+export function getMarkAgentAuditStats() {
+  return request({
+    url: '/server/markAgent/audit/stats',
+    method: 'get'
+  })
+}
+
+// 代理处理明细列表
+export function listMarkAgentOrderItem(query) {
+  return request({
+    url: '/server/markAgent/item/list',
+    method: 'get',
+    params: query
+  })
+}
+
 // 代理订单列表
 export function listMarkAgentOrder(query) {
   return request({
@@ -25,10 +87,78 @@ export function listMarkAgentWalletLog(query) {
   })
 }
 
+// 代理下线账户概览
+export function listMarkAgentDownstreamSummary(query) {
+  return request({
+    url: '/server/markAgent/downstream/summary',
+    method: 'get',
+    params: query
+  })
+}
+
+// 代理模板平台列表（导航栏）
+export function listMarkAgentPlatformOptions() {
+  return request({
+    url: '/server/markAgent/platform/list',
+    method: 'get'
+  })
+}
+
+// 当前代理账户概览
+export function getMarkAgentMeSummary() {
+  return request({
+    url: '/server/markAgent/me/summary',
+    method: 'get'
+  })
+}
+
 // 代理回填处理结果
 export function feedbackMarkOrderItem(itemId, data) {
   return request({
     url: '/server/markAgent/item/' + itemId + '/feedback',
+    method: 'post',
+    data
+  })
+}
+
+// 泰迪高频待处理订单自动检测
+export function autoDetectTdGaopinItems() {
+  return request({
+    url: '/server/markAgent/item/autoDetectTdGaopin',
+    method: 'post'
+  })
+}
+
+// 小米待处理订单自动检测
+export function autoDetectXiaomiItems() {
+  return request({
+    url: '/server/markAgent/item/autoDetectXiaomi',
+    method: 'post'
+  })
+}
+
+// 小米批量处理（开启自动检测）
+export function batchProcessXiaomi(data) {
+  return request({
+    url: '/server/markAgent/item/batchProcessXiaomi',
+    method: 'post',
+    data
+  })
+}
+
+// 小米批量手动检测
+export function batchDetectXiaomi(data) {
+  return request({
+    url: '/server/markAgent/item/batchDetectXiaomi',
+    method: 'post',
+    data
+  })
+}
+
+// 代理批量标记成功
+export function batchMarkSuccess(data) {
+  return request({
+    url: '/server/markAgent/item/batchMarkSuccess',
     method: 'post',
     data
   })

@@ -28,6 +28,15 @@ public class MarkTencentSubmitResultVO {
 
     private Boolean accepted;
 
+    private Long itemId;
+
+    private Long orderId;
+
+    private String orderNo;
+
+    /** 0待处理 1成功 2失败 */
+    private String processStatus;
+
     private Map<String, Object> phoneTypeResponse;
 
     private Map<String, Object> complainStatusResponse;

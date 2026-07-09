@@ -11,7 +11,11 @@ import { dynamicRoutes } from '@/router/routes/asyncRoutes'
 import { deepClone } from '@/utils'
 import { getRouters } from '@/api/login'
 import { listMarkUserPlatformPrice } from '@/api/server/markUser'
-import useUserStore from '@/store/modules/user'
+import { listMarkAgentPlatformOptions } from '@/api/server/markAgent'
+import { isDedicatedTencentPlatform, isDedicatedTencentPlatformCode, resolveTencentStyleRoutePath } from '@/utils/markTencentPlatform'
+import { isDedicatedXiaomiPlatform, isDedicatedXiaomiPlatformCode, resolveXiaomiStyleRoutePath } from '@/utils/markXiaomiPlatform'
+import { isDedicatedBaiduPlatform, isDedicatedBaiduPlatformCode } from '@/utils/markBaiduPlatform'
+import { isDedicated360Platform, isDedicated360PlatformCode, resolve360DedicatedRoutePath } from '@/utils/markQihu360Platform'
 
 // 匹配views里面所有的.vue文件
 const modules = import.meta.glob(['../../**/views/**/*.vue', '../../**/view/**/*.vue'])
@@ -63,6 +67,10 @@ function isMarkUserPlatformRoute(route: RouteItem): boolean {
   return typeof route.component === 'string' && route.component === 'server/mark/user/index'
 }
 
+function isMarkAgentProcessPlatformRoute(route: RouteItem): boolean {
+  return typeof route.component === 'string' && route.component === 'server/mark/agent/process/platform'
+}
+
 function getPlatformCodeFromRoute(route: RouteItem): string {
   const query = parseRouteQuery(route.query)
   return String(query?.platformCode || '').trim()
@@ -81,7 +89,20 @@ function buildStableMarkUserPath(platformCode: string, fallbackPath = 'markUser'
   if (!safeCode) return String(fallbackPath || 'markUser')
   return `markUser-${safeCode}`
 }
+
+function buildStableMarkAgentProcessPath(platformCode: string, fallbackPath = 'agentProcess'): string {
+  const safeCode = normalizeRouteSegment(platformCode)
+  if (!safeCode) return String(fallbackPath || 'agentProcess')
+  return `agentProcess-${safeCode}`
+}
 function buildMarkUserQuery(platform: MarkPlatformOption): string {
+  return JSON.stringify({
+    platformCode: platform.platformCode,
+    platformName: platform.platformName
+  })
+}
+
+function buildMarkAgentProcessQuery(platform: MarkPlatformOption): string {
   return JSON.stringify({
     platformCode: platform.platformCode,
     platformName: platform.platformName
@@ -108,14 +129,49 @@ function buildMarkUserRedirect(path: string, platform: MarkPlatformOption) {
   }
 }
 
+function resolvePlatformCodeFromLegacyRoute(to: any, platformList: MarkPlatformOption[]): string {
+  const legacyCode = String(to?.params?.legacyCode || '').trim().toLowerCase()
+  if (legacyCode) {
+    const matched = platformList.find((platform) => normalizeRouteSegment(platform.platformCode) === legacyCode)
+    if (matched) return matched.platformCode
+    const normalizedLegacy = legacyCode.replace(/-/g, '_')
+    const matchedLegacy = platformList.find((platform) => platform.platformCode.toLowerCase() === normalizedLegacy)
+    if (matchedLegacy) return matchedLegacy.platformCode
+  }
+  const queryCode = String(to?.query?.platformCode || '').trim()
+  return queryCode
+}
+
+function buildMarkUserLegacyCodeRedirect(
+  rewrittenPathByCode: Map<string, string>,
+  platformList: MarkPlatformOption[],
+  fallbackTargetPath: string,
+  fallbackPlatform: MarkPlatformOption
+) {
+  return (to: any) => {
+    const platformCode = resolvePlatformCodeFromLegacyRoute(to, platformList)
+    const platform = platformList.find(item => item.platformCode === platformCode) || fallbackPlatform
+    const targetPath = (platformCode && rewrittenPathByCode.get(platformCode)) || fallbackTargetPath
+    return buildMarkUserRedirect(targetPath, platform)(to)
+  }
+}
+
 function buildMarkUserLegacyRoutes(
   baseRoute: RouteItem,
   fallbackPlatform: MarkPlatformOption,
-  redirectPath: string
+  redirectPath: string,
+  rewrittenPathByCode: Map<string, string>,
+  platformList: MarkPlatformOption[]
 ): RouteItem[] {
   if (!fallbackPlatform) return []
   const fallbackQuery = buildMarkUserQuery(fallbackPlatform)
   const redirect = buildMarkUserRedirect(redirectPath, fallbackPlatform)
+  const legacyCodeRedirect = buildMarkUserLegacyCodeRedirect(
+    rewrittenPathByCode,
+    platformList,
+    redirectPath,
+    fallbackPlatform
+  )
   const baseName = typeof baseRoute.name === 'string' && baseRoute.name.length > 0 ? baseRoute.name : 'markUser'
   const numericLegacyRoute = deepClone(baseRoute)
   numericLegacyRoute.path = 'markUser:legacy(\\d+)'
@@ -131,7 +187,7 @@ function buildMarkUserLegacyRoutes(
   const codeLegacyRoute = deepClone(baseRoute)
   codeLegacyRoute.path = 'markUser-:legacyCode([A-Za-z0-9_-]+)'
   codeLegacyRoute.hidden = true
-  codeLegacyRoute.redirect = redirect as any
+  codeLegacyRoute.redirect = legacyCodeRedirect as any
   codeLegacyRoute.query = fallbackQuery
   codeLegacyRoute.meta = {
     ...(codeLegacyRoute.meta || {}),
@@ -141,16 +197,106 @@ function buildMarkUserLegacyRoutes(
   return [numericLegacyRoute, codeLegacyRoute]
 }
 
+function isMarkUserTencentRoute(route: RouteItem): boolean {
+  const path = String(route.path || '').trim()
+  const component = typeof route.component === 'string' ? route.component : ''
+  return component === 'server/mark/user/tencent' || path === 'tencentMark'
+}
+
+function isMarkUserXiaomiRoute(route: RouteItem): boolean {
+  const path = String(route.path || '').trim()
+  const component = typeof route.component === 'string' ? route.component : ''
+  return component === 'server/mark/user/xiaomi' || path === 'xiaomiMark'
+}
+
+function isMarkUserBaiduRoute(route: RouteItem): boolean {
+  const path = String(route.path || '').trim()
+  const component = typeof route.component === 'string' ? route.component : ''
+  return component === 'server/mark/user/baidu' || path === 'baiduMark'
+}
+
+function isMarkUserQihu360Route(route: RouteItem): boolean {
+  const path = String(route.path || '').trim()
+  const component = typeof route.component === 'string' ? route.component : ''
+  return component === 'server/mark/user/qihu360'
+    || path === 'qihuFirstMark'
+    || path === 'qihuSecondMark'
+    || path === 'sanliulingMark'
+}
+
+function isMarkUserDedicatedRoute(route: RouteItem): boolean {
+  return isMarkUserTencentRoute(route)
+    || isMarkUserXiaomiRoute(route)
+    || isMarkUserBaiduRoute(route)
+    || isMarkUserQihu360Route(route)
+}
+
+function isDedicatedMarkUserPlatform(platform: MarkPlatformOption): boolean {
+  return isDedicatedTencentPlatform(platform)
+    || isDedicatedXiaomiPlatform(platform)
+    || isDedicatedBaiduPlatform(platform)
+    || isDedicated360Platform(platform)
+}
+
+function resolveDedicatedMarkUserRoutePath(platform: MarkPlatformOption): string {
+  if (isDedicatedTencentPlatform(platform)) return resolveTencentStyleRoutePath(platform.platformCode)
+  if (isDedicatedXiaomiPlatform(platform)) return resolveXiaomiStyleRoutePath(platform.platformCode)
+  if (isDedicatedBaiduPlatform(platform)) return 'baiduMark'
+  if (isDedicated360Platform(platform)) return resolve360DedicatedRoutePath(platform.platformCode)
+  return buildStableMarkUserPath(platform.platformCode)
+}
+
+function buildDedicatedMarkUserRoute(
+  templateRoute: RouteItem,
+  platform: MarkPlatformOption,
+  reservedPaths: Set<string>
+): RouteItem {
+  const cloned = deepClone(templateRoute)
+  const defaultPath = resolveDedicatedMarkUserRoutePath(platform)
+  let newPath = defaultPath
+  let suffix = 1
+  while (reservedPaths.has(String(newPath))) {
+    newPath = `${defaultPath}-${suffix}`
+    suffix += 1
+  }
+  reservedPaths.add(String(newPath))
+  cloned.path = String(newPath)
+  cloned.query = buildMarkUserQuery(platform)
+  cloned.hidden = false
+  cloned.name = `MarkUser__${normalizeRouteSegment(platform.platformCode)}`
+  cloned.meta = {
+    ...(cloned.meta || {}),
+    title: platform.platformName
+  }
+  return cloned
+}
+
 function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatformOption[]): RouteItem[] {
   if (!Array.isArray(children) || children.length === 0) return children
-  const markChildren = children.filter(item => isMarkUserPlatformRoute(item))
-  if (markChildren.length === 0) {
+  const tencentTemplateRoute = children.find(item => isMarkUserTencentRoute(item))
+  const xiaomiTemplateRoute = children.find(item => isMarkUserXiaomiRoute(item))
+  const baiduTemplateRoute = children.find(item => isMarkUserBaiduRoute(item))
+  const qihu360TemplateRoute = children.find(item => isMarkUserQihu360Route(item))
+  const markChildren = children.filter(item => {
+    if (!isMarkUserPlatformRoute(item)) return false
+    const code = getPlatformCodeFromRoute(item)
+    if (!code) return false
+    return !isDedicatedTencentPlatformCode(code)
+      && !isDedicatedXiaomiPlatformCode(code)
+      && !isDedicatedBaiduPlatformCode(code)
+      && !isDedicated360PlatformCode(code)
+  })
+  const baseRoute = markChildren[0]
+    || tencentTemplateRoute
+    || xiaomiTemplateRoute
+    || baiduTemplateRoute
+    || qihu360TemplateRoute
+  if (!baseRoute) {
     return children.map(item => ({
       ...item,
       children: item.children ? rewriteMarkUserChildren(item.children, platformList) : item.children
     }))
   }
-  const baseRoute = markChildren[0]
   const existingByCode = new Map<string, RouteItem>()
   const reservedPaths = new Set<string>()
   children.forEach(item => {
@@ -162,10 +308,47 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
   })
 
   const rewrittenMarkChildren: RouteItem[] = platformList.map((platform) => {
+    if (isDedicatedTencentPlatform(platform)) {
+      const templateRoute = tencentTemplateRoute || {
+        path: 'tencentMark',
+        component: 'server/mark/user/tencent'
+      } as RouteItem
+      return buildDedicatedMarkUserRoute(templateRoute, platform, reservedPaths)
+    }
+    if (isDedicatedXiaomiPlatform(platform)) {
+      const templateRoute = xiaomiTemplateRoute || {
+        path: 'xiaomiMark',
+        component: 'server/mark/user/xiaomi'
+      } as RouteItem
+      return buildDedicatedMarkUserRoute(templateRoute, platform, reservedPaths)
+    }
+    if (isDedicatedBaiduPlatform(platform)) {
+      const templateRoute = baiduTemplateRoute || {
+        path: 'baiduMark',
+        component: 'server/mark/user/baidu'
+      } as RouteItem
+      return buildDedicatedMarkUserRoute(templateRoute, platform, reservedPaths)
+    }
+    if (isDedicated360Platform(platform)) {
+      const templateRoute = qihu360TemplateRoute || {
+        path: resolve360DedicatedRoutePath(platform.platformCode),
+        component: 'server/mark/user/qihu360'
+      } as RouteItem
+      return buildDedicatedMarkUserRoute(templateRoute, platform, reservedPaths)
+    }
     const source = existingByCode.get(platform.platformCode) || baseRoute
-    const cloned = deepClone(source)
-    const pathFallback = typeof source.path === 'string' && source.path ? source.path : 'markUser'
-    const basePath = buildStableMarkUserPath(platform.platformCode, pathFallback)
+    const routeSource = String(platform.platformCode || '').trim().toLowerCase() === 'td_gaopin' && isMarkUserDedicatedRoute(source)
+      ? {
+        ...source,
+        component: 'server/mark/user/index'
+      } as RouteItem
+      : source
+    const cloned = deepClone(routeSource)
+    const sourcePath = typeof routeSource.path === 'string' ? String(routeSource.path).trim() : ''
+    const pathFallback = sourcePath || 'markUser'
+    const basePath = sourcePath && !isMarkUserDedicatedRoute(routeSource)
+      ? sourcePath
+      : buildStableMarkUserPath(platform.platformCode, pathFallback)
     let newPath = basePath
     let suffix = 1
     while (reservedPaths.has(String(newPath))) {
@@ -175,12 +358,185 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
     reservedPaths.add(String(newPath))
     cloned.path = String(newPath)
     cloned.query = buildMarkUserQuery(platform)
+    cloned.hidden = false
+    cloned.name = `MarkUser__${normalizeRouteSegment(platform.platformCode)}`
     cloned.meta = {
       ...(cloned.meta || {}),
       title: platform.platformName
     }
     return cloned
   })
+  const rewrittenPathSet = new Set(
+    rewrittenMarkChildren
+      .map(item => String(item.path || '').trim())
+      .filter(path => path.length > 0)
+  )
+  const rewrittenPathByCode = new Map<string, string>()
+  rewrittenMarkChildren.forEach(item => {
+    const code = getPlatformCodeFromRoute(item)
+    const path = String(item.path || '').trim()
+    if (code && path) rewrittenPathByCode.set(code, path)
+  })
+  const fallbackPlatform = platformList[0]
+  const fallbackTargetPath = String(rewrittenMarkChildren[0]?.path || '').trim()
+  const fallbackRoutes: RouteItem[] = []
+  const allMarkRouteSources = children.filter(item => isMarkUserPlatformRoute(item) || isMarkUserDedicatedRoute(item))
+  if (fallbackPlatform) {
+    allMarkRouteSources.forEach((item, index) => {
+      const itemPath = String(item.path || '').trim()
+      if (!itemPath || rewrittenPathSet.has(itemPath)) return
+      const itemPlatformCode = getPlatformCodeFromRoute(item)
+      const targetPlatform = platformList.find(p => p.platformCode === itemPlatformCode) || fallbackPlatform
+      const targetPath = (itemPlatformCode && rewrittenPathByCode.get(itemPlatformCode)) || fallbackTargetPath
+      if (!targetPath) return
+      const fallbackRoute = deepClone(item)
+      fallbackRoute.hidden = true
+      fallbackRoute.redirect = buildMarkUserRedirect(targetPath, targetPlatform) as any
+      fallbackRoute.query = buildMarkUserQuery(targetPlatform)
+      fallbackRoute.meta = {
+        ...(fallbackRoute.meta || {}),
+        title: targetPlatform.platformName
+      }
+      if (typeof fallbackRoute.name === 'string' && fallbackRoute.name.length > 0) {
+        fallbackRoute.name = `${fallbackRoute.name}__fallback`
+      } else {
+        fallbackRoute.name = `markUserFallback${index + 1}`
+      }
+      fallbackRoutes.push(fallbackRoute)
+    })
+  }
+  const legacyRoutes = fallbackPlatform
+    ? buildMarkUserLegacyRoutes(
+      baseRoute,
+      fallbackPlatform,
+      fallbackTargetPath,
+      rewrittenPathByCode,
+      platformList
+    )
+    : []
+
+  const rewrittenChildren: RouteItem[] = []
+  let injected = false
+  children.forEach(item => {
+    if (isMarkUserPlatformRoute(item)) {
+      if (!injected) {
+        rewrittenChildren.push(...rewrittenMarkChildren)
+        rewrittenChildren.push(...fallbackRoutes)
+        rewrittenChildren.push(...legacyRoutes)
+        injected = true
+      }
+      return
+    }
+    if (isMarkUserDedicatedRoute(item)) {
+      return
+    }
+    rewrittenChildren.push({
+      ...item,
+      children: item.children ? rewriteMarkUserChildren(item.children, platformList) : item.children
+    })
+  })
+  if (!injected && rewrittenMarkChildren.length > 0) {
+    rewrittenChildren.push(...rewrittenMarkChildren)
+    rewrittenChildren.push(...fallbackRoutes)
+    rewrittenChildren.push(...legacyRoutes)
+  }
+  return rewrittenChildren
+}
+
+async function rewriteMarkUserRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
+  if (!Array.isArray(routes) || routes.length === 0) return routes
+  if (!auth.hasPermi('server:markUser:price:list')) return routes
+  try {
+    const resp: any = await listMarkUserPlatformPrice()
+    const platformList = normalizeMarkPlatformOptions(resp?.data)
+    if (platformList.length === 0) {
+      return routes
+    }
+    return rewriteMarkUserChildren(routes, platformList)
+  } catch (e) {
+    return routes
+  }
+}
+
+function buildMarkAgentProcessRedirect(path: string, platform: MarkPlatformOption) {
+  return buildMarkUserRedirect(path, platform)
+}
+
+function buildMarkAgentProcessLegacyRoutes(
+  baseRoute: RouteItem,
+  fallbackPlatform: MarkPlatformOption,
+  redirectPath: string
+): RouteItem[] {
+  if (!fallbackPlatform) return []
+  const fallbackQuery = buildMarkAgentProcessQuery(fallbackPlatform)
+  const redirect = buildMarkAgentProcessRedirect(redirectPath, fallbackPlatform)
+  const baseName = typeof baseRoute.name === 'string' && baseRoute.name.length > 0 ? baseRoute.name : 'agentProcess'
+  const numericLegacyRoute = deepClone(baseRoute)
+  numericLegacyRoute.path = 'agentProcess:legacy(\\d+)'
+  numericLegacyRoute.hidden = true
+  numericLegacyRoute.redirect = redirect as any
+  numericLegacyRoute.query = fallbackQuery
+  numericLegacyRoute.meta = {
+    ...(numericLegacyRoute.meta || {}),
+    title: fallbackPlatform.platformName
+  }
+  numericLegacyRoute.name = `${baseName}__legacy_numeric`
+
+  const codeLegacyRoute = deepClone(baseRoute)
+  codeLegacyRoute.path = 'agentProcess-:legacyCode([A-Za-z0-9_-]+)'
+  codeLegacyRoute.hidden = true
+  codeLegacyRoute.redirect = redirect as any
+  codeLegacyRoute.query = fallbackQuery
+  codeLegacyRoute.meta = {
+    ...(codeLegacyRoute.meta || {}),
+    title: fallbackPlatform.platformName
+  }
+  codeLegacyRoute.name = `${baseName}__legacy_code`
+  return [numericLegacyRoute, codeLegacyRoute]
+}
+
+function rewriteMarkAgentProcessChildren(children: RouteItem[], platformList: MarkPlatformOption[]): RouteItem[] {
+  if (!Array.isArray(children) || children.length === 0) return children
+  const markChildren = children.filter(item => isMarkAgentProcessPlatformRoute(item))
+  if (markChildren.length === 0) {
+    return children.map(item => ({
+      ...item,
+      children: item.children ? rewriteMarkAgentProcessChildren(item.children, platformList) : item.children
+    }))
+  }
+  const baseRoute = markChildren[0]
+  const existingByCode = new Map<string, RouteItem>()
+  const reservedPaths = new Set<string>()
+  children.forEach(item => {
+    if (!isMarkAgentProcessPlatformRoute(item) && item.path) reservedPaths.add(String(item.path))
+  })
+  markChildren.forEach(item => {
+    const code = getPlatformCodeFromRoute(item)
+    if (code) existingByCode.set(code, item)
+  })
+
+  const rewrittenMarkChildren: RouteItem[] = platformList.map((platform) => {
+    const source = existingByCode.get(platform.platformCode) || baseRoute
+    const cloned = deepClone(source)
+    const pathFallback = typeof source.path === 'string' && source.path ? source.path : 'agentProcess'
+    const basePath = buildStableMarkAgentProcessPath(platform.platformCode, pathFallback)
+    let newPath = basePath
+    let suffix = 1
+    while (reservedPaths.has(String(newPath))) {
+      newPath = `${basePath}-${suffix}`
+      suffix += 1
+    }
+    reservedPaths.add(String(newPath))
+    cloned.path = String(newPath)
+    cloned.query = buildMarkAgentProcessQuery(platform)
+    cloned.name = `MarkAgentProcess__${normalizeRouteSegment(platform.platformCode)}`
+    cloned.meta = {
+      ...(cloned.meta || {}),
+      title: platform.platformName
+    }
+    return cloned
+  })
+
   const rewrittenPathSet = new Set(
     rewrittenMarkChildren
       .map(item => String(item.path || '').trim())
@@ -204,8 +560,8 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
       const targetPath = (itemPlatformCode && rewrittenPathByCode.get(itemPlatformCode)) || fallbackTargetPath
       const fallbackRoute = deepClone(item)
       fallbackRoute.hidden = true
-      fallbackRoute.redirect = buildMarkUserRedirect(targetPath, targetPlatform) as any
-      fallbackRoute.query = buildMarkUserQuery(targetPlatform)
+      fallbackRoute.redirect = buildMarkAgentProcessRedirect(targetPath, targetPlatform) as any
+      fallbackRoute.query = buildMarkAgentProcessQuery(targetPlatform)
       fallbackRoute.meta = {
         ...(fallbackRoute.meta || {}),
         title: targetPlatform.platformName
@@ -213,19 +569,19 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
       if (typeof fallbackRoute.name === 'string' && fallbackRoute.name.length > 0) {
         fallbackRoute.name = `${fallbackRoute.name}__fallback`
       } else {
-        fallbackRoute.name = `markUserFallback${index + 1}`
+        fallbackRoute.name = `agentProcessFallback${index + 1}`
       }
       fallbackRoutes.push(fallbackRoute)
     })
   }
   const legacyRoutes = fallbackPlatform
-    ? buildMarkUserLegacyRoutes(baseRoute, fallbackPlatform, fallbackTargetPath)
+    ? buildMarkAgentProcessLegacyRoutes(baseRoute, fallbackPlatform, fallbackTargetPath)
     : []
 
   const rewrittenChildren: RouteItem[] = []
   let injected = false
   children.forEach(item => {
-    if (isMarkUserPlatformRoute(item)) {
+    if (isMarkAgentProcessPlatformRoute(item)) {
       if (!injected) {
         rewrittenChildren.push(...rewrittenMarkChildren)
         rewrittenChildren.push(...fallbackRoutes)
@@ -236,26 +592,70 @@ function rewriteMarkUserChildren(children: RouteItem[], platformList: MarkPlatfo
     }
     rewrittenChildren.push({
       ...item,
-      children: item.children ? rewriteMarkUserChildren(item.children, platformList) : item.children
+      children: item.children ? rewriteMarkAgentProcessChildren(item.children, platformList) : item.children
     })
   })
   return rewrittenChildren
 }
 
-async function rewriteMarkUserRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
+async function rewriteMarkAgentProcessRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
   if (!Array.isArray(routes) || routes.length === 0) return routes
-  if (!auth.hasPermi('server:markUser:price:list')) return routes
-  const hasBoundMarkTemplate = String(useUserStore().relMarkTemplate || '').trim().length > 0
+  if (!auth.hasPermi('server:markAgent:order:query')) return routes
   try {
-    const resp: any = await listMarkUserPlatformPrice()
+    const resp: any = await listMarkAgentPlatformOptions()
     const platformList = normalizeMarkPlatformOptions(resp?.data)
     if (platformList.length === 0) {
-      return hasBoundMarkTemplate ? rewriteMarkUserChildren(routes, []) : routes
+      return routes
     }
-    return rewriteMarkUserChildren(routes, platformList)
+    return rewriteMarkAgentProcessChildren(routes, platformList)
   } catch (e) {
     return routes
   }
+}
+
+function hideSidebarMenuRoutes(routes: RouteItem[]): RouteItem[] {
+  if (!Array.isArray(routes)) return routes
+  return routes.map((route) => {
+    const next = { ...route }
+    const path = String(route.path || '').trim()
+    const component = typeof route.component === 'string' ? route.component : ''
+    if (path === 'userNotice' || component === 'server/mark/user/notice') {
+      next.hidden = true
+    }
+    if (path === 'userWallet' || component === 'server/mark/user/wallet') {
+      next.meta = {
+        ...(next.meta || {}),
+        title: '消费明细'
+      }
+    }
+    // tencent/xiaomi/baidu dedicated routes are injected by rewriteMarkUserRoutesByTemplate;
+    // do not force-hide them here or template platforms disappear from sidebar.
+    if (path === 'agentTdCaptcha' || component === 'server/mark/agent/td/index') {
+      next.hidden = true
+    }
+    if (path === 'agentAudit' || component === 'server/mark/agent/audit/index' || component === 'server/mark/agent/audit') {
+      next.hidden = true
+    }
+    if (path === 'agentProcessDetail' || component === 'server/mark/agent/process/detail') {
+      next.hidden = true
+    }
+    if (path === 'agentProcessDownstream' || component === 'server/mark/agent/process/downstream') {
+      next.meta = {
+        ...(next.meta || {}),
+        title: '处理总览'
+      }
+    }
+    if (next.children?.length) {
+      next.children = hideSidebarMenuRoutes(next.children)
+    }
+    return next
+  })
+}
+
+async function rewriteRoutesByTemplate(routes: RouteItem[]): Promise<RouteItem[]> {
+  let next = await rewriteMarkUserRoutesByTemplate(routes)
+  next = await rewriteMarkAgentProcessRoutesByTemplate(next)
+  return hideSidebarMenuRoutes(next)
 }
 
 /**
@@ -300,7 +700,7 @@ const usePermissionStore = defineStore(
         return new Promise(resolve => {
           // 向后端请求路由数据
           getRouters().then(async res => {
-            const routeData = await rewriteMarkUserRoutesByTemplate(deepClone(res.data))
+            const routeData = await rewriteRoutesByTemplate(deepClone(res.data))
             const sidebarRoutes = constantRoutes.concat(filterAsyncRouter(deepClone(routeData)))
             const rewriteRoutes = filterAsyncRouter(deepClone(routeData), true)
             const asyncRoutes = filterDynamicRoutes(dynamicRoutes)
@@ -347,7 +747,6 @@ function filterAsyncRouter(asyncRouterMap: RouteItem[], type = false): RouteItem
       route.children = filterAsyncRouter(route.children, type)
     } else {
       delete route['children']
-      delete route['redirect']
     }
     return true
   })

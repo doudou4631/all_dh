@@ -1,127 +1,66 @@
 <template>
   <div class="app-container home">
-    <el-row :gutter="20">
-      <!-- 左侧个人信息 -->
-      <el-col :lg="6" :md="8" :sm="24" :xs="24">
-        <el-card class="user-info-card">
-          <div class="user-profile">
-            <el-avatar :size="80" :src="userInfo.avatar || profile" />
-            <h2 class="welcome-text">欢迎回来，{{ userInfo.name }}</h2>
-            <p class="user-role">{{ userInfo.roleName }}</p>
+    <section class="home-hero">
+      <div class="home-hero__profile">
+        <el-avatar :size="56" :src="userInfo.avatar || profile" />
+        <div class="home-hero__profile-main">
+          <h2 class="home-hero__welcome">欢迎回来，{{ userInfo.name }}</h2>
+          <p class="home-hero__role">{{ userInfo.roleName || '用户' }}</p>
+          <p class="home-hero__login">上次登录：{{ formatLoginTime(userInfo.loginDate) }}</p>
+        </div>
+      </div>
+
+      <div v-if="walletSummaryVisible" class="home-hero__stats">
+        <div class="home-stat home-stat--primary" @click="goPage('/mark/userWallet')">
+          <span class="home-stat__label">当前积分</span>
+          <span class="home-stat__value">{{ walletSummary.pointsBalance }}</span>
+        </div>
+        <div class="home-stat" @click="goPage('/mark/userWallet')">
+          <span class="home-stat__label">累计扣费</span>
+          <span class="home-stat__value">{{ walletSummary.totalDeductAmount }}</span>
+        </div>
+        <div class="home-stat" @click="goPage('/mark/userWallet')">
+          <span class="home-stat__label">累计退款</span>
+          <span class="home-stat__value">{{ walletSummary.totalRefundAmount }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="home-grid">
+      <el-card class="home-panel home-panel--notice" shadow="never" v-loading="noticeLoading">
+        <template #header>
+          <div class="home-panel__header">
+            <span class="home-panel__title">
+              <el-icon><Bell /></el-icon>
+              系统公告
+            </span>
+            <el-button v-if="noticeList.length" link type="primary" @click="viewMoreNotices">
+              查看更多<el-icon><ArrowRight /></el-icon>
+            </el-button>
           </div>
-          <div class="user-stats">
-            <div class="stat-item">
-              <div class="stat-value text-ellipsis" :title="formatDate(userInfo.loginDate) || '暂无'">
-                {{ formatDate(userInfo.loginDate) || '暂无' }}
-              </div>
-              <p class="stat-label">上次登录</p>
+        </template>
+        <div v-if="noticeList.length" class="message-list">
+          <div
+            v-for="item in noticeList"
+            :key="item.noticeId"
+            class="message-item message-item--notice"
+            @click="showNoticeDetail(item)"
+          >
+            <el-tag size="small" :type="item.noticeType === '1' ? 'danger' : 'success'">
+              {{ item.noticeType === '1' ? '通知' : '公告' }}
+            </el-tag>
+            <div class="message-item__main">
+              <div class="message-item__title">{{ item.noticeTitle }}</div>
             </div>
-            <div class="stat-item">
-              <div class="stat-value text-ellipsis" :title="userInfo.points || '暂无'">
-                {{ userInfo.points || '暂无' }}
-              </div>
-              <p class="stat-label">积分余额</p>
-            </div>
+            <span class="message-item__time">{{ formatShortTime(item.createTime) }}</span>
           </div>
-        </el-card>
+        </div>
+        <el-empty v-else description="暂无公告" :image-size="48" />
+      </el-card>
+    </section>
 
-        <!-- 系统公告卡片 -->
-        <el-card class="notice-card hide-on-small" v-loading="noticeLoading">
-          <template #header>
-            <div class="card-header">
-              <span class="header-title">
-                <el-icon>
-                  <Bell />
-                </el-icon>
-                系统公告
-              </span>
-              <el-button v-if="noticeList.length" link @click="viewMoreNotices">
-                查看更多<el-icon>
-                  <ArrowRight />
-                </el-icon>
-              </el-button>
-            </div>
-          </template>
-          <div v-if="noticeList.length" class="notice-list">
-            <div v-for="item in noticeList" :key="item.noticeId" class="notice-item" @click="showNoticeDetail(item)">
-              <el-tag size="small" :type="item.noticeType === '1' ? 'danger' : 'success'">
-                {{ item.noticeType === '1' ? '通知' : '公告' }}
-              </el-tag>
-              <span class="notice-title">{{ item.noticeTitle }}</span>
-              <span class="notice-time">{{ parseTime(item.createTime) }}</span>
-            </div>
-          </div>
-          <el-empty v-else description="暂无公告" />
-        </el-card>
-      </el-col>
-
-      <!-- 右侧内容区 -->
-      <el-col :lg="18" :md="16" :sm="24" :xs="24">
-        <el-row :gutter="20">
-          <el-col :span="24" v-if="walletSummaryVisible">
-            <el-card class="wallet-summary-card">
-              <el-row :gutter="16" class="wallet-stats">
-                <el-col :xs="24" :sm="8">
-                  <div class="wallet-stat-item">
-                    <div class="wallet-stat-label">当前积分</div>
-                    <div class="wallet-stat-value">{{ walletSummary.pointsBalance }}</div>
-                  </div>
-                </el-col>
-                <el-col :xs="24" :sm="8">
-                  <div class="wallet-stat-item">
-                    <div class="wallet-stat-label">累计扣费</div>
-                    <div class="wallet-stat-value">{{ walletSummary.totalDeductAmount }}</div>
-                  </div>
-                </el-col>
-                <el-col :xs="24" :sm="8">
-                  <div class="wallet-stat-item">
-                    <div class="wallet-stat-label">累计退款</div>
-                    <div class="wallet-stat-value">{{ walletSummary.totalRefundAmount }}</div>
-                  </div>
-                </el-col>
-              </el-row>
-            </el-card>
-          </el-col>
-
-
-          <!-- 移动端公告展示 -->
-          <el-col :span="24">
-            <el-card class="notice-card show-on-small" v-loading="noticeLoading">
-              <template #header>
-                <div class="card-header">
-                  <span class="header-title">
-                    <el-icon>
-                      <Bell />
-                    </el-icon>
-                    系统公告
-                  </span>
-                  <el-button v-if="noticeList.length" link @click="viewMoreNotices">
-                    查看更多<el-icon>
-                      <ArrowRight />
-                    </el-icon>
-                  </el-button>
-                </div>
-              </template>
-              <div v-if="noticeList.length" class="notice-list">
-                <div v-for="item in noticeList" :key="item.noticeId" class="notice-item"
-                  @click="showNoticeDetail(item)">
-                  <el-tag size="small" :type="item.noticeType === '1' ? 'danger' : 'success'">
-                    {{ item.noticeType === '1' ? '通知' : '公告' }}
-                  </el-tag>
-                  <span class="notice-title">{{ item.noticeTitle }}</span>
-                  <span class="notice-time">{{ parseTime(item.createTime) }}</span>
-                </div>
-              </div>
-              <el-empty v-else description="暂无公告" />
-            </el-card>
-          </el-col>
-        </el-row>
-      </el-col>
-    </el-row>
-
-    <!-- 公告详情对话框 -->
     <el-dialog v-model="noticeDialogVisible" :title="currentNotice.noticeTitle" width="50%" destroy-on-close>
-      <div v-html="currentNotice.noticeContent"></div>
+      <div class="notice-dialog-content" v-html="currentNotice.noticeContent"></div>
     </el-dialog>
   </div>
 </template>
@@ -131,92 +70,24 @@ import { ref, onMounted } from 'vue'
 import { listNotice } from '@/api/system/notice'
 import { parseTime } from '@/utils/ruoyi'
 import { Bell, ArrowRight } from '@element-plus/icons-vue'
-import { formatDate } from '@/utils'
 import profile from '@/assets/images/profile.jpg'
 import useUserStore from '@/store/modules/user'
 import { useRouter, type RouteLocationRaw } from 'vue-router'
 import { GeekResponseForList } from '@/types/request'
 import { getMarkUserWalletSummary } from '@/api/server/markUser'
 import auth from '@/plugins/auth'
+
 const router = useRouter()
-interface Feature {
-  icon: string;
-  title: string;
-  description: string;
-}
-
-interface Plugin {
-  name: string;
-  description: string;
-}
-
-interface Directive {
-  name: string;
-  description: string;
-  usage: string;
-}
 
 interface Notice {
-  noticeId: number;
-  noticeTitle: string;
-  noticeType: string;
-  noticeContent: string;
-  status: string;
-  createBy: string;
-  createTime: string;
+  noticeId: number
+  noticeTitle: string
+  noticeType: string
+  noticeContent: string
+  status: string
+  createBy: string
+  createTime: string
 }
-
-// 状态定义
-const features = ref<Feature[]>([
-  {
-    icon: 'Monitor',
-    title: '技术先进',
-    description: '采用Vue3、TypeScript等最新技术栈，保持与时俱进'
-  },
-  {
-    icon: 'SetUp',
-    title: '简单易用',
-    description: '开箱即用的后台解决方案，内置完整的权限验证系统'
-  },
-  {
-    icon: 'Document',
-    title: '规范开发',
-    description: '遵循最佳实践，统一的编码规范，让项目更易维护'
-  }
-])
-
-const plugins = ref<Plugin[]>([
-  {
-    name: 'Auth 权限验证',
-    description: '提供了权限验证相关方法，包括hasPermi、hasRole等功能，用于控制按钮和功能的访问权限'
-  },
-  {
-    name: 'Cache 缓存',
-    description: '提供了浏览器缓存操作方法，支持session和local存储的设置与获取'
-  },
-  {
-    name: 'Modal 弹窗',
-    description: '封装了Element Plus的弹窗组件，提供了更便捷的调用方式'
-  }
-])
-
-const directives = ref<Directive[]>([
-  {
-    name: 'hasPermi',
-    description: '用于控制按钮级别的权限',
-    usage: 'v-hasPermi="[\'system:user:add\']"'
-  },
-  {
-    name: 'hasRole',
-    description: '用于控制角色级别的权限',
-    usage: 'v-hasRole="[\'admin\']"'
-  },
-  {
-    name: 'auth',
-    description: '通用权限验证指令',
-    usage: 'v-auth="\'system:user:edit\'"'
-  }
-])
 
 const noticeList = ref<Notice[]>([])
 const noticeLoading = ref(false)
@@ -229,15 +100,30 @@ const walletSummary = ref({
   totalRefundAmount: 0
 })
 
-// 用户信息store
 const userInfo = useUserStore()
 
-// 获取公告列表
+function formatLoginTime(value?: string) {
+  if (!value) return '暂无'
+  const text = parseTime(value) as string
+  return text || '暂无'
+}
+
+function formatShortTime(value?: string) {
+  if (!value) return '-'
+  const text = String(parseTime(value) || '')
+  if (!text) return '-'
+  return text.length > 16 ? text.slice(5, 16) : text
+}
+
+function goPage(path: string) {
+  router.push(path)
+}
+
 const getNoticeList = async () => {
   noticeLoading.value = true
   try {
     const res: GeekResponseForList<Notice> = await listNotice({ pageNum: 1, pageSize: 5 })
-    noticeList.value = res.rows
+    noticeList.value = res.rows || []
   } catch (error) {
     console.error('获取公告列表失败:', error)
   } finally {
@@ -245,13 +131,11 @@ const getNoticeList = async () => {
   }
 }
 
-// 显示公告详情
 const showNoticeDetail = (notice: Notice) => {
   currentNotice.value = notice
   noticeDialogVisible.value = true
 }
 
-// 查看更多公告
 const viewMoreNotices = () => {
   const route: RouteLocationRaw = { path: '/userModel/notice' }
   router.push(route)
@@ -271,7 +155,7 @@ const getWalletSummary = async () => {
       totalRefundAmount: Number(data.totalRefundAmount) || 0
     }
     walletSummaryVisible.value = true
-  } catch (error) {
+  } catch {
     walletSummaryVisible.value = false
   }
 }
@@ -285,369 +169,220 @@ onMounted(() => {
 
 <style scoped lang="scss">
 .home {
-  padding: clamp(10px, 3vw, 20px);
+  padding: 12px 16px 16px;
+  background: var(--el-bg-color-page);
+  min-height: calc(100vh - 84px);
+}
 
-  .welcome-container {
-    text-align: center;
-    margin-bottom: 40px;
+.home-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--el-border-color-lighter);
+}
 
-    .welcome-title {
-      font-size: clamp(1.8em, 4vw, 2.5em);
-      color: var(--el-text-color-primary);
-      margin-bottom: 20px;
-    }
+.home-hero__profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1 1 280px;
+}
 
-    .welcome-desc {
-      font-size: clamp(1em, 2vw, 1.2em);
-      color: var(--el-text-color-secondary);
-    }
-  }
+.home-hero__profile-main {
+  min-width: 0;
+}
 
-  // 响应式间距调整
-  :deep(.el-row) {
-    margin-left: -10px !important;
-    margin-right: -10px !important;
+.home-hero__welcome {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  line-height: 1.35;
+}
 
-    .el-col {
-      padding-left: 10px !important;
-      padding-right: 10px !important;
-    }
-  }
+.home-hero__role {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
 
-  .feature-section {
-    .feature-card {
-      margin-bottom: 20px;
-      height: 100%;
-      text-align: center;
-      transition: transform 0.3s;
+.home-hero__login {
+  margin: 0;
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+}
 
-      &:hover {
-        transform: translateY(-5px);
-      }
+.home-hero__stats {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  flex: 0 1 420px;
+}
 
-      .feature-icon {
-        font-size: 2.5em;
-        color: var(--el-color-primary);
-        margin-bottom: 20px;
-      }
+.home-stat {
+  flex: 1;
+  min-width: 96px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
 
-      h3 {
-        margin: 10px 0;
-        font-size: 1.2em;
-        color: var(--el-text-color-primary);
-      }
-
-      p {
-        color: var(--el-text-color-secondary);
-        line-height: 1.5;
-      }
-    }
-  }
-
-  .user-info-card {
-    margin-bottom: 20px;
-
-    .user-profile {
-      text-align: center;
-      padding: 20px 0;
-
-      .welcome-text {
-        margin: 15px 0 5px;
-        font-size: 1.2em;
-        color: var(--el-text-color-primary);
-      }
-
-      .user-role {
-        color: var(--el-text-color-secondary);
-        font-size: 0.9em;
-      }
-    }
-
-    .user-stats {
-      display: flex;
-      justify-content: space-around;
-      padding: 15px 0;
-      border-top: 1px solid var(--el-border-color-lighter);
-
-      .stat-item {
-        text-align: center;
-
-        .stat-value {
-          font-size: 1.1em;
-          color: var(--el-text-color-primary);
-          margin-bottom: 5px;
-        }
-
-        .stat-label {
-          color: var(--el-text-color-secondary);
-          font-size: 0.9em;
-        }
-        
-        /* 上次登录特殊样式 */
-        &:nth-child(1) .stat-value {
-          font-weight: bold;
-          font-size: 1.2em;
-        }
-        
-        /* 积分余额特殊样式 */
-        &:nth-child(2) .stat-value {
-          font-weight: bold;
-          color: var(--el-color-primary);
-          font-size: 1.3em;
-          text-shadow: 0 0 2px rgba(var(--el-color-primary-rgb), 0.2);
-        }
-        
-        &:nth-child(2) .stat-label {
-          color: var(--el-color-primary);
-          font-weight: 500;
-        }
-      }
-    }
-  }
-
-  .notice-card {
-    &.show-on-small {
-      display: none;
-      margin: 20px 0;
-    }
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-
-      .header-title {
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        font-weight: bold;
-        color: var(--el-text-color-primary);
-      }
-    }
-
-    .notice-list {
-      .notice-item {
-        padding: 10px 0;
-        border-bottom: 1px solid var(--el-border-color-lighter);
-        cursor: pointer;
-        transition: all 0.3s;
-
-        &:last-child {
-          border-bottom: none;
-        }
-
-        &:hover {
-          background-color: var(--el-fill-color-lighter);
-        }
-
-        .notice-title {
-          margin: 0 10px;
-          color: var(--el-text-color-primary);
-          flex: 1;
-        }
-
-        .notice-time {
-          font-size: 0.9em;
-          color: var(--el-text-color-secondary);
-        }
-      }
-    }
-  }
-
-  .wallet-summary-card {
-    .wallet-stats {
-      row-gap: 12px;
-    }
-
-    .wallet-stat-item {
-      border-radius: 8px;
-      padding: 12px 16px;
-      background: var(--el-fill-color-light);
-    }
-
-    .wallet-stat-label {
-      font-size: 14px;
-      color: var(--el-text-color-secondary);
-      margin-bottom: 6px;
-    }
-
-    .wallet-stat-value {
-      font-size: 30px;
-      line-height: 1.2;
-      color: var(--el-text-color-primary);
-      font-weight: 600;
-    }
-  }
-
-  // 响应式显示控制
-  @media (max-width: 768px) {
-    .hide-on-small {
-      display: none;
-    }
-
-    .show-on-small {
-      display: block !important;
-    }
-
-    .welcome-container {
-      margin-bottom: 20px;
-    }
-
-    .docs-section {
-      .doc-card {
-        margin-bottom: 20px;
-      }
-    }
-  }
-
-  @media (max-width: 576px) {
-    .user-info-card {
-      .user-stats {
-        flex-direction: column;
-        gap: 15px;
-
-        .stat-item {
-          width: 100%;
-          padding: 10px 0;
-          border-bottom: 1px solid var(--el-border-color-lighter);
-
-          &:last-child {
-            border-bottom: none;
-          }
-        }
-      }
-    }
-
-    .feature-section {
-      .feature-card {
-        .feature-icon {
-          font-size: 2em;
-        }
-      }
-    }
-  }
-
-  .text-ellipsis {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .welcome-card {
-    margin-bottom: 20px;
-
-    .welcome-container {
-      text-align: center;
-      margin-bottom: 30px;
-
-      // ...existing code...
-    }
-
-    .feature-section {
-      .feature-item {
-        text-align: center;
-        padding: 20px;
-        border-radius: 8px;
-        transition: all 0.3s;
-        background-color: var(--el-fill-color-light);
-        margin-bottom: 20px;
-
-        &:hover {
-          transform: translateY(-5px);
-          background-color: var(--el-fill-color);
-        }
-
-        .feature-icon {
-          font-size: 2.5em;
-          color: var(--el-color-primary);
-          margin-bottom: 15px;
-        }
-
-        h3 {
-          margin: 10px 0;
-          font-size: 1.2em;
-          color: var(--el-text-color-primary);
-        }
-
-        p {
-          color: var(--el-text-color-secondary);
-          line-height: 1.5;
-          margin: 0;
-        }
-      }
-    }
-  }
-
-  .features-card {
-    .feature-group {
-      margin-bottom: 30px;
-
-      .group-title {
-        font-size: 1.2em;
-        color: var(--el-text-color-primary);
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid var(--el-border-color-lighter);
-      }
-
-      .feature-list {
-        .feature-list-item {
-          padding: 15px;
-          margin-bottom: 15px;
-          border-radius: 6px;
-          background-color: var(--el-fill-color-light);
-
-          h4 {
-            color: var(--el-color-primary);
-            margin: 0 0 10px;
-          }
-
-          p {
-            color: var(--el-text-color-secondary);
-            margin: 0 0 10px;
-            line-height: 1.5;
-          }
-        }
-      }
-    }
-  }
-
-  // 响应式调整
-  @media (max-width: 768px) {
-    .features-card {
-      .el-row {
-        .el-col {
-          width: 100%;
-        }
-      }
-    }
+  &:hover {
+    background: var(--el-fill-color);
+    transform: translateY(-1px);
   }
 }
 
-// 覆盖卡片样式
-:deep(.el-card) {
-  --el-card-padding: 20px;
+.home-stat--primary {
+  background: #ecf5ff;
+  border: 1px solid #d9ecff;
+
+  .home-stat__value {
+    color: var(--el-color-primary);
+  }
+}
+
+.home-stat__label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.home-stat__value {
+  display: block;
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.home-grid {
+  display: block;
+}
+
+.home-panel--notice {
+  min-height: auto;
+}
+
+.home-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.home-panel__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.home-panel__badge {
+  margin-left: 4px;
+}
+
+.message-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  flex: 1;
+}
+
+.message-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  cursor: pointer;
+  min-width: 0;
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  &:hover {
+    opacity: 0.88;
+  }
+}
+
+.message-item--notice {
+  align-items: center;
+}
+
+.message-item__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.message-item__title {
+  font-size: 13px;
+  color: var(--el-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message-item__time {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--el-text-color-placeholder);
+  line-height: 1.6;
+}
+
+.notice-dialog-content {
+  line-height: 1.7;
+  word-break: break-word;
+}
+
+:deep(.home-panel.el-card) {
+  --el-card-padding: 14px;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
 
   .el-card__header {
-    padding: 15px 20px;
+    padding: 12px 14px;
     border-bottom: 1px solid var(--el-border-color-lighter);
   }
-}
 
-// 调整卡片间距
-.el-card {
-  margin-bottom: clamp(15px, 3vw, 20px);
-
-  :deep(.el-card__body) {
-    padding: clamp(12px, 2vw, 20px);
+  .el-card__body {
+    padding: 10px 14px 14px;
+    flex: 1;
   }
 }
 
-// 调整对话框响应式
-:deep(.el-dialog) {
-  @media (max-width: 768px) {
-    width: 90% !important;
-    margin: 0 auto;
+@media (max-width: 992px) {
+  .home-hero {
+    flex-direction: column;
+  }
+
+  .home-hero__stats {
+    width: 100%;
+    flex: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .home {
+    padding: 10px 12px 14px;
+  }
+
+  .home-stat__value {
+    font-size: 18px;
   }
 }
 </style>

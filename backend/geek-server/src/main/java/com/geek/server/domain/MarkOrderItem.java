@@ -39,8 +39,8 @@ public class MarkOrderItem extends BaseEntity {
     @Excel(name = "明细金额")
     private Long itemAmount;
 
-    @Schema(title = "处理状态（0待处理 1成功 2失败）")
-    @Excel(name = "处理状态", readConverterExp = "0=待处理,1=成功,2=失败")
+    @Schema(title = "处理状态（0待处理 1处理完成 2处理失败 3处理中/已手动提交）")
+    @Excel(name = "处理状态", readConverterExp = "0=待处理,1=处理完成,2=处理失败,3=处理中")
     private String processStatus;
 
     @Schema(title = "处理结果")

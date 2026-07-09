@@ -1,11 +1,6 @@
 <template>
   <div class="app-container mark-user-order-page">
-    <div v-if="activeSubTab === 'submit' && platformOptions.length > 0" class="page-top-remain">
-      <div class="submit-right-remain">
-        当前剩余：<span>{{ activeRemainCount }}</span> 次
-      </div>
-    </div>
-    <el-card shadow="never" class="platform-card">
+    <el-card shadow="never" class="platform-card" :body-style="{ padding: '0' }">
       <el-empty v-if="platformOptions.length === 0" description="当前未配置可用平台" />
       <div v-else :class="['platform-layout', { 'platform-layout--single': !showPlatformSwitcher }]">
         <el-tabs
@@ -13,7 +8,6 @@
           v-model="activePlatformCode"
           tab-position="left"
           class="platform-nav-tabs"
-          @tab-change="handlePlatformTabChange"
         >
           <el-tab-pane
             v-for="item in platformOptions"
@@ -24,56 +18,84 @@
         </el-tabs>
 
         <div class="platform-main">
+          <div
+            v-if="activeSubTab === 'submit' && platformOptions.length > 0"
+            class="platform-main-remain"
+          >
+            <div class="submit-right-remain">
+              当前剩余：<span>{{ activeRemainCount }}</span> 次
+            </div>
+          </div>
           <el-tabs v-model="activeSubTab" class="sub-tabs">
             <el-tab-pane :label="`${activePlatformName} - 提交号码`" name="submit">
               <div class="submit-pane">
-                <div class="submit-grid">
-                  <div class="submit-left">
-                    <h3 class="submit-title">{{ activePlatformName }} - 提交号码</h3>
-                    <div class="submit-tip">
-                      {{ activePlatformHint }}
+                <div class="submit-content-shell">
+                  <div class="submit-grid">
+                    <div class="submit-left">
+                      <div class="submit-input-panel">
+                        <div class="submit-panel-head">号码录入</div>
+                        <el-input
+                          v-model="submitForm.phonesText"
+                          type="textarea"
+                          :rows="11"
+                          resize="vertical"
+                          class="submit-textarea"
+                          placeholder="可粘贴混合文本，点击「号码提取」整理号码；确认后再点「一键批量查询」"
+                        />
+                        <div class="submit-stats">
+                          <span>输入 <strong>{{ submitPhoneStats.inputCount }}</strong></span>
+                          <span>有效 <strong>{{ submitPhoneStats.validCount }}</strong></span>
+                          <span>重复 {{ submitPhoneStats.duplicateCount }}</span>
+                          <span>无效 {{ submitPhoneStats.invalidCount }}</span>
+                        </div>
+                        <div v-if="!hasSubmitQuota" class="submit-warning-bar">
+                          当前平台剩余次数不足，无法查询提交。
+                        </div>
+                        <div v-else-if="insufficientRemain" class="submit-warning-bar">
+                          当前平台剩余次数不足，请减少号码后再提交。
+                        </div>
+                        <div class="submit-actions">
+                          <div class="submit-action-row submit-action-row--primary">
+                            <el-button
+                              type="warning"
+                              class="submit-action-btn submit-action-btn--extract"
+                              :disabled="!String(submitForm.phonesText || '').trim()"
+                              @click="extractSubmitPhones"
+                            >
+                              号码提取
+                            </el-button>
+                            <el-button
+                              type="primary"
+                              class="submit-action-btn"
+                              :loading="precheckLoading"
+                              :disabled="!canSubmit"
+                              @click="submitBatchOrder"
+                              v-hasPermi="['server:markUser:order:add']"
+                            >
+                              一键批量查询
+                            </el-button>
+                          </div>
+                          <el-button
+                            class="submit-action-btn submit-action-btn--ghost"
+                            :disabled="!String(submitForm.phonesText || '').trim()"
+                            @click="clearSubmitPhones"
+                          >
+                            清空
+                          </el-button>
+                        </div>
+                      </div>
                     </div>
-                    <el-input
-                      v-model="submitForm.phonesText"
-                      type="textarea"
-                      :rows="11"
-                      placeholder="请输入号码，每行一个或使用空格/逗号分隔"
-                    />
-                    <div class="submit-stats">
-                      输入：{{ submitPhoneStats.inputCount }} 个，
-                      有效：{{ submitPhoneStats.validCount }} 个，
-                      重复：{{ submitPhoneStats.duplicateCount }} 个，
-                      无效：{{ submitPhoneStats.invalidCount }} 个
-                    </div>
-                    <div v-if="insufficientRemain" class="submit-warning-bar">
-                      当前平台剩余次数不足，请减少号码后再提交。
-                    </div>
-                    <div class="submit-actions">
-                      <el-button
-                        type="primary"
-                        icon="Search"
-                        :loading="precheckLoading"
-                        :disabled="!canSubmit"
-                        @click="submitBatchOrder"
-                        v-hasPermi="['server:markUser:order:add']"
-                      >
-                        一键批量查询
-                      </el-button>
-                      <el-button @click="clearSubmitPhones">清空</el-button>
-                    </div>
-                  </div>
 
-                  <div class="submit-right">
-                    <div class="submit-right-content">
-                      <h3 class="submit-title">查询结果</h3>
+                    <div class="submit-right">
                       <div class="query-result-panel">
                         <div class="query-result-head">
+                          <div class="query-result-title">查询结果</div>
                           <div class="query-result-actions">
                             <el-button
                               type="success"
                               size="small"
-                              icon="CircleCheck"
-                              :disabled="precheckSubmittableSelectedCount === 0 || clearSubmitLoading || precheckLoading"
+                              class="query-result-btn query-result-btn--primary"
+                              :disabled="precheckSubmittableSelectedCount === 0 || clearSubmitLoading || precheckLoading || !hasSubmitQuota"
                               :loading="clearSubmitLoading"
                               @click="submitSelectedMarkedPhones"
                             >
@@ -81,8 +103,9 @@
                             </el-button>
                             <el-button
                               type="warning"
+                              plain
                               size="small"
-                              icon="Select"
+                              class="query-result-btn"
                               :disabled="!hasPrecheckResult"
                               @click="togglePrecheckSelectAll"
                             >
@@ -90,7 +113,8 @@
                             </el-button>
                             <el-button
                               size="small"
-                              icon="Delete"
+                              plain
+                              class="query-result-btn"
                               :disabled="!hasPrecheckResult"
                               @click="resetPrecheckPanel"
                             >
@@ -98,7 +122,8 @@
                             </el-button>
                             <el-button
                               size="small"
-                              icon="DocumentCopy"
+                              plain
+                              class="query-result-btn"
                               :disabled="!hasPrecheckResult"
                               @click="copyPrecheckPhones"
                             >
@@ -106,7 +131,8 @@
                             </el-button>
                             <el-button
                               size="small"
-                              icon="Download"
+                              plain
+                              class="query-result-btn"
                               :disabled="!hasPrecheckResult"
                               @click="exportPrecheckRows"
                             >
@@ -120,11 +146,13 @@
                             class="query-result-table"
                             :data="precheckTableData"
                             border
+                            stripe
+                            size="small"
                             max-height="430"
                             row-key="phone"
                             @selection-change="handlePrecheckSelectionChange"
                           >
-                            <el-table-column type="selection" width="48" reserve-selection />
+                            <el-table-column type="selection" width="48" reserve-selection :selectable="precheckRowSelectable" />
                             <el-table-column label="手机号码" prop="phone" min-width="130" />
                             <el-table-column label="状态" width="80" align="center">
                               <template #default="scope">
@@ -138,42 +166,6 @@
                                 {{ precheckResultLabel(scope.row) }}
                               </template>
                             </el-table-column>
-                            <el-table-column v-if="isTencentPlatform" label="验证码" width="190" align="center">
-                              <template #default="scope">
-                                <template v-if="canSubmitTencentByRow(scope.row)">
-                                  <el-input
-                                    class="tencent-row-sms-input"
-                                    :model-value="getTencentRowSmsCode(scope.row.phone)"
-                                    maxlength="6"
-                                    placeholder="请输入 6 位验证码"
-                                    @update:model-value="(value) => handleTencentRowSmsCodeChange(scope.row.phone, value)"
-                                  />
-                                </template>
-                                <span v-else class="tencent-row-disabled">-</span>
-                              </template>
-                            </el-table-column>
-                            <el-table-column v-if="isTencentPlatform" label="提交" width="90" align="center">
-                              <template #default="scope">
-                                <template v-if="canSubmitTencentByRow(scope.row)">
-                                  <el-button
-                                    type="primary"
-                                    size="small"
-                                    :loading="getTencentRowLoading(scope.row.phone)"
-                                    :disabled="activeRemainCount < 1 || !isTencentRowSmsCodeValid(scope.row.phone)"
-                                    @click="submitTencentPhoneByRow(scope.row)"
-                                    v-hasPermi="['server:markUser:order:add']"
-                                  >
-                                    提交
-                                  </el-button>
-                                </template>
-                                <span v-else class="tencent-row-disabled">不可提交</span>
-                              </template>
-                            </el-table-column>
-                            <el-table-column v-if="isTencentPlatform" label="显示结果" min-width="150" show-overflow-tooltip>
-                              <template #default="scope">
-                                {{ getTencentRowResultText(scope.row.phone) }}
-                              </template>
-                            </el-table-column>
                           </el-table>
                         </div>
                       </div>
@@ -185,23 +177,24 @@
 
             <el-tab-pane :label="`${activePlatformName} - 任务记录`" name="record">
               <div class="record-search-panel">
-                <div class="record-search-grid">
-                  <div class="record-search-item record-search-item--keyword">
-                    <label class="record-search-item__label">综合搜索（订单号/手机号/用户名）</label>
+                <div class="record-search-bar">
+                  <div class="record-search-field record-search-field--keyword">
+                    <span class="record-search-field__label">综合搜索</span>
                     <el-input
                       v-model="queryParams.keyword"
+                      size="small"
                       clearable
-                      placeholder="输入订单号、手机号或用户名"
+                      placeholder="订单号/手机号/用户名"
                       @keyup.enter="handleQuery"
                     />
                   </div>
-                  <div class="record-search-item">
-                    <label class="record-search-item__label">处理状态</label>
+                  <div class="record-search-field record-search-field--status">
+                    <span class="record-search-field__label">处理状态</span>
                     <el-select
                       v-model="queryParams.orderStatus"
+                      size="small"
                       clearable
-                      placeholder="选择或搜索状态"
-                      style="width: 100%;"
+                      placeholder="状态"
                     >
                       <el-option label="待处理" value="0" />
                       <el-option label="处理中" value="1" />
@@ -209,60 +202,31 @@
                       <el-option label="已取消" value="3" />
                     </el-select>
                   </div>
-                  <div class="record-search-item record-search-item--date">
-                    <label class="record-search-item__label">提交时间</label>
+                  <div class="record-search-field record-search-field--date">
+                    <span class="record-search-field__label">提交时间</span>
                     <el-date-picker
                       v-model="recordDateRange"
                       type="daterange"
+                      size="small"
                       range-separator="-"
-                      start-placeholder="yyyy / mm / dd"
-                      end-placeholder="yyyy / mm / dd"
-                      format="YYYY / MM / DD"
+                      start-placeholder="开始"
+                      end-placeholder="结束"
+                      format="YYYY/MM/DD"
                       value-format="YYYY-MM-DD"
-                      style="width: 100%;"
                       @change="handleRecordDateRangeChange"
                     />
                   </div>
-                  <div class="record-search-item record-search-item--quick">
-                    <label class="record-search-item__label">快捷筛选</label>
-                    <div class="record-quick-group">
-                      <el-button
-                        :type="activeQuickRange === 'today' ? 'primary' : 'default'"
-                        plain
-                        size="small"
-                        @click="setRecordQuickRange('today')"
-                      >
-                        今天
-                      </el-button>
-                      <el-button
-                        :type="activeQuickRange === 'yesterday' ? 'primary' : 'default'"
-                        plain
-                        size="small"
-                        @click="setRecordQuickRange('yesterday')"
-                      >
-                        昨天
-                      </el-button>
-                      <el-button
-                        :type="activeQuickRange === 'week' ? 'primary' : 'default'"
-                        plain
-                        size="small"
-                        @click="setRecordQuickRange('week')"
-                      >
-                        最近7天
-                      </el-button>
-                    </div>
-                  </div>
-                  <div class="record-search-item record-search-item--actions">
-                    <label class="record-search-item__label">操作</label>
+                  <div class="record-search-field record-search-field--actions">
                     <div class="record-action-group">
-                      <el-button @click="exportRecordRows">导出</el-button>
-                      <el-button @click="resetQuery">重置/刷新</el-button>
-                      <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
+                      <el-button size="small" @click="exportRecordRows">导出</el-button>
+                      <el-button size="small" @click="resetQuery">重置</el-button>
+                      <el-button type="primary" size="small" icon="Search" @click="handleQuery">搜索</el-button>
                     </div>
                   </div>
                 </div>
               </div>
 
+              <div class="record-table-wrap">
               <el-table
                 v-loading="loading"
                 :data="orderList"
@@ -270,93 +234,30 @@
                 @selection-change="handleRecordSelectionChange"
               >
                 <el-table-column type="selection" width="48" />
-                <el-table-column label="订单号" prop="orderNo" min-width="180" show-overflow-tooltip />
-                <el-table-column label="用户名" prop="userName" min-width="120" show-overflow-tooltip />
-                <el-table-column label="号码（点击复制）" min-width="160" show-overflow-tooltip>
+                <el-table-column label="用户名" prop="userName" min-width="110" show-overflow-tooltip />
+                <el-table-column label="号码（点击复制）" min-width="150" show-overflow-tooltip>
                   <template #default="scope">
                     <el-button link type="primary" @click="copyText(scope.row.phonePreview || '')">
                       {{ scope.row.phonePreview || '-' }}
                     </el-button>
                   </template>
                 </el-table-column>
-                <el-table-column label="平台" prop="platformName" min-width="120" show-overflow-tooltip />
-                <el-table-column label="提交时间" min-width="160" align="center">
-                  <template #default="scope">
-                    {{ formatDateTime(scope.row.createTime) }}
-                  </template>
-                </el-table-column>
-                <el-table-column label="状态" width="92" align="center">
+                <el-table-column label="平台" prop="platformName" min-width="110" show-overflow-tooltip />
+                <el-table-column label="处理状态" width="92" align="center">
                   <template #default="scope">
                     <el-tag :type="recordStatusType(scope.row)" size="small">
                       {{ recordStatusLabel(scope.row) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="80" align="center">
+                <el-table-column label="订单号" prop="orderNo" min-width="180" show-overflow-tooltip />
+                <el-table-column label="提交时间" min-width="160" align="center">
                   <template #default="scope">
-                    <el-button
-                      link
-                      type="primary"
-                      icon="View"
-                      @click="openRecordDetail(scope.row)"
-                      v-hasPermi="['server:markUser:order:query']"
-                    >
-                      详情
-                    </el-button>
+                    {{ formatDateTime(scope.row.createTime) }}
                   </template>
                 </el-table-column>
               </el-table>
-
-              <el-dialog v-model="recordDetailOpen" title="任务详情" width="980px" append-to-body>
-                <div v-loading="recordDetailLoading">
-                  <el-descriptions :column="4" border>
-                    <el-descriptions-item label="订单号">{{ recordDetailData.order?.orderNo || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="平台">{{ recordDetailData.order?.platformName || '-' }}</el-descriptions-item>
-                    <el-descriptions-item label="提交时间">{{ formatDateTime(recordDetailData.order?.createTime) }}</el-descriptions-item>
-                    <el-descriptions-item label="状态">
-                      <el-tag :type="recordStatusType(recordDetailData.order)" size="small">
-                        {{ recordStatusLabel(recordDetailData.order) }}
-                      </el-tag>
-                    </el-descriptions-item>
-                    <el-descriptions-item label="总数">{{ recordDetailData.order?.totalCount ?? 0 }}</el-descriptions-item>
-                    <el-descriptions-item label="成功">{{ recordDetailData.order?.successCount ?? 0 }}</el-descriptions-item>
-                    <el-descriptions-item label="失败">{{ recordDetailData.order?.failedCount ?? 0 }}</el-descriptions-item>
-                    <el-descriptions-item label="退款">{{ recordDetailData.order?.refundAmount ?? 0 }}</el-descriptions-item>
-                  </el-descriptions>
-
-                  <el-table class="mt10" :data="recordDetailData.items || []" max-height="420">
-                    <el-table-column label="序号" type="index" width="56" align="center" />
-                    <el-table-column label="号码" prop="phone" min-width="130" />
-                    <el-table-column label="状态" width="90" align="center">
-                      <template #default="scope">
-                        <el-tag :type="itemStatusType(scope.row.processStatus)" size="small">
-                          {{ itemStatusLabel(scope.row.processStatus) }}
-                        </el-tag>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="处理结果" min-width="220">
-                      <template #default="scope">
-                        <div class="record-detail-text">{{ scope.row.processResult || '-' }}</div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="处理备注" min-width="320">
-                      <template #default="scope">
-                        <div class="record-detail-text">{{ scope.row.processNote || '-' }}</div>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="处理时间" width="160" align="center">
-                      <template #default="scope">
-                        {{ formatDateTime(scope.row.processedTime) }}
-                      </template>
-                    </el-table-column>
-                  </el-table>
-                </div>
-                <template #footer>
-                  <div class="dialog-footer">
-                    <el-button @click="recordDetailOpen = false">关 闭</el-button>
-                  </div>
-                </template>
-              </el-dialog>
+              </div>
 
               <pagination
                 v-show="total > 0"
@@ -378,15 +279,37 @@ import {
   listMarkUserOrder,
   createMarkUserClearOrder,
   precheckMarkUserOrder,
-  getMarkUserOrderDetail,
-  listMarkUserPlatformPrice,
-  submitMarkUserTencent
+  listMarkUserPlatformPrice
 } from '@/api/server/markUser'
-import { useRoute, useRouter } from 'vue-router'
+import {
+  filterLegacyMarkPlatforms,
+  isDedicatedTencentPlatformCode,
+  TENCENT_DEDICATED_ROUTE,
+  TENCENT_DEDICATED_ROUTE_NAME
+} from '@/utils/markTencentPlatform'
+import {
+  isDedicatedXiaomiPlatformCode,
+  XIAOMI_DEDICATED_ROUTE,
+  XIAOMI_DEDICATED_ROUTE_NAME
+} from '@/utils/markXiaomiPlatform'
+import {
+  isDedicatedBaiduPlatformCode,
+  BAIDU_DEDICATED_ROUTE,
+  BAIDU_DEDICATED_ROUTE_NAME
+} from '@/utils/markBaiduPlatform'
+import {
+  isDedicated360PlatformCode,
+  resolve360DedicatedRouteName,
+  resolve360DedicatedRoutePathByCode
+} from '@/utils/markQihu360Platform'
+import { markItemProcessStatusLabel, markItemProcessStatusTagType } from '@/utils/markProcessStatus'
+import { useRoute, useRouter, onBeforeRouteLeave } from 'vue-router'
+import useMarkUserPageStore from '@/store/modules/markUserPage'
 
 const { proxy } = getCurrentInstance()
 const route = useRoute()
 const router = useRouter()
+const markUserPageStore = useMarkUserPageStore()
 
 const loading = ref(false)
 const precheckLoading = ref(false)
@@ -397,7 +320,6 @@ const recordSelectedRows = ref([])
 const platformOptions = ref([])
 const activePlatformCode = ref('')
 const activeSubTab = ref('submit')
-const activeQuickRange = ref('')
 const recordDateRange = ref([])
 const precheckTableRef = ref(null)
 const precheckSelectedRows = ref([])
@@ -405,10 +327,6 @@ const precheckSourcePayload = ref(null)
 const precheckKeyword = ref('')
 const precheckQueryStatus = ref('')
 const precheckMarkStatus = ref('')
-const recordDetailOpen = ref(false)
-const recordDetailLoading = ref(false)
-const recordDetailData = ref({ order: {}, items: [] })
-const tencentRowStateMap = ref({})
 
 function createEmptyPrecheckData() {
   return {
@@ -423,20 +341,6 @@ function createEmptyPrecheckData() {
     failedPhones: [],
     items: []
   }
-}
-
-function openRecordDetail(row) {
-  const orderId = row?.id
-  if (!orderId) return
-  recordDetailOpen.value = true
-  recordDetailLoading.value = true
-  getMarkUserOrderDetail(orderId).then((res) => {
-    recordDetailData.value = res.data || { order: {}, items: [] }
-  }).catch((error) => {
-    proxy.$modal.msgError(error?.message || '加载详情失败')
-  }).finally(() => {
-    recordDetailLoading.value = false
-  })
 }
 
 const precheckDialogData = ref(createEmptyPrecheckData())
@@ -459,16 +363,6 @@ const submitForm = reactive({
   remark: ''
 })
 
-const platformHintMap = {
-  mobile_gaopin: '高频拦截处理移动高频、线路忙、用户忙等问题。',
-  td_gaopin: '泰迪高频用于处理泰迪平台高频拦截问题。',
-  td_second: '泰迪二次用于处理泰迪平台二次标记问题。',
-  qihu_first: '360首次用于处理 360 首次标记问题。',
-  qihu_second: '360二次用于处理 360 二次标记问题。',
-  dianhuabang: '电话邦用于处理电话邦平台号码标记问题。',
-  tencent_mark: '腾讯用于处理腾讯平台号码标记问题。'
-}
-
 const activePlatform = computed(() => {
   return platformOptions.value.find((item) => item.platformCode === activePlatformCode.value) || null
 })
@@ -487,58 +381,117 @@ const activeRemainCount = computed(() => {
   return Number.isFinite(remain) ? Math.max(0, remain) : 0
 })
 
-const activePlatformHint = computed(() => {
-  if (!activePlatform.value) return '请选择平台后提交号码。'
-  return platformHintMap[activePlatform.value.platformCode] || `${activePlatformName.value}支持号码标记处理，请按行输入号码。`
-})
-const isTencentPlatform = computed(() => {
-  const code = String(activePlatform.value?.platformCode || '').toLowerCase()
-  const name = String(activePlatform.value?.platformName || '')
-  return ['tencent_mark', 'tencent', 'tx', 'txwz'].includes(code) || name.includes('腾讯')
-})
-
-const routePlatformCode = computed(() => String(route.query?.platformCode || '').trim())
+const routePlatformCode = computed(() => resolvePlatformCodeFromRoute(route))
 const showPlatformSwitcher = computed(() => !routePlatformCode.value)
+const lastRestoredStateKey = ref('')
+
+function parseMarkRouteQuery(query) {
+  if (!query) return {}
+  if (typeof query === 'string') {
+    try {
+      return JSON.parse(query)
+    } catch (e) {
+      return {}
+    }
+  }
+  if (typeof query === 'object') {
+    return query
+  }
+  return {}
+}
+
+function resolvePlatformCodeFromRoute(sourceRoute = route) {
+  const parsed = parseMarkRouteQuery(sourceRoute?.query)
+  return String(parsed.platformCode || sourceRoute?.query?.platformCode || '').trim()
+}
+
+function collectPhonesFromSegment(segment) {
+  const trimmed = String(segment || '').trim()
+  if (!trimmed) return []
+
+  const digitsOnly = trimmed.replace(/[^\d]/g, '')
+  if (digitsOnly.length >= 7 && digitsOnly.length <= 15) {
+    return [digitsOnly]
+  }
+
+  const candidates = []
+  const mobileMatches = trimmed.match(/1[3-9]\d{9}/g) || []
+  candidates.push(...mobileMatches)
+
+  const landlineMatches = trimmed.match(/0\d{2,3}[-\s.]?\d{7,8}/g) || []
+  candidates.push(...landlineMatches)
+
+  const specialMatches = trimmed.match(/[48]00[-\s.]?\d{7}/g) || []
+  candidates.push(...specialMatches)
+
+  const digitRuns = trimmed.match(/\d{7,15}/g) || []
+  candidates.push(...digitRuns)
+
+  return candidates
+    .map((item) => String(item || '').replace(/[^\d]/g, ''))
+    .filter((phone) => phone.length >= 7 && phone.length <= 15)
+}
+
+function dedupePhones(phones) {
+  const uniquePhones = []
+  const seen = new Set()
+  ;(phones || []).forEach((phone) => {
+    if (!phone || seen.has(phone)) return
+    seen.add(phone)
+    uniquePhones.push(phone)
+  })
+  return uniquePhones
+}
 
 function parsePhonesWithStats(text) {
   const source = String(text || '')
-  const tokens = source
-    .split(/[\n,，;；\s]+/)
+  const segments = source
+    .split(/[\n,，;；]+/)
     .map((item) => item.trim())
     .filter((item) => item.length > 0)
 
-  const uniqueValid = []
-  const validSet = new Set()
-  let validRawCount = 0
+  const allPhones = []
   let invalidCount = 0
 
-  tokens.forEach((token) => {
-    const normalized = token.replace(/[^\d]/g, '')
-    if (normalized.length < 7 || normalized.length > 15) {
+  segments.forEach((segment) => {
+    const phones = collectPhonesFromSegment(segment)
+    if (phones.length === 0) {
       invalidCount += 1
       return
     }
-    validRawCount += 1
-    if (!validSet.has(normalized)) {
-      validSet.add(normalized)
-      uniqueValid.push(normalized)
-    }
+    allPhones.push(...phones)
   })
 
+  const uniqueValid = dedupePhones(allPhones)
+
   return {
-    inputCount: tokens.length,
+    inputCount: segments.length,
     validCount: uniqueValid.length,
-    duplicateCount: Math.max(0, validRawCount - uniqueValid.length),
+    duplicateCount: Math.max(0, allPhones.length - uniqueValid.length),
     invalidCount,
     validPhones: uniqueValid
   }
 }
 
+function extractPhoneNumbersFromText(text) {
+  const source = String(text || '')
+  if (!source.trim()) return []
+
+  const segments = source
+    .split(/[\n,，;；]+/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0)
+
+  const allPhones = segments.flatMap((segment) => collectPhonesFromSegment(segment))
+  return dedupePhones(allPhones)
+}
+
 const submitPhoneStats = computed(() => parsePhonesWithStats(submitForm.phonesText))
-const canSubmit = computed(() => !!activePlatform.value && submitPhoneStats.value.validCount > 0)
+const canSubmit = computed(() => !!activePlatform.value && submitPhoneStats.value.validCount > 0 && hasSubmitQuota.value)
 const expectedSubmitCount = computed(() => submitPhoneStats.value.validCount)
 const expectedDeductAmount = computed(() => expectedSubmitCount.value * activeUnitPrice.value)
 const insufficientRemain = computed(() => expectedDeductAmount.value > activeRemainCount.value)
+const hasSubmitQuota = computed(() => activeRemainCount.value >= activeUnitPrice.value)
 const precheckTableData = computed(() => Array.isArray(precheckDialogData.value.items) ? precheckDialogData.value.items : [])
 const hasPrecheckResult = computed(() => precheckTableData.value.length > 0 || precheckDialogData.value.totalCount > 0)
 
@@ -560,13 +513,112 @@ const precheckFilteredTableData = computed(() => {
 })
 
 const precheckSelectedPhones = computed(() => normalizePhoneList(precheckSelectedRows.value.map((item) => item.phone)))
+const TEDDY_GAOPIN_PLATFORM_CODE = 'td_gaopin'
+const TEDDY_GAOPIN_DISPLAY_LABEL = '\u6cf0\u8fea\u718a\u9ad8\u9891'
+const TEDDY_GAOPIN_NO_LABEL = '\u65e0'
+const TEDDY_GAOPIN_HF_KEY = '\u9ad8\u9891\u6807\u8bb0\u81f3\u5c11\u9700\u898110\u4e2a\u5de5\u4f5c\u65e5\u6216\u627e\u5e73\u53f0\u65b9\u5e2e\u5fd9\u5904\u7406'
+const TEDDY_GAOPIN_FRAUD_KEY = '\u7591\u4f3c\u8bc8\u9a97'
+const TEDDY_GAOPIN_HF_SHORT_KEY = '\u9ad8\u9891'
+const isTeddyGaopinActive = computed(() => String(activePlatformCode.value || '').trim() === TEDDY_GAOPIN_PLATFORM_CODE)
+const MOBILE_GAOPIN_PLATFORM_CODES = ['mobile_gaopin', 'yidonggaopin']
+const MOBILE_GAOPIN_MARKED_LABEL = '\u6709\u6807\u8bb0'
+const MOBILE_GAOPIN_NO_LABEL = '\u65e0'
+const isMobileGaopinActive = computed(() => MOBILE_GAOPIN_PLATFORM_CODES.includes(String(activePlatformCode.value || '').trim()))
+
+function resolvePrecheckRawDetail(row) {
+  const status = String(row?.status || '').trim()
+  if (status.toLowerCase().startsWith('yes-')) {
+    return status.slice(4).trim()
+  }
+  if (status.toLowerCase().startsWith('no-')) {
+    return status.slice(3).trim()
+  }
+  const detail = stripPlatformPrefix(row?.detail || '')
+  if (detail && detail !== TEDDY_GAOPIN_DISPLAY_LABEL) {
+    return detail
+  }
+  return detail || status
+}
+
+function isTeddyGaopinNoResult(row) {
+  const status = String(row?.status || '').trim().toLowerCase()
+  if (status === 'no' || status.startsWith('no-')) {
+    return true
+  }
+  const detail = stripPlatformPrefix(row?.detail || '').trim()
+  return detail === TEDDY_GAOPIN_NO_LABEL
+    || detail === '\u672a\u6807\u8bb0'
+    || detail === '\u65e0\u6807\u8bb0'
+}
+
+function isTeddyGaopinSubmittableRaw(raw) {
+  const value = String(raw || '').trim()
+  if (value.includes(TEDDY_GAOPIN_HF_KEY)) return true
+  return value.includes(TEDDY_GAOPIN_FRAUD_KEY) && value.includes(TEDDY_GAOPIN_HF_SHORT_KEY)
+}
+
+function isTeddyGaopinSubmittableRow(row) {
+  if (row?.querySuccess !== true) return false
+  if (!isTeddyGaopinActive.value) return true
+  return isTeddyGaopinSubmittableRaw(resolvePrecheckRawDetail(row))
+}
+
+function isMobileGaopinNoResult(row) {
+  const status = String(row?.status || '').trim().toLowerCase()
+  if (status === 'no' || status.startsWith('no-')) {
+    return true
+  }
+  const detail = stripPlatformPrefix(row?.detail || '').trim()
+  return detail === MOBILE_GAOPIN_NO_LABEL
+    || detail === '\u672a\u6807\u8bb0'
+    || detail === '\u65e0\u6807\u8bb0'
+}
+
+function isMobileGaopinSubmittableRow(row) {
+  if (row?.querySuccess !== true) return false
+  if (!isMobileGaopinActive.value) return true
+  if (isMobileGaopinNoResult(row)) return false
+  if (row?.marked === true) return true
+  const detail = stripPlatformPrefix(row?.detail || '').trim()
+  return detail === MOBILE_GAOPIN_MARKED_LABEL || detail === '\u9ad8\u9891\u62e6\u622a'
+}
+
+function isPrecheckRowSubmittable(row) {
+  if (row?.querySuccess !== true) return false
+  if (isTeddyGaopinActive.value) {
+    return isTeddyGaopinSubmittableRow(row)
+  }
+  if (isMobileGaopinActive.value) {
+    return isMobileGaopinSubmittableRow(row)
+  }
+  return true
+}
+
+function precheckRowSelectable(row) {
+  if (isTeddyGaopinActive.value) {
+    return isTeddyGaopinSubmittableRow(row)
+  }
+  if (isMobileGaopinActive.value) {
+    return isMobileGaopinSubmittableRow(row)
+  }
+  return row?.querySuccess === true
+}
+
 const precheckMarkedVisibleRows = computed(() => {
-  return precheckFilteredTableData.value.filter((row) => row?.querySuccess === true && row?.marked === true)
+  return precheckFilteredTableData.value.filter((row) => {
+    if (isTeddyGaopinActive.value) {
+      return isTeddyGaopinSubmittableRow(row)
+    }
+    if (isMobileGaopinActive.value) {
+      return isMobileGaopinSubmittableRow(row)
+    }
+    return row?.querySuccess === true && row?.marked === true
+  })
 })
 const precheckSubmittableSelectedPhones = computed(() => {
   return normalizePhoneList(
     precheckSelectedRows.value
-      .filter((row) => row?.querySuccess === true)
+      .filter((row) => isPrecheckRowSubmittable(row))
       .map((item) => item.phone)
   )
 })
@@ -603,77 +655,6 @@ function normalizePhoneList(source) {
   return result
 }
 
-function resetTencentRowStates() {
-  tencentRowStateMap.value = {}
-}
-
-function getTencentRowState(phone, createIfMissing = false) {
-  const normalizedPhone = normalizeTencentPhone(phone)
-  if (!normalizedPhone) {
-    return null
-  }
-  let state = tencentRowStateMap.value[normalizedPhone]
-  if (!state && createIfMissing) {
-    state = {
-      smsCode: '',
-      loading: false,
-      resultText: '-'
-    }
-    tencentRowStateMap.value[normalizedPhone] = state
-  }
-  return state
-}
-
-function resolveTencentRowSubmitMode(row) {
-  if (!isTencentPlatform.value || row?.querySuccess !== true) {
-    return ''
-  }
-  const resultText = `${row?.status || ''} ${row?.detail || ''}`.replace(/\s+/g, '')
-  if (resultText.includes('多人标记') || resultText.includes('多人举报') || resultText.includes('多人投诉')) {
-    return 'tamper'
-  }
-  if (resultText.includes('骚扰电话') || resultText.includes('骚扰')) {
-    return 'normal'
-  }
-  return ''
-}
-
-function canSubmitTencentByRow(row) {
-  return !!resolveTencentRowSubmitMode(row)
-}
-
-function getTencentRowSmsCode(phone) {
-  return getTencentRowState(phone, false)?.smsCode || ''
-}
-
-function handleTencentRowSmsCodeChange(phone, value) {
-  const state = getTencentRowState(phone, true)
-  if (!state) {
-    return
-  }
-  state.smsCode = normalizeTencentPhone(value).slice(0, 6)
-}
-
-function getTencentRowLoading(phone) {
-  return getTencentRowState(phone, false)?.loading === true
-}
-
-function isTencentRowSmsCodeValid(phone) {
-  return /^\d{6}$/.test(getTencentRowSmsCode(phone))
-}
-
-function getTencentRowResultText(phone) {
-  return getTencentRowState(phone, false)?.resultText || '-'
-}
-
-function buildTencentRowResultText(result, mode) {
-  const accepted = result?.accepted === true
-  const reCode = displayValue(result?.submitReCode)
-  const data = displayValue(result?.submitData)
-  const modeText = mode === 'tamper' ? '篡改' : '直提'
-  return `${accepted ? '成功' : '失败'}（${modeText}，reCode=${reCode}，data=${data}）`
-}
-
 function queryStatusLabel(row) {
   if (row?.querySuccess === true) return '成功'
   if (row?.querySuccess === false) return '失败'
@@ -700,11 +681,44 @@ function markStatusType(row) {
   return ''
 }
 
+function normalizeMarkDetailText(text) {
+  const value = String(text || '').trim()
+  if (!value) return value
+  const prefix = '\u666e\u901a\u6807\u8bb0'
+  if (value === prefix || value.startsWith(`${prefix}-`) || value.startsWith(`${prefix}\u2014`)) {
+    return '\u6709\u6807\u8bb0'
+  }
+  return value
+}
+
 function precheckResultLabel(row) {
   if (row?.querySuccess === false) return row?.errorMessage || row?.detail || '查询失败'
-  if (row?.detail) return row.detail
+  if (isTeddyGaopinActive.value) {
+    if (isTeddyGaopinNoResult(row)) {
+      return TEDDY_GAOPIN_NO_LABEL
+    }
+    if (isTeddyGaopinSubmittableRaw(resolvePrecheckRawDetail(row))) {
+      return TEDDY_GAOPIN_DISPLAY_LABEL
+    }
+  }
+  if (isMobileGaopinActive.value) {
+    if (isMobileGaopinNoResult(row)) {
+      return MOBILE_GAOPIN_NO_LABEL
+    }
+    if (isMobileGaopinSubmittableRow(row)) {
+      return MOBILE_GAOPIN_MARKED_LABEL
+    }
+  }
+  if (row?.detail) return normalizeMarkDetailText(stripPlatformPrefix(row.detail))
   const statusText = markStatusLabel(row)
   return statusText === '-' ? '查询成功' : statusText
+}
+
+function stripPlatformPrefix(text) {
+  const value = String(text || '').trim()
+  if (!value) return value
+  const matched = value.match(/^[\w.-]+[：:]\s*(.+)$/)
+  return matched ? matched[1].trim() : value
 }
 
 function resolvePrecheckQueryStatus(row) {
@@ -725,7 +739,6 @@ function resetPrecheckPanel() {
   precheckKeyword.value = ''
   precheckQueryStatus.value = ''
   precheckMarkStatus.value = ''
-  resetTencentRowStates()
   precheckDialogData.value = createEmptyPrecheckData()
   precheckSelectedRows.value = []
   precheckTableRef.value?.clearSelection?.()
@@ -762,16 +775,14 @@ async function executePrecheck(payload, { silentWarning = false } = {}) {
     precheckKeyword.value = ''
     precheckQueryStatus.value = ''
     precheckMarkStatus.value = ''
-    resetTencentRowStates()
     precheckSelectedRows.value = []
     precheckTableRef.value?.clearSelection?.()
 
-    if (!silentWarning && markedPhones.length === 0) {
-      if (precheckDialogData.value.failedCount > 0) {
-        proxy.$modal.msgWarning(`预查询完成，失败 ${precheckDialogData.value.failedCount} 个，可提交 0 个`)
-      } else {
-        proxy.$modal.msgWarning('预查询未发现被标记号码，请确认后再决定是否重试')
-      }
+    await nextTick()
+    autoSelectMarkedPrecheckRows()
+
+    if (!silentWarning) {
+      notifyPrecheckSummary()
     }
   } catch (error) {
     console.error('预查询失败:', error)
@@ -793,7 +804,64 @@ async function refreshPrecheckResult() {
 }
 
 function handlePrecheckSelectionChange(rows) {
-  precheckSelectedRows.value = Array.isArray(rows) ? rows : []
+  const nextRows = Array.isArray(rows) ? rows : []
+  if (isTeddyGaopinActive.value) {
+    precheckSelectedRows.value = nextRows.filter((row) => isTeddyGaopinSubmittableRow(row))
+    return
+  }
+  if (isMobileGaopinActive.value) {
+    precheckSelectedRows.value = nextRows.filter((row) => isMobileGaopinSubmittableRow(row))
+    return
+  }
+  precheckSelectedRows.value = nextRows
+}
+
+function notifyPrecheckSummary() {
+  const total = precheckTableData.value.length
+  const failedCount = precheckDialogData.value.failedCount || 0
+  if (isTeddyGaopinActive.value) {
+    const submittableCount = precheckTableData.value.filter((row) => isTeddyGaopinSubmittableRow(row)).length
+    if (submittableCount === 0) {
+      proxy.$modal.msgWarning(`查询完成，共 ${total} 个号码，可提交 0 个（仅「泰迪熊高频」结果可提交并扣次）`)
+      return
+    }
+    if (submittableCount < total) {
+      proxy.$modal.msgWarning(`查询完成，共 ${total} 个号码，仅 ${submittableCount} 个为「泰迪熊高频」可提交扣次，已自动勾选`)
+      return
+    }
+    proxy.$modal.msgSuccess(`查询完成，${submittableCount} 个号码可提交，已自动勾选`)
+    return
+  }
+  if (isMobileGaopinActive.value) {
+    const submittableCount = precheckTableData.value.filter((row) => isMobileGaopinSubmittableRow(row)).length
+    if (submittableCount === 0) {
+      proxy.$modal.msgWarning(`查询完成，共 ${total} 个号码，可提交 0 个（仅「有标记」结果可提交并扣次）`)
+      return
+    }
+    if (submittableCount < total) {
+      proxy.$modal.msgWarning(`查询完成，共 ${total} 个号码，仅 ${submittableCount} 个为「有标记」可提交扣次，已自动勾选`)
+      return
+    }
+    proxy.$modal.msgSuccess(`查询完成，${submittableCount} 个号码可提交，已自动勾选`)
+    return
+  }
+  const markedCount = precheckDialogData.value.markedCount || 0
+  if (markedCount === 0) {
+    if (failedCount > 0) {
+      proxy.$modal.msgWarning(`预查询完成，失败 ${failedCount} 个，可提交 0 个`)
+    } else {
+      proxy.$modal.msgWarning('预查询未发现被标记号码，请确认后再决定是否重试')
+    }
+  }
+}
+
+function autoSelectMarkedPrecheckRows() {
+  if (!isTeddyGaopinActive.value && !isMobileGaopinActive.value) return
+  precheckTableRef.value?.clearSelection?.()
+  const markedRows = precheckTableData.value.filter((row) => isPrecheckRowSubmittable(row))
+  markedRows.forEach((row) => {
+    precheckTableRef.value?.toggleRowSelection?.(row, true)
+  })
 }
 
 function togglePrecheckSelectAll() {
@@ -866,7 +934,7 @@ function exportPrecheckRows() {
     queryStatusLabel(item),
     markStatusLabel(item),
     item.status || '',
-    item.detail || '',
+    precheckResultLabel(item),
     item.errorMessage || '',
     item.responseTime ?? ''
   ])
@@ -885,30 +953,35 @@ async function copyPrecheckPhones() {
 }
 
 function recordStatusLabel(row) {
+  const auditStatus = String(row?.auditStatus ?? '1')
+  if (auditStatus === '0') return '待审核'
+  if (auditStatus === '2') return '已拒绝'
+  if (auditStatus === '3') return '已打回'
+  const itemStatus = String(row?.itemProcessStatus ?? '')
+  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2') {
+    return markItemProcessStatusLabel(itemStatus, row)
+  }
   const status = String(row?.orderStatus ?? '')
   const successCount = Number(row?.successCount ?? 0)
   const failedCount = Number(row?.failedCount ?? 0)
   if (status === '0' || status === '1') return '待处理'
-  if (status === '2') return failedCount > 0 && successCount <= 0 ? '失败' : (failedCount > 0 ? '失败' : '成功')
+  if (status === '2') return failedCount > 0 && successCount <= 0 ? '失败' : (failedCount > 0 ? '部分失败' : '成功')
   if (status === '3') return '失败'
   return '待处理'
 }
 
 function recordStatusType(row) {
+  const auditStatus = String(row?.auditStatus ?? '1')
+  if (auditStatus === '2') return 'danger'
+  if (auditStatus === '3') return 'warning'
+  if (auditStatus === '0') return 'info'
+  const itemStatus = String(row?.itemProcessStatus ?? '')
+  if (itemStatus === '0' || itemStatus === '1' || itemStatus === '2') {
+    return markItemProcessStatusTagType(itemStatus, row)
+  }
   const label = recordStatusLabel(row)
-  if (label === '成功') return 'success'
-  if (label === '失败') return 'danger'
-  return 'warning'
-}
-
-function itemStatusLabel(status) {
-  const map = { '0': '待处理', '1': '成功', '2': '失败' }
-  return map[status] || '-'
-}
-
-function itemStatusType(status) {
-  if (status === '1') return 'success'
-  if (status === '2') return 'danger'
+  if (label === '处理完成' || label === '成功') return 'success'
+  if (label === '处理失败' || label === '失败' || label === '部分失败') return 'danger'
   return 'warning'
 }
 
@@ -920,14 +993,8 @@ function formatDateTime(value) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
-function formatDateOnly(value) {
-  const d = new Date(value)
-  const p = (n) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
 function recordRowKey(row) {
-  return `${row?.id ?? ''}-${row?.phonePreview ?? ''}`
+  return `${row?.itemId ?? row?.id ?? ''}-${row?.phonePreview ?? ''}`
 }
 
 function normalizeQueryPlatform() {
@@ -958,7 +1025,7 @@ function getList() {
 
 function loadSummaryAndPrice() {
   return listMarkUserPlatformPrice().then((resp) => {
-    const allList = Array.isArray(resp?.data) ? resp.data : []
+    const allList = filterLegacyMarkPlatforms(Array.isArray(resp?.data) ? resp.data : [])
     const menuPreferredPlatformCode = routePlatformCode.value
     if (menuPreferredPlatformCode) {
       const matched = allList.find((item) => item.platformCode === menuPreferredPlatformCode)
@@ -1000,7 +1067,69 @@ function loadSummaryAndPrice() {
   })
 }
 
-function handlePlatformTabChange() {
+function resolveStateKey(platformCode) {
+  const code = String(
+    platformCode
+    || resolvePlatformCodeFromRoute(route)
+    || activePlatformCode.value
+    || ''
+  ).trim()
+  return code || '__default__'
+}
+
+function savePageState(platformCode) {
+  const key = String(platformCode || '').trim() || resolveStateKey()
+  markUserPageStore.saveSnapshot(key, collectPageSnapshot())
+}
+
+function refreshPlatformPageState(platformCode, { force = false } = {}) {
+  const key = resolveStateKey(platformCode)
+  if (!force && key === lastRestoredStateKey.value) {
+    syncRecordTabData()
+    return
+  }
+  restorePageState(key)
+  lastRestoredStateKey.value = key
+  syncRecordTabData()
+}
+
+function switchPlatformPageState(previousCode, nextCode) {
+  if (previousCode) {
+    savePageState(previousCode)
+  }
+  refreshPlatformPageState(nextCode, { force: true })
+}
+
+function collectPageSnapshot() {
+  return {
+    submitForm: {
+      phonesText: submitForm.phonesText,
+      requestNo: submitForm.requestNo,
+      remark: submitForm.remark
+    },
+    precheckDialogData: JSON.parse(JSON.stringify(precheckDialogData.value)),
+    precheckSourcePayload: precheckSourcePayload.value
+      ? {
+          ...precheckSourcePayload.value,
+          phones: Array.isArray(precheckSourcePayload.value.phones)
+            ? [...precheckSourcePayload.value.phones]
+            : []
+        }
+      : null,
+    precheckKeyword: precheckKeyword.value,
+    precheckQueryStatus: precheckQueryStatus.value,
+    precheckMarkStatus: precheckMarkStatus.value,
+    precheckSelectedPhones: normalizePhoneList(precheckSelectedRows.value.map((row) => row.phone)),
+    activeSubTab: activeSubTab.value,
+    queryParams: {
+      ...queryParams,
+      params: { ...(queryParams.params || {}) }
+    },
+    recordDateRange: Array.isArray(recordDateRange.value) ? [...recordDateRange.value] : []
+  }
+}
+
+function applyDefaultRecordQuery() {
   queryParams.pageNum = 1
   queryParams.orderNo = null
   queryParams.requestNo = null
@@ -1009,9 +1138,88 @@ function handlePlatformTabChange() {
   queryParams.orderStatus = null
   queryParams.params = {}
   recordDateRange.value = []
-  activeQuickRange.value = ''
   recordSelectedRows.value = []
-  getList()
+}
+
+function applyDefaultPageState(platformCode) {
+  submitForm.phonesText = ''
+  submitForm.requestNo = ''
+  submitForm.remark = ''
+  resetPrecheckPanel()
+  activeSubTab.value = 'submit'
+  applyDefaultRecordQuery()
+  queryParams.platformCode = platformCode || activePlatformCode.value || routePlatformCode.value || null
+}
+
+function restorePrecheckSelection(phones) {
+  const selectedPhones = normalizePhoneList(Array.isArray(phones) ? phones : [])
+  precheckSelectedRows.value = []
+  precheckTableRef.value?.clearSelection?.()
+  if (!selectedPhones.length) return
+  const phoneSet = new Set(selectedPhones)
+  precheckTableData.value
+    .filter((row) => phoneSet.has(row.phone) && isPrecheckRowSubmittable(row))
+    .forEach((row) => {
+      precheckTableRef.value?.toggleRowSelection?.(row, true)
+    })
+}
+
+function restorePageState(platformCode) {
+  const key = resolveStateKey(platformCode)
+  const snapshot = markUserPageStore.getSnapshot(key)
+  if (!snapshot) {
+    applyDefaultPageState(platformCode)
+    return
+  }
+
+  const snapshotPlatform = String(
+    snapshot.precheckDialogData?.platformCode
+    || snapshot.precheckSourcePayload?.platformCode
+    || snapshot.queryParams?.platformCode
+    || ''
+  ).trim()
+  if (snapshotPlatform && snapshotPlatform !== key && key !== '__default__') {
+    markUserPageStore.clearSnapshot(key)
+    applyDefaultPageState(platformCode)
+    return
+  }
+
+  submitForm.phonesText = snapshot.submitForm?.phonesText || ''
+  submitForm.requestNo = snapshot.submitForm?.requestNo || ''
+  submitForm.remark = snapshot.submitForm?.remark || ''
+  precheckDialogData.value = snapshot.precheckDialogData || createEmptyPrecheckData()
+  precheckSourcePayload.value = snapshot.precheckSourcePayload || null
+  precheckKeyword.value = snapshot.precheckKeyword || ''
+  precheckQueryStatus.value = snapshot.precheckQueryStatus || ''
+  precheckMarkStatus.value = snapshot.precheckMarkStatus || ''
+  activeSubTab.value = snapshot.activeSubTab || 'submit'
+  recordDateRange.value = Array.isArray(snapshot.recordDateRange) ? [...snapshot.recordDateRange] : []
+  recordSelectedRows.value = []
+
+  Object.assign(queryParams, {
+    pageNum: snapshot.queryParams?.pageNum ?? 1,
+    pageSize: snapshot.queryParams?.pageSize ?? 10,
+    orderNo: snapshot.queryParams?.orderNo ?? null,
+    requestNo: snapshot.queryParams?.requestNo ?? null,
+    keyword: snapshot.queryParams?.keyword ?? null,
+    phone: snapshot.queryParams?.phone ?? null,
+    platformCode: platformCode || activePlatformCode.value || routePlatformCode.value || null,
+    orderStatus: snapshot.queryParams?.orderStatus ?? null,
+    params: { ...(snapshot.queryParams?.params || {}) }
+  })
+
+  nextTick(() => {
+    restorePrecheckSelection(snapshot.precheckSelectedPhones)
+  })
+}
+
+function syncRecordTabData() {
+  if (activeSubTab.value === 'record') {
+    getList()
+    startRecordPolling()
+  } else {
+    stopRecordPolling()
+  }
 }
 
 function handleQuery() {
@@ -1027,13 +1235,11 @@ function resetQuery() {
   queryParams.orderStatus = null
   queryParams.params = {}
   recordDateRange.value = []
-  activeQuickRange.value = ''
   queryParams.platformCode = activePlatformCode.value || routePlatformCode.value || null
   handleQuery()
 }
 
 function handleRecordDateRangeChange(value) {
-  activeQuickRange.value = ''
   if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
     recordDateRange.value = []
     queryParams.params = {}
@@ -1049,56 +1255,28 @@ function clearSubmitPhones() {
   submitForm.phonesText = ''
 }
 
-function normalizeTencentPhone(value) {
-  return String(value || '').replace(/[^\d]/g, '')
-}
-async function submitTencentPhoneByRow(row) {
-  if (!canSubmitTencentByRow(row)) {
-    proxy.$modal.msgWarning('该查询结果不支持短信提交')
+function extractSubmitPhones() {
+  const raw = String(submitForm.phonesText || '').trim()
+  if (!raw) {
+    proxy.$modal.msgWarning('请先粘贴或输入号码内容')
     return
   }
-  const phone = normalizeTencentPhone(row?.phone)
-  if (!/^\d{7,15}$/.test(phone)) {
-    proxy.$modal.msgError('手机号格式不正确，请输入 7-15 位数字')
+  const phones = extractPhoneNumbersFromText(raw)
+  if (!phones.length) {
+    proxy.$modal.msgWarning('未提取到有效号码（7-15位数字）')
     return
   }
-  const state = getTencentRowState(phone, true)
-  if (!state) {
-    proxy.$modal.msgError('初始化行状态失败')
-    return
-  }
-  const smsCode = normalizeTencentPhone(state.smsCode)
-  state.smsCode = smsCode
-  if (!/^\d{6}$/.test(smsCode)) {
-    proxy.$modal.msgError('验证码应为 6 位数字')
-    return
-  }
-  const mode = resolveTencentRowSubmitMode(row)
-  const forceTamper = mode === 'tamper'
-  state.loading = true
-  try {
-    const res = await submitMarkUserTencent({ phone, smsCode, forceTamper })
-    const result = res?.data || null
-    state.resultText = buildTencentRowResultText(result, mode)
-    if (result?.accepted === true) {
-      await Promise.all([loadSummaryAndPrice(), getList()])
-      proxy.$modal.msgSuccess(forceTamper ? '腾讯篡改提交受理成功' : '腾讯受理成功')
-    } else {
-      await getList()
-      proxy.$modal.msgWarning('腾讯受理失败，请查看显示结果')
-    }
-  } catch (error) {
-    state.resultText = `提交异常（${String(error?.message || '未知错误')}）`
-    console.error('腾讯提交失败:', error)
-    proxy.$modal.msgError(error?.message || '腾讯提交失败')
-  } finally {
-    state.loading = false
-  }
+  submitForm.phonesText = phones.join('\n')
+  proxy.$modal.msgSuccess(`已整理 ${phones.length} 个号码，请确认后点击「一键批量查询」`)
 }
 
 async function submitBatchOrder() {
   if (!activePlatform.value) {
     proxy.$modal.msgError('当前未选择平台')
+    return
+  }
+  if (!hasSubmitQuota.value) {
+    proxy.$modal.msgError('当前平台剩余次数不足，无法查询提交')
     return
   }
   const phones = submitPhoneStats.value.validPhones
@@ -1117,13 +1295,19 @@ async function submitBatchOrder() {
   await executePrecheck(payload)
 }
 
-async function afterCreateOrderSuccess(res) {
-  proxy.$modal.msgSuccess(res?.msg || '下单成功')
+async function afterCreateOrderSuccess(res, submittedCount = 0) {
+  await loadSummaryAndPrice()
+  const count = Number(submittedCount || res?.data?.order?.totalCount || res?.data?.totalCount || 0)
+  const remain = activeRemainCount.value
+  if (count > 0) {
+    proxy.$modal.msgSuccess(`提交成功，已提交 ${count} 个号码，扣除 ${count} 次，当前剩余 ${remain} 次`)
+  } else {
+    proxy.$modal.msgSuccess(res?.msg || '下单成功')
+  }
   resetPrecheckPanel()
   submitForm.phonesText = ''
   submitForm.requestNo = ''
   submitForm.remark = ''
-  await loadSummaryAndPrice()
   await getList()
   activeSubTab.value = 'submit'
 }
@@ -1131,11 +1315,20 @@ async function afterCreateOrderSuccess(res) {
 async function submitSelectedMarkedPhones() {
   const selectedPhones = precheckSubmittableSelectedPhones.value
   if (!selectedPhones.length) {
-    proxy.$modal.msgWarning('请先勾选可提交号码（仅支持查询成功记录）')
+    const tip = isTeddyGaopinActive.value
+      ? '仅支持提交泰迪熊高频结果（高频标记/疑似诈骗高频标记），其他结果不可提交'
+      : isMobileGaopinActive.value
+        ? '仅支持提交「有标记」结果，显示「无」的号码不可提交'
+        : '请先勾选可提交号码（仅支持查询成功记录）'
+    proxy.$modal.msgWarning(tip)
     return
   }
   if (!precheckSourcePayload.value) {
     proxy.$modal.msgWarning('暂无可提交结果，请先执行预查询')
+    return
+  }
+  if (!hasSubmitQuota.value) {
+    proxy.$modal.msgError('当前平台剩余次数不足，无法提交')
     return
   }
   const finalDeductAmount = selectedPhones.length * activeUnitPrice.value
@@ -1146,50 +1339,19 @@ async function submitSelectedMarkedPhones() {
 
   const payload = {
     ...precheckSourcePayload.value,
-    phones: selectedPhones
+    phones: selectedPhones,
+    requestNo: ''
   }
   clearSubmitLoading.value = true
   try {
     const res = await createMarkUserClearOrder(payload)
-    await afterCreateOrderSuccess(res)
+    await afterCreateOrderSuccess(res, selectedPhones.length)
   } catch (error) {
     console.error('提交订单失败:', error)
     proxy.$modal.msgError(error?.message || '提交失败')
   } finally {
     clearSubmitLoading.value = false
   }
-}
-
-function setRecordQuickRange(type) {
-  if (activeQuickRange.value === type) {
-    activeQuickRange.value = ''
-    recordDateRange.value = []
-    queryParams.params = {}
-    handleQuery()
-    return
-  }
-
-  const now = new Date()
-  const today = formatDateOnly(now)
-  let beginTime = today
-  let endTime = today
-
-  if (type === 'yesterday') {
-    const yesterday = new Date(now)
-    yesterday.setDate(yesterday.getDate() - 1)
-    beginTime = formatDateOnly(yesterday)
-    endTime = beginTime
-  } else if (type === 'week') {
-    const weekStart = new Date(now)
-    weekStart.setDate(weekStart.getDate() - 6)
-    beginTime = formatDateOnly(weekStart)
-    endTime = today
-  }
-
-  activeQuickRange.value = type
-  recordDateRange.value = [beginTime, endTime]
-  queryParams.params = { beginTime, endTime }
-  handleQuery()
 }
 
 function handleRecordSelectionChange(rows) {
@@ -1202,38 +1364,149 @@ function exportRecordRows() {
     proxy.$modal.msgWarning('暂无可导出记录')
     return
   }
-  const header = ['订单号', '用户名', '手机号', '平台', '提交时间', '状态']
+  const header = ['用户名', '手机号', '平台', '处理状态', '订单号', '提交时间']
   const body = rows.map((item) => [
-    item.orderNo || '',
     item.userName || '',
     item.phonePreview || '',
     item.platformName || '',
-    formatDateTime(item.createTime),
-    recordStatusLabel(item)
+    recordStatusLabel(item),
+    item.orderNo || '',
+    formatDateTime(item.createTime)
   ])
   downloadCsv(`mark-record-${Date.now()}.csv`, [header, ...body])
 }
 
-watch(routePlatformCode, () => {
-  loadSummaryAndPrice().then(() => {
-    handlePlatformTabChange()
-  })
+watch(routePlatformCode, async (newCode, oldCode) => {
+  if (newCode === oldCode) return
+  await loadSummaryAndPrice()
+  switchPlatformPageState(oldCode, newCode)
 })
-watch(activePlatformCode, () => {
-  resetTencentRowStates()
+
+watch(activePlatformCode, (newCode, oldCode) => {
+  if (!showPlatformSwitcher.value || !oldCode || oldCode === newCode) {
+    return
+  }
+  switchPlatformPageState(oldCode, newCode)
+})
+
+let recordPollTimer = null
+function startRecordPolling() {
+  stopRecordPolling()
+  recordPollTimer = window.setInterval(() => {
+    if (activeSubTab.value !== 'record') return
+    getList()
+  }, 5000)
+}
+function stopRecordPolling() {
+  if (recordPollTimer) {
+    window.clearInterval(recordPollTimer)
+    recordPollTimer = null
+  }
+}
+
+watch(routePlatformCode, (code) => {
+  if (isDedicatedTencentPlatformCode(code)) {
+    router.replace({ name: TENCENT_DEDICATED_ROUTE_NAME }).catch(() => {
+      router.replace({ path: TENCENT_DEDICATED_ROUTE }).catch(() => {})
+    })
+    return
+  }
+  if (isDedicatedXiaomiPlatformCode(code)) {
+    router.replace({ name: XIAOMI_DEDICATED_ROUTE_NAME }).catch(() => {
+      router.replace({ path: XIAOMI_DEDICATED_ROUTE }).catch(() => {})
+    })
+    return
+  }
+  if (isDedicatedBaiduPlatformCode(code)) {
+    router.replace({ name: BAIDU_DEDICATED_ROUTE_NAME }).catch(() => {
+      router.replace({ path: BAIDU_DEDICATED_ROUTE }).catch(() => {})
+    })
+    return
+  }
+  if (isDedicated360PlatformCode(code)) {
+    router.replace({ name: resolve360DedicatedRouteName(code) }).catch(() => {
+      router.replace({ path: resolve360DedicatedRoutePathByCode(code) }).catch(() => {})
+    })
+  }
+})
+
+watch(activeSubTab, (tab) => {
+  if (tab === 'record') {
+    getList()
+    startRecordPolling()
+  } else {
+    stopRecordPolling()
+  }
 })
 
 onMounted(async () => {
+  if (isDedicatedTencentPlatformCode(routePlatformCode.value)) {
+    const redirected = await router.replace({ name: TENCENT_DEDICATED_ROUTE_NAME }).catch(() => null)
+    if (!redirected) {
+      await router.replace({ path: TENCENT_DEDICATED_ROUTE }).catch(() => {})
+    }
+    return
+  }
+  if (isDedicatedXiaomiPlatformCode(routePlatformCode.value)) {
+    const redirected = await router.replace({ name: XIAOMI_DEDICATED_ROUTE_NAME }).catch(() => null)
+    if (!redirected) {
+      await router.replace({ path: XIAOMI_DEDICATED_ROUTE }).catch(() => {})
+    }
+    return
+  }
+  if (isDedicatedBaiduPlatformCode(routePlatformCode.value)) {
+    const redirected = await router.replace({ name: BAIDU_DEDICATED_ROUTE_NAME }).catch(() => null)
+    if (!redirected) {
+      await router.replace({ path: BAIDU_DEDICATED_ROUTE }).catch(() => {})
+    }
+    return
+  }
+  if (isDedicated360PlatformCode(routePlatformCode.value)) {
+    const code = routePlatformCode.value
+    const redirected = await router.replace({ name: resolve360DedicatedRouteName(code) }).catch(() => null)
+    if (!redirected) {
+      await router.replace({ path: resolve360DedicatedRoutePathByCode(code) }).catch(() => {})
+    }
+    return
+  }
   await loadSummaryAndPrice()
-  handlePlatformTabChange()
+  refreshPlatformPageState(resolveStateKey(), { force: true })
+})
+
+onBeforeRouteLeave((_to, from) => {
+  savePageState(resolvePlatformCodeFromRoute(from) || activePlatformCode.value)
+})
+
+onBeforeUnmount(() => {
+  stopRecordPolling()
 })
 </script>
 
 <style scoped>
+.mark-user-order-page {
+  padding: 0 !important;
+  margin: 0;
+  width: 100%;
+}
+
+.mark-user-order-page :deep(.platform-card) {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.mark-user-order-page :deep(.platform-card > .el-card__body) {
+  padding: 0 !important;
+}
+
+.mark-user-order-page :deep(.pagination-container) {
+  margin-top: 12px;
+}
+
 .platform-layout {
   display: flex;
   align-items: flex-start;
-  gap: 16px;
+  gap: 8px;
 }
 
 .platform-layout--single {
@@ -1271,28 +1544,65 @@ onMounted(async () => {
   min-width: 0;
   position: relative;
 }
-.page-top-remain {
+
+.platform-main-remain {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 2;
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
+  align-items: center;
+  height: 40px;
+  padding-right: 4px;
 }
 
 .sub-tabs {
-  margin-top: 2px;
+  margin-top: 0;
+}
+
+.sub-tabs :deep(.el-tabs__header) {
+  margin: 0;
+  padding: 0;
+}
+
+.sub-tabs :deep(.el-tabs__nav-wrap) {
+  padding: 0;
+}
+
+.sub-tabs :deep(.el-tabs__nav-wrap::after) {
+  height: 1px;
+}
+
+.sub-tabs :deep(.el-tabs__content) {
+  padding: 0;
+}
+
+.sub-tabs :deep(.el-tabs__item) {
+  height: 40px;
+  line-height: 40px;
+  padding: 0 16px;
+}
+
+.platform-main:has(.platform-main-remain) .sub-tabs :deep(.el-tabs__header) {
+  padding-right: 150px;
 }
 
 .submit-pane {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  padding: 16px;
+  padding: 14px 16px 18px;
+  background: #f5f7fa;
+}
+
+.submit-content-shell {
+  width: 100%;
+  max-width: 1280px;
 }
 
 .submit-grid {
   display: grid;
-  grid-template-columns: minmax(0, 540px) minmax(0, 1fr);
+  grid-template-columns: minmax(300px, 36%) minmax(0, 1fr);
   width: 100%;
-  min-height: 560px;
-  gap: 16px;
+  min-height: 520px;
+  gap: 14px;
   align-items: stretch;
 }
 
@@ -1303,25 +1613,53 @@ onMounted(async () => {
 
 .submit-right {
   display: flex;
-  width: 100%;
 }
-.submit-right-content {
+
+.submit-input-panel,
+.query-result-panel {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.submit-input-panel {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  padding: 12px 14px 14px;
+}
+
+.submit-panel-head,
+.query-result-title {
+  margin-bottom: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #303133;
+  line-height: 1.5;
+}
+
+.submit-textarea {
   width: 100%;
-  flex: 1;
-  min-width: 0;
+
+  :deep(.el-textarea__inner) {
+    min-height: 220px;
+    padding: 10px 12px;
+    font-size: 13px;
+    line-height: 1.55;
+    box-sizing: border-box;
+  }
 }
 
 .submit-right-remain {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 5px 10px;
-  border: 1px solid #a0cfff;
+  padding: 6px 12px;
+  border: 1px solid #b3d8ff;
   border-radius: 4px;
   background: #ecf5ff;
-  color: #303133;
+  color: #606266;
   font-size: 13px;
   line-height: 1;
 }
@@ -1331,67 +1669,68 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.submit-title {
-  margin: 0 0 12px;
-  font-size: 22px;
-  font-weight: 600;
-  color: var(--el-text-color-primary);
-}
-
-.submit-tip {
-  margin-bottom: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e6d8a6;
-  border-radius: 4px;
-  background: #faf4db;
-  color: #606266;
-  font-size: 14px;
-}
-
 .submit-warning-bar {
   margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px solid #f56c6c;
+  padding: 8px 12px;
   border-radius: 4px;
   background: #fef0f0;
-  color: #c45656;
-  font-size: 14px;
+  color: #f56c6c;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .submit-stats {
-  margin-top: 10px;
-  color: var(--el-text-color-secondary);
-  font-size: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 8px;
+  color: #909399;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.submit-stats strong {
+  color: var(--el-color-primary);
+  font-weight: 600;
 }
 
 .submit-actions {
-  margin-top: 14px;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.submit-action-row {
+  display: flex;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
-.tencent-row-sms-input {
-  width: 150px;
+.submit-action-btn {
+  min-width: 108px;
+  height: 32px;
+  margin: 0;
+  font-size: 13px;
 }
 
-.tencent-row-disabled {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+.submit-action-btn--extract {
+  --el-button-bg-color: #d48806;
+  --el-button-border-color: #d48806;
+  --el-button-hover-bg-color: #b8740a;
+  --el-button-hover-border-color: #b8740a;
+  --el-button-active-bg-color: #9c6509;
+  --el-button-active-border-color: #9c6509;
+  --el-button-disabled-bg-color: #e8c98a;
+  --el-button-disabled-border-color: #e8c98a;
+  color: #fff;
 }
 
-.record-detail-text {
-  white-space: pre-wrap;
-  line-height: 1.45;
-  color: var(--el-text-color-regular);
-  word-break: break-word;
+.submit-action-btn--ghost {
+  align-self: flex-start;
 }
 
 .query-result-panel {
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  background: #fff;
   overflow: hidden;
   width: 100%;
   flex: 1;
@@ -1404,39 +1743,64 @@ onMounted(async () => {
 .query-result-head {
   display: flex;
   align-items: center;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: #f8fbff;
-}
-
-.query-result-head-meta {
-  display: flex;
-  align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  width: 100%;
-  min-width: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+  background: #fafbfc;
 }
 
-
+.query-result-title {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
 
 .query-result-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
 }
-.query-result-actions :deep(.el-button) {
-  min-height: 34px;
-  padding: 0 16px;
-  font-size: 14px;
+
+.query-result-btn {
+  min-height: 28px;
+  padding: 0 10px;
+  margin: 0;
+  font-size: 12px;
+}
+
+.query-result-btn--primary {
+  min-width: 84px;
 }
 
 .query-result-body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: 10px 12px 12px;
+}
+
+.query-result-table :deep(.el-table__header th) {
+  background: #eef3f8;
+  color: #303133;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.query-result-table :deep(.el-table__header .cell) {
+  font-size: 13px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.query-result-table :deep(.el-table__body .cell) {
+  font-size: 13px;
+}
+
+.query-result-table :deep(.el-table__empty-text) {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 }
 
 .query-result-table :deep(.el-scrollbar__bar.is-horizontal) {
@@ -1473,43 +1837,87 @@ onMounted(async () => {
 }
 
 .record-search-panel {
+  margin-top: 0;
   margin-bottom: 12px;
   border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
+  border-radius: 0;
+  border-top: none;
   background: #fff;
-  padding: 12px 14px;
+  padding: 8px 10px;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 
-.record-search-grid {
-  display: grid;
-  grid-template-columns: minmax(260px, 2.2fr) minmax(160px, 1fr) minmax(320px, 2fr) auto auto;
-  gap: 12px;
-  align-items: end;
-}
-
-.record-search-item {
-  min-width: 0;
-}
-
-.record-search-item__label {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-}
-
-.record-quick-group {
+.record-search-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  width: max-content;
+  min-width: 100%;
+}
+
+.record-search-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.record-search-field--keyword {
+  flex: 0 1 200px;
+  width: 200px;
+  min-width: 140px;
+}
+
+.record-search-field--keyword :deep(.el-input) {
+  width: 100%;
+}
+
+.record-search-field--status :deep(.el-select) {
+  width: 96px;
+}
+
+.record-search-field--date :deep(.el-date-editor) {
+  width: 210px !important;
+  flex-shrink: 0;
+}
+
+.record-search-field--date :deep(.el-range-input) {
+  font-size: 12px;
+}
+
+.record-search-field--actions {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.record-search-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--el-text-color-regular);
+  line-height: 1;
 }
 
 .record-action-group {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+}
+
+.record-action-group :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
+
+.record-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.record-table-wrap :deep(.el-table) {
+  min-width: 860px;
 }
 
 @media (max-width: 768px) {
@@ -1526,6 +1934,10 @@ onMounted(async () => {
     margin-bottom: 0;
   }
 
+  .submit-pane {
+    padding: 12px;
+  }
+
   .submit-grid {
     grid-template-columns: 1fr;
   }
@@ -1534,8 +1946,14 @@ onMounted(async () => {
     min-height: 420px;
   }
 
+  .query-result-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .query-result-actions {
     width: 100%;
+    justify-content: flex-start;
   }
 
   .query-result-actions :deep(.el-button) {
@@ -1545,15 +1963,6 @@ onMounted(async () => {
   .precheck-filter-bar :deep(.el-select),
   .precheck-filter-bar :deep(.el-input) {
     width: 100% !important;
-  }
-  .record-search-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .record-action-group,
-  .record-quick-group {
-    width: 100%;
-    min-width: 100%;
   }
 }
 </style>

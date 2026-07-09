@@ -56,9 +56,18 @@ export const constantRoutes: RouteItem[] = [
     hidden: true
   },
   {
-    path: "/:pathMatch(.*)*",
-    component: () => import('@/views/error/404.vue'),
-    hidden: true
+    path: '/userModel',
+    component: Layout,
+    hidden: true,
+    redirect: 'noredirect',
+    children: [
+      {
+        path: 'notice',
+        component: () => import('@/views/server/user/notice.vue'),
+        name: 'UserSysNotice',
+        meta: { title: '系统公告', icon: 'message' }
+      }
+    ]
   },
   {
     path: '/401',
@@ -78,31 +87,6 @@ export const constantRoutes: RouteItem[] = [
       }
     ]
   },
-  // {
-  //   path: '/laboratory',
-  //   component: Layout,
-  //   meta: { title: '实验室', icon: 'dashboard' },
-  //   children: [
-  //     {
-  //       path: 'threeTest',
-  //       component: () => import('@/views/laboratory/three/gltfmode.vue'),
-  //       name: 'threeTest',
-  //       meta: { title: 'three实验室', icon: 'dashboard' }
-  //     },
-  //     {
-  //       path: "websocket",
-  //       component: () => import('@/views/laboratory/chat/websocket.vue'),
-  //       name: 'websocket',
-  //       meta: { title: 'websocket实验室', icon: 'dashboard' }
-  //     },
-  //     {
-  //       path: "chat",
-  //       component: () => import('@/views/laboratory/chat/chat.vue'),
-  //       name: 'chat',
-  //       meta: { title: 'chat实验室', icon: 'dashboard' }
-  //     },
-  //   ]
-  // },
   {
     path: '/user',
     component: Layout,
@@ -117,6 +101,9 @@ export const constantRoutes: RouteItem[] = [
       }
     ]
   },
-
+  {
+    path: "/:pathMatch(.*)*",
+    component: () => import('@/views/error/404.vue'),
+    hidden: true
+  },
 ]
-

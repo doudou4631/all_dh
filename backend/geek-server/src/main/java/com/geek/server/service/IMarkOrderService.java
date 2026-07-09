@@ -4,10 +4,14 @@ import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
+import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
 import com.geek.server.domain.dto.MarkTencentSubmitRequest;
+import com.geek.server.domain.vo.MarkAgentDownstreamSummaryVO;
+import com.geek.server.domain.vo.MarkAgentMeSummaryVO;
+import com.geek.server.domain.vo.MarkAgentOrderItemVO;
 import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
@@ -28,6 +32,8 @@ public interface IMarkOrderService {
     MarkTencentStatusQueryResultVO queryTencentStatus(MarkTencentStatusQueryRequest request);
     MarkTencentSubmitResultVO submitTencent(MarkTencentSubmitRequest request);
 
+    MarkTencentSubmitResultVO selectMyTencentSubmitResult(Long itemId);
+
     List<MarkOrder> selectMyOrderList(MarkOrder query);
 
     MarkOrderDetailVO selectMyOrderDetail(Long orderId);
@@ -40,13 +46,29 @@ public interface IMarkOrderService {
 
     List<MarkOrder> selectAgentOrderList(MarkOrder query);
 
+    List<MarkAgentOrderItemVO> selectAgentOrderItemList(MarkAgentOrderItemVO query);
+
     MarkOrderDetailVO selectAgentOrderDetail(Long orderId);
     List<MarkWalletLog> selectAgentWalletLogList(MarkWalletLog query);
+
+    List<MarkAgentDownstreamSummaryVO> selectAgentDownstreamSummaryList();
+
+    MarkAgentMeSummaryVO selectAgentMeSummary();
 
     MarkOrderDetailVO feedbackOrderItem(Long itemId, MarkOrderItemProcessRequest request);
 
     MarkOrderDetailVO completeOrder(Long orderId);
     MarkOrderDetailVO completeOrder(Long orderId, MarkOrderItemProcessRequest request);
+
+    List<MarkOrder> selectAgentAuditPendingList(MarkOrder query);
+
+    List<MarkOrder> selectAgentAuditHistoryList(MarkOrder query);
+
+    MarkOrderDetailVO auditOrderPass(Long orderId, MarkOrderAuditRequest request);
+
+    MarkOrderDetailVO auditOrderReject(Long orderId, MarkOrderAuditRequest request);
+
+    MarkOrderDetailVO auditOrderReturn(Long orderId, MarkOrderAuditRequest request);
 
     List<MarkOrder> selectAdminAuditOrderList(MarkOrder query);
 
@@ -55,4 +77,14 @@ public interface IMarkOrderService {
     List<MarkUserPlatformPrice> selectAgentUserPlatformPriceList(Long userId);
 
     MarkAgentPlatformQuotaAdjustResultVO adjustAgentUserPlatformQuota(MarkAgentPlatformQuotaAdjustRequest request);
+
+    void processTdGaopinPendingItemsAuto();
+
+    void processXiaomiPendingItemsAuto();
+
+    java.util.Map<String, Object> batchProcessXiaomiItems(java.util.List<Long> itemIds);
+
+    java.util.Map<String, Object> batchDetectXiaomiItems(java.util.List<Long> itemIds);
+
+    java.util.Map<String, Object> batchMarkSuccessOrderItems(java.util.List<Long> itemIds);
 }

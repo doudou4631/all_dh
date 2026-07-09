@@ -69,7 +69,7 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.INSERT)
     @PostMapping
     public AjaxResult add(@RequestBody MarkPlatformTemplate markPlatformTemplate) {
-        ensureMarkAdminManagePermission();
+        ensureTemplateManagePermission();
         return toAjax(markPlatformTemplateService.insertMarkPlatformTemplate(markPlatformTemplate));
     }
 
@@ -78,7 +78,7 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.UPDATE)
     @PutMapping
     public AjaxResult edit(@RequestBody MarkPlatformTemplate markPlatformTemplate) {
-        ensureMarkAdminManagePermission();
+        ensureTemplateManagePermission();
         return toAjax(markPlatformTemplateService.updateMarkPlatformTemplate(markPlatformTemplate));
     }
 
@@ -87,15 +87,18 @@ public class MarkPlatformTemplateController extends BaseController {
     @Log(title = "标记平台模板", businessType = BusinessType.DELETE)
     @DeleteMapping("/{ids}")
     public AjaxResult remove(@PathVariable Long[] ids) {
-        ensureMarkAdminManagePermission();
+        ensureTemplateManagePermission();
         return toAjax(markPlatformTemplateService.deleteMarkPlatformTemplateByIds(ids));
     }
 
-    private void ensureMarkAdminManagePermission() {
-        boolean markAdminOperator = SecurityUtils.hasRole("mark_admin");
-        boolean adminOperator = SecurityUtils.hasRole("admin");
-        if (!markAdminOperator || adminOperator) {
-            throw new ServiceException("仅标记业务管理员可管理标记模板");
+    private void ensureTemplateManagePermission() {
+        if (SecurityUtils.isAdmin()
+                || SecurityUtils.hasRole("admin")
+                || SecurityUtils.hasRole("mark_admin")
+                || SecurityUtils.hasRole("agent")
+                || SecurityUtils.hasRole("mark_agent")) {
+            return;
         }
+        throw new ServiceException("无权管理标记模板");
     }
 }

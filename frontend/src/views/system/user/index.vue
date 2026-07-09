@@ -1,5 +1,5 @@
 <template>
-   <div class="app-container">
+   <div class="app-container" :class="{ 'user-table-page': isAgentAccountPage }">
       <el-row :gutter="20">
          <!--部门数据-->
          <!-- <el-col :span="4" :xs="24">
@@ -17,52 +17,111 @@
          </el-col> -->
          <!--用户数据-->
          <el-col :span="24" :xs="24">
-            <el-card shadow="never" body-class="search-card">
-               <el-form :model="queryParams" ref="queryRef" :inline="true" v-show="showSearch" label-width="68px">
+            <el-alert
+               v-if="isAgentAccountPage && isAgent"
+               class="user-template-banner"
+               :type="myMarkTemplateBound ? 'success' : 'warning'"
+               :closable="false"
+               show-icon
+            >
+               <div class="user-template-banner__content">
+                  <span>
+                     我的标记模板：
+                     <strong>{{ myMarkTemplateDisplay }}</strong>
+                     <span class="user-template-banner__hint">
+                        {{ myMarkTemplateBound ? '（与用户端模板独立，互不同步）' : '（代理端展示用，请先绑定）' }}
+                     </span>
+                  </span>
+                  <div class="user-template-banner__actions">
+                     <el-button
+                        v-if="canManageMarkTemplate"
+                        type="primary"
+                        size="small"
+                        @click="handleGoMarkTemplatePage"
+                     >管理我的模板</el-button>
+                     <el-button type="warning" size="small" @click="handleBindMyMarkTemplate">绑定我的模板</el-button>
+                  </div>
+               </div>
+            </el-alert>
+            <el-card shadow="never" :body-class="isAgentAccountPage ? 'user-table-search-card' : 'search-card'">
+               <el-form
+                  :model="queryParams"
+                  ref="queryRef"
+                  :inline="true"
+                  v-show="showSearch"
+                  :label-width="isAgentAccountPage ? 'auto' : '68px'"
+                  :class="{ 'user-table-search-form': isAgentAccountPage }"
+               >
                   <el-form-item label="用户名称" prop="userName">
-                     <el-input v-model="queryParams.userName" placeholder="请输入用户名称" clearable style="width: 240px"
-                        @keyup.enter="handleQuery" />
+                     <el-input
+                        v-model="queryParams.userName"
+                        placeholder="请输入用户名称"
+                        clearable
+                        :style="{ width: isAgentAccountPage ? '140px' : '240px' }"
+                        :size="isAgentAccountPage ? 'small' : 'default'"
+                        @keyup.enter="handleQuery"
+                     />
                   </el-form-item>
                   <el-form-item label="手机号码" prop="phonenumber">
-                     <el-input v-model="queryParams.phonenumber" placeholder="请输入手机号码" clearable style="width: 240px"
-                        @keyup.enter="handleQuery" />
+                     <el-input
+                        v-model="queryParams.phonenumber"
+                        placeholder="请输入手机号码"
+                        clearable
+                        :style="{ width: isAgentAccountPage ? '140px' : '240px' }"
+                        :size="isAgentAccountPage ? 'small' : 'default'"
+                        @keyup.enter="handleQuery"
+                     />
                   </el-form-item>
                   <el-form-item label="状态" prop="status">
-                     <el-select v-model="queryParams.status" placeholder="用户状态" clearable style="width: 240px">
+                     <el-select
+                        v-model="queryParams.status"
+                        placeholder="用户状态"
+                        clearable
+                        :style="{ width: isAgentAccountPage ? '100px' : '240px' }"
+                        :size="isAgentAccountPage ? 'small' : 'default'"
+                     >
                         <el-option v-for="dict in sys_normal_disable" :key="dict.value" :label="dict.label"
                            :value="dict.value" />
                      </el-select>
                   </el-form-item>
-                  <el-form-item label="创建时间" style="width: 308px;">
-                     <el-date-picker v-model="dateRange" value-format="YYYY-MM-DD" type="daterange" range-separator="-"
-                        start-placeholder="开始日期" end-placeholder="结束日期"></el-date-picker>
+                  <el-form-item label="创建时间" :style="{ width: isAgentAccountPage ? 'auto' : '308px' }">
+                     <el-date-picker
+                        v-model="dateRange"
+                        value-format="YYYY-MM-DD"
+                        type="daterange"
+                        range-separator="-"
+                        start-placeholder="开始日期"
+                        end-placeholder="结束日期"
+                        :size="isAgentAccountPage ? 'small' : 'default'"
+                        :style="{ width: isAgentAccountPage ? '220px' : '100%' }"
+                     />
                   </el-form-item>
-                  <el-form-item>
-                     <el-button type="primary" icon="Search" @click="handleQuery">搜索</el-button>
-                     <el-button icon="Refresh" @click="resetQuery">重置</el-button>
+                  <el-form-item class="user-table-search-actions">
+                     <el-button type="primary" icon="Search" :size="isAgentAccountPage ? 'small' : 'default'" @click="handleQuery">搜索</el-button>
+                     <el-button icon="Refresh" :size="isAgentAccountPage ? 'small' : 'default'" @click="resetQuery">重置</el-button>
                   </el-form-item>
                </el-form>
             </el-card>
 
-            <el-card shadow="never" class="mt10">
-               <el-row :gutter="10" class="mb8">
+            <el-card shadow="never" :class="isAgentAccountPage ? 'user-table-card' : 'mt10'">
+               <el-row :gutter="10" :class="isAgentAccountPage ? 'user-table-toolbar' : 'mb8'">
                   <el-col :span="1.5">
-                     <el-button type="primary" plain icon="Plus" @click="handleAdd"
+                     <el-button type="primary" plain icon="Plus" :size="isAgentAccountPage ? 'small' : 'default'" @click="handleAdd"
                         v-hasPermi="['system:user:add']">新增</el-button>
                   </el-col>
-                  <el-col :span="1.5">
+                  <el-col :span="1.5" v-if="!isAgentAccountPage">
                      <el-button type="success" plain icon="Edit" :disabled="single" @click="handleUpdate"
                         v-hasPermi="['system:user:edit']">修改</el-button>
                   </el-col>
                   <el-col :span="1.5">
-                     <el-button type="danger" plain icon="Delete" :disabled="multiple" @click="handleDelete"
+                     <el-button type="danger" plain icon="Delete" :disabled="multiple" :size="isAgentAccountPage ? 'small' : 'default'" @click="handleDelete"
                         v-hasPermi="['system:user:remove']">删除</el-button>
                   </el-col>
-                  <el-col :span="1.5">
+                  <el-col :span="1.5" v-if="!isAgentAccountPage">
                      <el-button type="info" plain icon="Upload" @click="handleImport"
                         v-hasPermi="['system:user:import']">导入</el-button>
                   </el-col>
-                  <el-col :span="1.5">
+                  <el-col :span="1.5" v-if="!isAgentAccountPage">
                      <el-button type="warning" plain icon="Download" @click="handleExport"
                         v-hasPermi="['system:user:export']">导出</el-button>
                   </el-col>
@@ -70,19 +129,44 @@
                      :columns="columns"></right-toolbar>
                </el-row>
 
-               <el-table v-loading="loading" :data="userList" @selection-change="handleSelectionChange">
-                  <el-table-column type="selection" width="50" align="center" />
-                  <el-table-column label="用户编号" align="center" key="userId" prop="userId" v-if="columns[0].visible" width="120"/>
+               <el-table
+                  v-loading="loading"
+                  :data="userList"
+                  :size="isAgentAccountPage ? 'small' : 'default'"
+                  :border="isAgentAccountPage"
+                  :class="{ 'user-table-main': isAgentAccountPage }"
+                  @selection-change="handleSelectionChange"
+               >
+                  <el-table-column type="selection" :width="isAgentAccountPage ? 42 : 50" align="center" />
+                  <el-table-column
+                     label="用户编号"
+                     align="center"
+                     key="userId"
+                     prop="userId"
+                     v-if="columns[0].visible && !isAgentAccountPage"
+                     width="120"
+                  />
+                  <el-table-column
+                     label="用户编号"
+                     align="left"
+                     key="userIdCompact"
+                     prop="userId"
+                     v-if="columns[0].visible && isAgentAccountPage"
+                     min-width="150"
+                     show-overflow-tooltip
+                     class-name="user-id-cell"
+                  />
                   <el-table-column label="用户名称" align="center" key="userName" prop="userName" v-if="columns[1].visible"
-                     :show-overflow-tooltip="true" width="120"/>
+                     :show-overflow-tooltip="true" :min-width="isAgentAccountPage ? 90 : 120"/>
                   <el-table-column label="用户昵称" align="center" key="nickName" prop="nickName" v-if="columns[2].visible"
-                     :show-overflow-tooltip="true" width="120"/>
+                     :show-overflow-tooltip="true" :min-width="isAgentAccountPage ? 90 : 120"/>
                   <!-- <el-table-column label="部门" align="center" key="deptName" prop="dept.deptName"
                      v-if="columns[3].visible" :show-overflow-tooltip="true" /> -->
                   <el-table-column label="当前模板" align="center" key="points" prop="relMarkTemplate"
-                     v-if="columns[3].visible && shouldShowMarkTemplateColumn" :show-overflow-tooltip="true" width="140">
+                     v-if="columns[3].visible && shouldShowMarkTemplateColumn" :show-overflow-tooltip="true" :min-width="isAgentAccountPage ? 100 : 140">
                      <template #default="scope">
-                        <span style="color: #409EFF; font-weight: bold;">{{ resolveMarkTemplateName(scope.row) }}</span>
+                        <el-tag v-if="!hasBoundMarkTemplate(scope.row)" type="danger" size="small">未绑定</el-tag>
+                        <span v-else class="user-table-template">{{ resolveMarkTemplateName(scope.row) }}</span>
                      </template>
                   </el-table-column>
                   <el-table-column label="当前积分" align="center" key="points" prop="points"
@@ -92,47 +176,63 @@
                      </template>
                   </el-table-column>
                   <el-table-column label="手机号码" align="center" key="phonenumber" prop="phonenumber"
-                     v-if="columns[4].visible && !(isAgentAccountPage && isAgent)" width="120" />
-                  <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" >
+                     v-if="columns[4].visible && !(isAgentAccountPage && isAgent)" :min-width="isAgentAccountPage ? 110 : 120" />
+                  <el-table-column label="状态" align="center" key="status" v-if="columns[5].visible" width="72">
                      <template #default="scope">
                         <el-switch v-model="scope.row.status" active-value="0" inactive-value="1"
                            :disabled="!canEditUser"
                            @change="handleStatusChange(scope.row)"></el-switch>
                      </template>
                   </el-table-column>
-                  <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[6].visible" >
+                  <el-table-column label="创建时间" align="center" prop="createTime" v-if="columns[6].visible" :min-width="isAgentAccountPage ? 140 : 160">
 
                      <template #default="scope">
                         <span>{{ parseTime(scope.row.createTime) }}</span>
                      </template>
                   </el-table-column>
-                  <el-table-column label="操作" align="center" :width="620" class-name="small-padding fixed-width"
-                     fixed="right">
+                  <el-table-column
+                     label="操作"
+                     align="center"
+                     :width="isAgentAccountPage ? 340 : 620"
+                     class-name="small-padding fixed-width"
+                     fixed="right"
+                  >
 
                      <template #default="scope">
-                        <div class="operation-actions" v-if="isAgentAccountPage">
-                           <el-button type="success" @click="handleAddPoints(scope.row)"
+                        <div class="operation-actions operation-actions--table" v-if="isAgentAccountPage">
+                           <el-button
+                              v-if="canBindMarkTemplate && Number(scope.row.userId) !== 1"
+                              type="warning"
+                              plain
+                              size="small"
+                              @click="handleBindMarkTemplate(scope.row)"
+                           >
+                              {{ resolveBindTemplateActionLabel(scope.row) }}
+                           </el-button>
+                           <el-button link type="success" size="small" @click="handleAddPoints(scope.row)"
                               v-hasPermi="['server:pointRecord:add']"
-                              v-if="Number(scope.row.userId) !== 1" round>充值</el-button>
-                           <el-button type="danger" @click="handleDeductPoints(scope.row)"
+                              v-if="Number(scope.row.userId) !== 1">充值</el-button>
+                           <el-button link type="danger" size="small" @click="handleDeductPoints(scope.row)"
                               v-hasPermi="['server:pointRecord:add']"
-                              v-if="Number(scope.row.userId) !== 1" round>扣减</el-button>
-                           <el-button type="primary" plain @click="handleViewAgentPlatformQuota(scope.row)"
+                              v-if="Number(scope.row.userId) !== 1">扣减</el-button>
+                           <el-button link type="primary" size="small" @click="handleViewAgentPlatformQuota(scope.row)"
                               v-hasPermi="['server:pointRecord:add']"
-                              v-if="isAgent && Number(scope.row.userId) !== 1" round>平台次数</el-button>
-                           <el-button type="info" @click="handleToggleOwnedAccounts(scope.row)"
-                              v-if="isSuperAdminAgentAccountPage && Number(scope.row.userId) !== 1"
-                              round>{{ isCurrentOwner(scope.row) ? '收起名下账户' : '查看名下账户' }}</el-button>
-                           <el-button type="warning" @click="handleBindMarkTemplate(scope.row)"
-                              v-hasPermi="['system:user:edit']"
-                              v-if="isAccountAdmin && Number(scope.row.userId) !== 1" round>绑定模板</el-button>
+                              v-if="isAgent && Number(scope.row.userId) !== 1">平台次数</el-button>
+                           <el-button link type="info" size="small" @click="handleToggleOwnedAccounts(scope.row)"
+                              v-if="isSuperAdminAgentAccountPage && Number(scope.row.userId) !== 1">
+                              {{ isCurrentOwner(scope.row) ? '收起' : '名下账户' }}
+                           </el-button>
                            <el-dropdown
                               v-if="Number(scope.row.userId) !== 1"
                               @command="(command) => handleCommand(command, scope.row)"
                            >
-                              <el-button type="primary" plain round>更多</el-button>
+                              <el-button link type="primary" size="small">更多</el-button>
                               <template #dropdown>
                                  <el-dropdown-menu>
+                                    <el-dropdown-item
+                                       v-if="canBindMarkTemplate && isAgent"
+                                       command="handleBindMarkTemplate"
+                                    >绑定模板</el-dropdown-item>
                                     <el-dropdown-item command="handleUpdate">编辑账号</el-dropdown-item>
                                     <el-dropdown-item command="handleDelete" v-hasPermi="['system:user:remove']">删除账号</el-dropdown-item>
                                     <el-dropdown-item command="handleResetPwd" v-hasPermi="['system:user:resetPwd']">重置密码</el-dropdown-item>
@@ -289,10 +389,10 @@
                   </el-form-item>
                </el-col>
             </el-row>
-            <el-row v-if="isAgentAccountPage && isAccountAdmin">
+            <el-row v-if="isAgentAccountPage && canEditMarkTemplateInForm">
                <el-col :span="12">
                   <el-form-item label="标记模板" prop="relMarkTemplate">
-                     <el-select v-model="form.relMarkTemplate" clearable filterable placeholder="请选择标记模板">
+                     <el-select v-model="form.relMarkTemplate" clearable filterable placeholder="请选择用户标记模板">
                         <el-option v-for="item in markTemplateList" :key="item.id" :label="item.templateName"
                            :value="item.id" />
                      </el-select>
@@ -367,7 +467,12 @@
                <el-input v-model="markTemplateForm.userName" disabled />
             </el-form-item>
             <el-form-item label="标记模板" prop="relMarkTemplate">
-               <el-select v-model="markTemplateForm.relMarkTemplate" placeholder="请选择标记模板" clearable style="width: 100%;">
+               <el-select
+                  v-model="markTemplateForm.relMarkTemplate"
+                  placeholder="请选择标记模板"
+                  clearable
+                  style="width: 100%;"
+               >
                   <el-option v-for="item in markTemplateList" :key="item.id" :label="item.templateName" :value="item.id" />
                </el-select>
             </el-form-item>
@@ -473,7 +578,9 @@
 
 <script setup name="User">
 import { getToken } from "@/utils/auth";
+import { getInfo } from "@/api/login";
 import { changeUserStatus, listUser, resetUserPwd, delUser, getUser, updateUser, addUser, deptTreeSelect } from "@/api/system/user";
+import { getConfigKey } from "@/api/system/config";
 import { adjustPointRecord } from "@/api/server/pointRecord";
 import { adjustMarkAgentQuota, listMarkAgentQuotaPlatformOptions } from "@/api/server/markAgent";
 import { listTemplate } from "@/api/server/template";
@@ -490,6 +597,9 @@ const canEditUser = computed(() => proxy.$auth.hasPermi('system:user:edit'));
 const roleSet = computed(() => new Set(Array.isArray(userStore.roles) ? userStore.roles : []));
 const isAgent = computed(() => roleSet.value.has('agent') || roleSet.value.has('mark_agent'));
 const isAccountAdmin = computed(() => roleSet.value.has('admin') || roleSet.value.has('mark_admin'));
+const canBindMarkTemplate = computed(() => isAgentAccountPage.value && (isAccountAdmin.value || isAgent.value));
+const canManageMarkTemplate = computed(() => isAgentAccountPage.value && isAgent.value && proxy.$auth.hasPermi('server:markTemplate:list'));
+const canEditMarkTemplateInForm = computed(() => isAgentAccountPage.value && (isAccountAdmin.value || isAgent.value));
 const isAgentAccountPage = computed(() => route.path.includes("agentAccount"));
 const shouldShowMarkTemplateColumn = computed(() => isAgentAccountPage.value && (isAccountAdmin.value || isAgent.value));
 const isSuperAdminAgentAccountPage = computed(() => isAgentAccountPage.value && isAccountAdmin.value);
@@ -552,6 +662,7 @@ const markTemplateDialog = reactive({
    open: false,
    title: ""
 });
+const loginUserIdCache = ref(null);
 const markTemplateForm = reactive({
    userId: null,
    userName: "",
@@ -692,7 +803,7 @@ const data = reactive({
       phonenumber: [{ pattern: /^1[3|4|5|6|7|8|9][0-9]\d{8}$/, message: "请输入正确的手机号码", trigger: "blur" }],
       relMarkTemplate: [{
          validator: (_rule, value, callback) => {
-            if (!(isAgentAccountPage.value && isAccountAdmin.value)) {
+            if (!canEditMarkTemplateInForm.value || isAgent.value) {
                callback();
                return;
             }
@@ -732,11 +843,53 @@ const markTemplateNameMap = computed(() => {
 function resolveMarkTemplateName(row) {
    const templateId = normalizeMarkTemplateId(row?.relMarkTemplate);
    if (templateId === null) {
-      return "-";
+      return "未绑定";
    }
    return markTemplateNameMap.value.get(templateId) || `模板#${templateId}`;
 }
 
+function hasBoundMarkTemplate(row) {
+   return normalizeMarkTemplateId(row?.relMarkTemplate) !== null;
+}
+
+const myMarkTemplateDisplay = computed(() => {
+   const templateId = normalizeMarkTemplateId(userStore.relMarkTemplate);
+   if (templateId === null) {
+      return "未绑定";
+   }
+   return markTemplateNameMap.value.get(templateId) || `模板#${templateId}`;
+});
+
+const myMarkTemplateBound = computed(() => normalizeMarkTemplateId(userStore.relMarkTemplate) !== null);
+
+async function resolveLoginUserId(forceRefresh = false) {
+   if (!forceRefresh && loginUserIdCache.value) {
+      return loginUserIdCache.value;
+   }
+   const response = await getInfo();
+   loginUserIdCache.value = response?.user?.userId ?? null;
+   return loginUserIdCache.value;
+}
+
+function resolveBindTemplateActionLabel(row) {
+   return hasBoundMarkTemplate(row) ? "改绑模板" : "绑定模板";
+}
+
+async function handleBindMyMarkTemplate() {
+   const userId = await resolveLoginUserId();
+   if (!userId) {
+      proxy.$modal.msgError("无法识别当前登录用户");
+      return;
+   }
+   await handleBindMarkTemplate({
+      userId,
+      userName: userStore.name || userStore.nickName || String(userId)
+   });
+}
+
+function handleGoMarkTemplatePage() {
+   router.push("/mark/markTemplate");
+}
 
 function pickAgentDefaultMarkTemplateId() {
    const options = Array.isArray(markTemplateList.value) ? markTemplateList.value : [];
@@ -759,7 +912,7 @@ function isMarkTemplateDefault(item) {
 }
 
 function ensureAgentDefaultMarkTemplateSelected() {
-   if (!(isAgentAccountPage.value && isAccountAdmin.value)) {
+   if (!canEditMarkTemplateInForm.value || isAgent.value) {
       return;
    }
    const current = normalizeMarkTemplateId(form.value.relMarkTemplate);
@@ -1006,6 +1159,9 @@ function handleStatusChange(row) {
 /** 更多操作 */
 function handleCommand(command, row) {
    switch (command) {
+      case "handleBindMarkTemplate":
+         handleBindMarkTemplate(row);
+         break;
       case "handleUpdate":
          handleUpdate(row);
          break;
@@ -1242,15 +1398,34 @@ function resetMarkTemplateForm() {
    }
 }
 
+function buildUserUpdatePayload(userResponse, patch = {}) {
+   const currentUser = userResponse?.data || {};
+   const roleIds = Array.isArray(userResponse?.roleIds) && userResponse.roleIds.length
+      ? userResponse.roleIds
+      : (Array.isArray(currentUser.roleIds) && currentUser.roleIds.length
+         ? currentUser.roleIds
+         : (Array.isArray(currentUser.roles) ? currentUser.roles.map(role => role.roleId) : []));
+   return {
+      ...currentUser,
+      roleIds,
+      ...patch
+   };
+}
+
+function resolveRequestErrorMessage(error, fallback) {
+   const message = String(error?.message || error?.msg || "").trim();
+   return message || fallback;
+}
+
 /** 标记模板绑定按钮操作 */
 async function handleBindMarkTemplate(row) {
-   if (!(isAgentAccountPage.value && isAccountAdmin.value)) {
+   if (!canBindMarkTemplate.value) {
       return;
    }
    resetMarkTemplateForm();
    markTemplateForm.userId = row.userId;
    markTemplateForm.userName = row.userName;
-   markTemplateDialog.title = "绑定模板 - " + row.userName;
+   markTemplateDialog.title = `${hasBoundMarkTemplate(row) ? "改绑" : "绑定"}模板 - ${row.userName}`;
    markTemplateDialog.open = true;
    try {
       const [, userResponse] = await Promise.all([
@@ -1260,7 +1435,7 @@ async function handleBindMarkTemplate(row) {
       markTemplateForm.relMarkTemplate = normalizeMarkTemplateId(userResponse?.data?.relMarkTemplate) || "";
    } catch (error) {
       markTemplateForm.relMarkTemplate = "";
-      proxy.$modal.msgError("加载标记模板信息失败");
+      proxy.$modal.msgError(resolveRequestErrorMessage(error, "加载标记模板信息失败"));
    }
 }
 
@@ -1272,17 +1447,19 @@ function submitMarkTemplateForm() {
       }
       const templateId = normalizeMarkTemplateId(markTemplateForm.relMarkTemplate);
       getUser(markTemplateForm.userId).then(userResponse => {
-         const currentUser = userResponse.data;
-         const updateData = {
-            ...currentUser,
+         const updateData = buildUserUpdatePayload(userResponse, {
             relMarkTemplate: templateId
-         };
-         updateUser(updateData).then(() => {
+         });
+         updateUser(updateData).then(async () => {
             proxy.$modal.msgSuccess("标记模板绑定成功");
             markTemplateDialog.open = false;
+            const loginUserId = await resolveLoginUserId();
+            if (loginUserId && Number(markTemplateForm.userId) === Number(loginUserId)) {
+               userStore.relMarkTemplate = templateId;
+            }
             getList();
-         }).catch(() => {
-            proxy.$modal.msgError("标记模板绑定失败");
+         }).catch((error) => {
+            proxy.$modal.msgError(resolveRequestErrorMessage(error, "标记模板绑定失败"));
          });
       });
    });
@@ -1340,19 +1517,16 @@ function submitServiceForm() {
       if (valid) {
          // 获取当前用户信息
          getUser(serviceForm.userId).then(userResponse => {
-            const currentUser = userResponse.data;
-            // 更新用户的服务绑定信息
-            const updateData = {
-               ...currentUser,
+            const updateData = buildUserUpdatePayload(userResponse, {
                relTemplate: serviceForm.relTemplate
-            };
+            });
             
             updateUser(updateData).then(() => {
                proxy.$modal.msgSuccess("服务绑定成功");
                serviceDialog.open = false;
                getList();
-            }).catch(() => {
-               proxy.$modal.msgError("服务绑定失败");
+            }).catch((error) => {
+               proxy.$modal.msgError(resolveRequestErrorMessage(error, "服务绑定失败"));
             });
          });
       }
@@ -1484,6 +1658,7 @@ function submitForm() {
             }
          }
          if (form.value.userId != undefined) {
+            delete payload.password;
             updateUser(payload).then(response => {
                proxy.$modal.msgSuccess("修改成功");
                open.value = false;
@@ -1501,19 +1676,95 @@ function submitForm() {
 };
 
 getDeptTree();
+getConfigKey("sys.user.initPassword").then(res => {
+   initPassword.value = res.msg;
+});
 if (isAgentAccountPage.value) {
    loadMarkTemplateList();
+   if (isAgent.value) {
+      resolveLoginUserId().catch(() => {});
+   }
 }
 getList();
 </script>
 
 <style scoped>
+.user-table-page {
+   padding-top: 8px;
+}
+
+.user-table-page :deep(.user-table-search-card) {
+   padding: 8px 10px 2px;
+}
+
+.user-table-page :deep(.user-table-search-form) {
+   display: flex;
+   flex-wrap: wrap;
+   align-items: center;
+   gap: 4px 8px;
+}
+
+.user-table-page :deep(.user-table-search-form .el-form-item) {
+   margin-right: 0;
+   margin-bottom: 8px;
+}
+
+.user-table-page :deep(.user-table-search-form .el-form-item__label) {
+   padding-right: 6px;
+   font-size: 12px;
+}
+
+.user-table-page :deep(.user-table-search-actions) {
+   margin-left: auto;
+}
+
+.user-table-page .user-table-card {
+   margin-top: 8px;
+}
+
+.user-table-page .user-table-card :deep(.el-card__body) {
+   padding: 10px 12px 12px;
+}
+
+.user-table-page .user-table-toolbar {
+   margin-bottom: 8px;
+   align-items: center;
+}
+
+.user-table-page :deep(.user-table-main .el-table__header .cell),
+.user-table-page :deep(.user-table-main .el-table__body .cell) {
+   font-size: 12px;
+   padding: 0 6px;
+}
+
+.user-table-page :deep(.user-table-main .el-table__cell) {
+   padding: 6px 0;
+}
+
+.user-table-page :deep(.user-id-cell .cell) {
+   white-space: nowrap;
+   font-family: Consolas, Monaco, monospace;
+   font-size: 12px;
+}
+
+.user-table-template {
+   color: #409eff;
+   font-weight: 600;
+   font-size: 12px;
+}
+
 /* 缩小操作按钮高度 */
 .el-table .el-button {
    padding: 4px 8px;
    font-size: 14px;
    height: 28px;
    line-height: 1;
+}
+
+.user-table-page .operation-actions--table .el-button {
+   padding: 0 4px;
+   height: auto;
+   font-size: 12px;
 }
 
 .owned-account-header {
@@ -1528,5 +1779,40 @@ getList();
    justify-content: center;
    flex-wrap: wrap;
    gap: 6px;
+}
+
+.operation-actions--table {
+   flex-wrap: nowrap;
+   gap: 2px 6px;
+   justify-content: flex-start;
+}
+
+.user-template-banner {
+   margin-bottom: 8px;
+}
+
+.user-template-banner__content {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 12px;
+   width: 100%;
+}
+
+.user-template-banner__hint {
+   margin-left: 6px;
+   color: var(--el-color-warning);
+   font-size: 12px;
+}
+
+.user-template-banner__actions {
+   display: flex;
+   align-items: center;
+   gap: 8px;
+   flex-shrink: 0;
+}
+
+.mark-template-dialog-hint {
+   margin-bottom: 12px;
 }
 </style>

@@ -41,14 +41,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectByUserAndPlatform" resultMap="MarkUserPlatformQuotaResult">
         <include refid="selectMarkUserPlatformQuotaVo"/>
         where muq.user_id = #{userId}
-          and muq.platform_code = #{platformCode}
+          and lower(muq.platform_code) = lower(#{platformCode})
         limit 1
     </select>
 
     <select id="selectByUserAndPlatformForUpdate" resultMap="MarkUserPlatformQuotaResult">
         <include refid="selectMarkUserPlatformQuotaVo"/>
         where muq.user_id = #{userId}
-          and muq.platform_code = #{platformCode}
+          and lower(muq.platform_code) = lower(#{platformCode})
         limit 1
         for update
     </select>
@@ -82,6 +82,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <update id="updateMarkUserPlatformQuota" parameterType="MarkUserPlatformQuota">
         update mark_user_platform_quota
         <trim prefix="set" suffixOverrides=",">
+            <if test="platformCode != null and platformCode != ''">platform_code = #{platformCode},</if>
             <if test="platformName != null">platform_name = #{platformName},</if>
             <if test="remainCount != null">remain_count = #{remainCount},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
@@ -90,4 +91,33 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </trim>
         where id = #{id}
     </update>
+
+    <select id="selectDownstreamSummaryByAgent" resultType="com.geek.server.domain.vo.MarkAgentDownstreamSummaryVO">
+        select
+            su.user_id as userId,
+            su.user_name as userName,
+            su.nick_name as nickName,
+            su.remark,
+            su.status,
+            coalesce(sum(muq.remain_count), 0) as totalRemainCount
+        from sys_user su
+        left join mark_user_platform_quota muq on muq.user_id = su.user_id
+        where su.del_flag = '0'
+          and su.create_by = #{agentUsername}
+        group by su.user_id, su.user_name, su.nick_name, su.remark, su.status
+        order by su.user_id desc
+    </select>
+
+    <select id="countDownstreamUsersByAgent" resultType="long">
+        select count(*)
+        from sys_user su
+        where su.del_flag = '0'
+          and su.create_by = #{agentUsername}
+    </select>
+
+    <select id="sumRemainCountByUserId" resultType="long">
+        select coalesce(sum(muq.remain_count), 0)
+        from mark_user_platform_quota muq
+        where muq.user_id = #{userId}
+    </select>
 </mapper>

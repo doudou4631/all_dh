@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="app-container mark-user-wallet-page">
     <el-card shadow="never" class="mb10">
       <el-row :gutter="16">
         <el-col :xs="24" :sm="8">
@@ -14,20 +14,12 @@
       </el-row>
     </el-card>
 
-    <el-card shadow="never" class="mb10">
+    <el-card shadow="never">
       <template #header>
-        <span>平台单价</span>
+        <span>用户消费列表</span>
       </template>
-      <el-table :data="summary.platformPrices || []" max-height="260">
-        <el-table-column label="序号" type="index" width="56" align="center" />
-        <el-table-column label="平台编码" prop="platformCode" min-width="160" />
-        <el-table-column label="平台名称" prop="platformName" min-width="140" />
-        <el-table-column label="单价" prop="unitPrice" width="100" align="center" />
-      </el-table>
-    </el-card>
 
-    <el-card shadow="never" body-class="search-card">
-      <el-form ref="queryRef" :model="queryParams" :inline="true" v-show="showSearch" label-width="84px">
+      <el-form ref="queryRef" :model="queryParams" :inline="true" v-show="showSearch" label-width="84px" class="wallet-query-form">
         <el-form-item label="业务类型" prop="bizType">
           <el-select v-model="queryParams.bizType" clearable placeholder="请选择" style="width: 150px;">
             <el-option label="扣费" value="DEDUCT" />
@@ -43,26 +35,32 @@
           <el-button icon="Refresh" @click="resetQuery">重置</el-button>
         </el-form-item>
       </el-form>
-    </el-card>
 
-    <el-card shadow="never" class="mt10">
       <el-row :gutter="10" class="mb8">
         <right-toolbar v-model:showSearch="showSearch" @queryTable="getLogList"></right-toolbar>
       </el-row>
+
       <el-table v-loading="loading" :data="logList">
         <el-table-column label="序号" type="index" width="56" align="center" />
         <el-table-column label="业务类型" prop="bizType" width="100" align="center">
           <template #default="scope">
-            <el-tag :type="scope.row.bizType === 'REFUND' ? 'success' : (scope.row.bizType === 'DEDUCT' ? 'warning' : 'info')" size="small">
-              {{ scope.row.bizType || '-' }}
+            <el-tag :type="bizTypeTagType(scope.row.bizType)" size="small">
+              {{ bizTypeLabel(scope.row.bizType) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="订单ID" prop="orderId" min-width="120" />
-        <el-table-column label="明细ID" prop="orderItemId" min-width="120" />
-        <el-table-column label="变动金额" prop="changeAmount" width="110" align="center" />
-        <el-table-column label="变动前" prop="balanceBefore" width="100" align="center" />
-        <el-table-column label="变动后" prop="balanceAfter" width="100" align="center" />
+        <el-table-column label="平台" prop="platformName" min-width="120" show-overflow-tooltip />
+        <el-table-column label="订单ID" prop="orderId" min-width="100" />
+        <el-table-column label="明细ID" prop="orderItemId" min-width="100" />
+        <el-table-column label="变动金额" prop="changeAmount" width="100" align="center">
+          <template #default="scope">
+            <span :class="changeAmountClass(scope.row.changeAmount)">
+              {{ formatChangeAmount(scope.row.changeAmount) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column label="变动前" prop="balanceBefore" width="90" align="center" />
+        <el-table-column label="变动后" prop="balanceAfter" width="90" align="center" />
         <el-table-column label="备注" prop="remark" min-width="160" show-overflow-tooltip />
         <el-table-column label="时间" min-width="160" align="center">
           <template #default="scope">
@@ -70,6 +68,7 @@
           </template>
         </el-table-column>
       </el-table>
+
       <pagination
         v-show="total > 0"
         :total="total"
@@ -111,6 +110,35 @@ function formatDateTime(value) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`
 }
 
+function bizTypeLabel(value) {
+  const map = {
+    DEDUCT: '扣费',
+    REFUND: '退款',
+    ADJUST: '调整'
+  }
+  return map[value] || value || '-'
+}
+
+function bizTypeTagType(value) {
+  if (value === 'REFUND') return 'success'
+  if (value === 'DEDUCT') return 'warning'
+  return 'info'
+}
+
+function formatChangeAmount(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return value ?? '-'
+  return amount > 0 ? `+${amount}` : String(amount)
+}
+
+function changeAmountClass(value) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount)) return ''
+  if (amount > 0) return 'amount-plus'
+  if (amount < 0) return 'amount-minus'
+  return ''
+}
+
 function loadSummary() {
   getMarkUserWalletSummary().then((res) => {
     summary.value = res.data || {}
@@ -144,15 +172,25 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.mt10 {
-  margin-top: 10px;
-}
-
 .mb8 {
   margin-bottom: 8px;
 }
 
 .mb10 {
   margin-bottom: 10px;
+}
+
+.wallet-query-form {
+  margin-bottom: 4px;
+}
+
+.amount-plus {
+  color: var(--el-color-success);
+  font-weight: 600;
+}
+
+.amount-minus {
+  color: var(--el-color-danger);
+  font-weight: 600;
 }
 </style>

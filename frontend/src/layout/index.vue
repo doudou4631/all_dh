@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { AppMain, Settings, TagsView, Sidebar, Navbar } from './components'
-import NoticeMarquee from './components/NoticeMarquee.vue'
 import { computed, ref, watchEffect } from 'vue'
 import { useWindowSize } from '@vueuse/core'
 import useAppStore from '@/store/modules/app'
@@ -46,8 +45,6 @@ function setLayout() {
 </script>
 <template>
   <div :class="classObj" class="app-wrapper" :style="{ '--current-color': theme }">
-    <!-- 跑马灯通知公告 -->
-    <NoticeMarquee />
     <div v-if="device === 'mobile' && sidebarOption.opened" class="drawer-bg" @click="handleClickOutside" />
     <!-- 侧边栏 -->
     <sidebar v-if="!sidebarOption.hide" />
@@ -94,7 +91,7 @@ function setLayout() {
 
 .fixed-header {
   position: fixed;
-  top: 40px; // 调整为跑马灯下方
+  top: 0;
   right: 0;
   z-index: 9;
   width: calc(100% - variables.$base-sidebar-width);

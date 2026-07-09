@@ -1,0 +1,11 @@
+SET NAMES utf8mb4;
+UPDATE mark_platform_template SET template_name='??????????', template_info='[{"platformCode":"mobile_gaopin","platformName":"??????","unitPrice":1},{"platformCode":"td_gaopin","platformName":"?????","unitPrice":1},{"platformCode":"td_second","platformName":"??????","unitPrice":1},{"platformCode":"qihu_first","platformName":"360???","unitPrice":1},{"platformCode":"qihu_second","platformName":"360????","unitPrice":1},{"platformCode":"dianhuabang","platformName":"?????","unitPrice":1},{"platformCode":"tencent_mark","platformName":"???","unitPrice":1}]', update_by='admin', update_time=NOW() WHERE id=1;
+UPDATE mark_user_platform_quota SET platform_name='??????' WHERE user_id=100001 AND platform_code='mobile_gaopin';
+UPDATE mark_user_platform_quota SET platform_name='?????' WHERE user_id=100001 AND platform_code='td_gaopin';
+UPDATE mark_user_platform_quota SET platform_name='??????' WHERE user_id=100001 AND platform_code='td_second';
+UPDATE mark_user_platform_quota SET platform_name='360???' WHERE user_id=100001 AND platform_code='qihu_first';
+UPDATE mark_user_platform_quota SET platform_name='360????' WHERE user_id=100001 AND platform_code='qihu_second';
+UPDATE mark_user_platform_quota SET platform_name='?????' WHERE user_id=100001 AND platform_code='dianhuabang';
+UPDATE mark_user_platform_quota SET platform_name='???' WHERE user_id=100001 AND platform_code='tencent_mark';
+UPDATE sys_user SET nick_name='??????' WHERE user_name='markuser';
+UPDATE sys_user SET nick_name='??????' WHERE user_name='markagent';

@@ -9,11 +9,11 @@
   "scripts": {
     "dev": "vite",
     "dev:mobile-h5-src": "vite --config vite.mobile-h5.config.js",
-    "build:prod": "vite build",
+    "build:prod": "node ../ops/sync-public-docs.mjs && vite build",
     "build:mobile-h5-src": "vite build --config vite.mobile-h5.config.js",
     "check:mobile-h5-shims": "node mobile-h5-src/scripts/check-shim-redirects.mjs",
     "cutover:mobile-h5-src": "powershell -NoProfile -ExecutionPolicy Bypass -File ../ops/mobile-h5/cutover-mobile-h5-src.ps1",
-    "build:stage": "vite build --mode staging",
+    "build:stage": "node ../ops/sync-public-docs.mjs && vite build --mode staging",
     "preview": "vite preview",
     "preview:mobile-h5-src": "vite preview --config vite.mobile-h5.config.js"
   },

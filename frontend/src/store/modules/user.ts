@@ -6,6 +6,18 @@ import { LoginForm, RegisterForm, RoleInfo, UserInfo } from '@/types/user'
 import { ElMessageBox } from 'element-plus'
 import { router } from '@/router'
 
+const INIT_PWD_ALERT_DISMISSED_PREFIX = 'initPwdAlertDismissed_'
+
+function hasDismissedInitPwdAlert(userName: string) {
+  if (!userName) return false
+  return localStorage.getItem(`${INIT_PWD_ALERT_DISMISSED_PREFIX}${userName}`) === '1'
+}
+
+function markInitPwdAlertDismissed(userName: string) {
+  if (!userName) return
+  localStorage.setItem(`${INIT_PWD_ALERT_DISMISSED_PREFIX}${userName}`, '1')
+}
+
 const useUserStore = defineStore(
   'user',
   {
@@ -77,15 +89,17 @@ const useUserStore = defineStore(
             } else {
               this.avatar = user.avatar.startsWith('http') ? user.avatar : import.meta.env.VITE_APP_BASE_API + user.avatar;
             }
-            /* 初始密码提示 */
-            if (res.isDefaultModifyPwd && this.isPasswordExpired === null) {
-              this.isPasswordExpired = res.isPasswordExpired
+            /* 初始密码提示：仅首次登录提醒，关闭后不再弹出 */
+            if (res.isDefaultModifyPwd && !hasDismissedInitPwdAlert(user.userName)) {
               ElMessageBox.confirm('您的密码还是初始密码，请修改密码！', '安全提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }).then(() => {
+                markInitPwdAlertDismissed(user.userName)
                 router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
-              }).catch(() => { })
+              }).catch(() => {
+                markInitPwdAlertDismissed(user.userName)
+              })
             }
             if (!res.isDefaultModifyPwd && res.isPasswordExpired && this.isPasswordExpired === null) {
-              this.isDefaultModifyPwd = res.isDefaultModifyPwd
+              this.isPasswordExpired = res.isPasswordExpired
               ElMessageBox.confirm('您的密码已过期，请尽快修改密码！', '安全提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }).then(() => {
                 router.push({ name: 'Profile', params: { activeTab: 'resetPwd' } })
               }).catch(() => { })

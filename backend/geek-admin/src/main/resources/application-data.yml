@@ -33,8 +33,8 @@ spring:
       primary: MASTER
       datasource:
         MASTER:
-            url: jdbc:mysql://43.142.125.17:3306/verifynum?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true
-#            url: jdbc:mysql://127.0.0.1:3306/verifynum?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true
+#            url: jdbc:mysql://43.142.125.17:3306/verifynum?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true
+            url: jdbc:mysql://127.0.0.1:3306/verifynum?useUnicode=true&characterEncoding=utf8&zeroDateTimeBehavior=convertToNull&useSSL=false&allowPublicKeyRetrieval=true&autoReconnect=true&serverTimezone=GMT%2B8&nullCatalogMeansCurrent=true
             username: verifyNum
             password: pL6NspjfTHLazatP
             driver-class-name: com.mysql.cj.jdbc.Driver
@@ -66,8 +66,10 @@ spring:
       # 配置检测连接是否有效
       validationQuery: SELECT 1
       testWhileIdle: true
-      testOnBorrow: false
+      testOnBorrow: true
       testOnReturn: false
+      keepAlive: true
+      keepAliveBetweenTimeMillis: 30000
       # 配置监控统计拦截的filters  stat=>监控统计 wall=>防SQL注入 slf4j log4j2=>日志记录
       filters: stat,wall,slf4j,log4j2
       # 通过connectProperties属性来打开mergeSql功能；慢SQL记录

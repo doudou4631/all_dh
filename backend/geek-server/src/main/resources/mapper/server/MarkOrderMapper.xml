@@ -19,6 +19,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="totalAmount" column="total_amount"/>
         <result property="refundAmount" column="refund_amount"/>
         <result property="orderStatus" column="order_status"/>
+        <result property="auditStatus" column="audit_status"/>
+        <result property="auditOpinion" column="audit_opinion"/>
+        <result property="auditBy" column="audit_by"/>
+        <result property="auditTime" column="audit_time"/>
         <result property="completedTime" column="completed_time"/>
         <result property="createBy" column="create_by"/>
         <result property="createTime" column="create_time"/>
@@ -26,6 +30,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="updateTime" column="update_time"/>
         <result property="remark" column="remark"/>
         <result property="phonePreview" column="phone_preview"/>
+        <result property="itemId" column="item_id"/>
+        <result property="itemProcessStatus" column="item_process_status"/>
+        <result property="itemProcessedTime" column="item_processed_time"/>
     </resultMap>
 
     <sql id="selectMarkOrderVo">
@@ -44,6 +51,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.total_amount,
             mo.refund_amount,
             mo.order_status,
+            mo.audit_status,
+            mo.audit_opinion,
+            mo.audit_by,
+            mo.audit_time,
             mo.completed_time,
             mo.create_by,
             mo.create_time,
@@ -87,6 +98,8 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
             <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
             <if test="orderStatus != null and orderStatus != ''"> and mo.order_status = #{orderStatus}</if>
+            <if test="auditStatus != null and auditStatus != ''"> and mo.audit_status = #{auditStatus}</if>
+            <if test="params != null and params.auditHistoryOnly != null"> and mo.audit_status in ('1','2','3')</if>
             <if test="phone != null and phone != ''">
                 and mo.id in (
                     select moi.order_id
@@ -120,12 +133,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.total_amount,
             mo.refund_amount,
             mo.order_status,
+            mo.audit_status,
+            mo.audit_opinion,
+            mo.audit_by,
+            mo.audit_time,
             mo.completed_time,
             mo.create_by,
             mo.create_time,
             mo.update_by,
             mo.update_time,
             mo.remark,
+            moi.id as item_id,
+            moi.process_status as item_process_status,
+            moi.processed_time as item_processed_time,
             moi.phone as phone_preview
         from mark_order mo
         left join sys_user su on su.user_id = mo.user_id
@@ -143,7 +163,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="userId != null"> and mo.user_id = #{userId}</if>
             <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
             <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
-            <if test="orderStatus != null and orderStatus != ''"> and mo.order_status = #{orderStatus}</if>
+            <if test="orderStatus != null and orderStatus == '0'"> and moi.process_status = '0'</if>
+            <if test="orderStatus != null and orderStatus == '1'"> and mo.order_status = '1'</if>
+            <if test="orderStatus != null and orderStatus == '2'"> and moi.process_status in ('1','2')</if>
+            <if test="orderStatus != null and orderStatus == '3'"> and mo.order_status = '3'</if>
+            <if test="auditStatus != null and auditStatus != ''"> and mo.audit_status = #{auditStatus}</if>
+            <if test="params != null and params.auditHistoryOnly != null"> and mo.audit_status in ('1','2','3')</if>
             <if test="phone != null and phone != ''"> and moi.phone like concat('%', #{phone}, '%')</if>
             <if test="params != null and params.beginTime != null and params.beginTime != ''">
                 and mo.create_time &gt;= #{params.beginTime}
@@ -171,6 +196,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             mo.total_amount,
             mo.refund_amount,
             mo.order_status,
+            mo.audit_status,
+            mo.audit_opinion,
+            mo.audit_by,
+            mo.audit_time,
             mo.completed_time,
             mo.create_by,
             mo.create_time,
@@ -188,7 +217,28 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         left join sys_user su on su.user_id = mo.user_id
         <where>
             <if test="!isAdmin">
-                and (mo.assigned_agent_id = #{agentId} or (mo.assigned_agent_id is null and su.create_by = #{agentUsername}))
+                and (
+                    mo.assigned_agent_id = #{agentId}
+                    or (mo.assigned_agent_id is null and su.create_by = #{agentUsername})
+                    or exists (
+                        select 1
+                        from sys_user agent_u
+                        inner join sys_user_role aur on aur.user_id = agent_u.user_id
+                        inner join sys_role ar on ar.role_id = aur.role_id and ar.role_key in ('agent', 'mark_agent')
+                        where agent_u.user_id = #{agentId}
+                          and agent_u.del_flag = '0'
+                          and agent_u.rel_mark_template is not null
+                          and agent_u.rel_mark_template &gt; 0
+                          and su.rel_mark_template = agent_u.rel_mark_template
+                    )
+                    or exists (
+                        select 1
+                        from mark_platform_template mpt
+                        where mpt.id = su.rel_mark_template
+                          and mpt.owner_user_id = #{agentId}
+                          and mpt.status = '0'
+                    )
+                )
             </if>
             <if test="query != null and query.orderNo != null and query.orderNo != ''">
                 and mo.order_no like concat('%', #{query.orderNo}, '%')
@@ -216,6 +266,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             </if>
             <if test="query != null and query.orderStatus != null and query.orderStatus != ''">
                 and mo.order_status = #{query.orderStatus}
+            </if>
+            <if test="query != null and query.auditStatus != null and query.auditStatus != ''">
+                and mo.audit_status = #{query.auditStatus}
+            </if>
+            <if test="query != null and query.params != null and query.params.auditHistoryOnly != null">
+                and mo.audit_status in ('1','2','3')
             </if>
             <if test="query != null and query.phone != null and query.phone != ''">
                 and mo.id in (
@@ -257,6 +313,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="totalAmount != null">total_amount,</if>
             <if test="refundAmount != null">refund_amount,</if>
             <if test="orderStatus != null and orderStatus != ''">order_status,</if>
+            <if test="auditStatus != null and auditStatus != ''">audit_status,</if>
+            <if test="auditOpinion != null">audit_opinion,</if>
+            <if test="auditBy != null">audit_by,</if>
+            <if test="auditTime != null">audit_time,</if>
             <if test="completedTime != null">completed_time,</if>
             <if test="createBy != null">create_by,</if>
             <if test="createTime != null">create_time,</if>
@@ -277,6 +337,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="totalAmount != null">#{totalAmount},</if>
             <if test="refundAmount != null">#{refundAmount},</if>
             <if test="orderStatus != null and orderStatus != ''">#{orderStatus},</if>
+            <if test="auditStatus != null and auditStatus != ''">#{auditStatus},</if>
+            <if test="auditOpinion != null">#{auditOpinion},</if>
+            <if test="auditBy != null">#{auditBy},</if>
+            <if test="auditTime != null">#{auditTime},</if>
             <if test="completedTime != null">#{completedTime},</if>
             <if test="createBy != null">#{createBy},</if>
             <if test="createTime != null">#{createTime},</if>
@@ -301,6 +365,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="totalAmount != null">total_amount = #{totalAmount},</if>
             <if test="refundAmount != null">refund_amount = #{refundAmount},</if>
             <if test="orderStatus != null and orderStatus != ''">order_status = #{orderStatus},</if>
+            <if test="auditStatus != null and auditStatus != ''">audit_status = #{auditStatus},</if>
+            <if test="auditOpinion != null">audit_opinion = #{auditOpinion},</if>
+            <if test="auditBy != null">audit_by = #{auditBy},</if>
+            <if test="auditTime != null">audit_time = #{auditTime},</if>
             <if test="completedTime != null">completed_time = #{completedTime},</if>
             <if test="updateBy != null">update_by = #{updateBy},</if>
             <if test="updateTime != null">update_time = #{updateTime},</if>
@@ -308,4 +376,15 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         </trim>
         where id = #{id}
     </update>
+
+    <select id="selectAgentUserIdByMarkTemplate" resultType="long">
+        select u.user_id
+        from sys_user u
+        inner join sys_user_role ur on ur.user_id = u.user_id
+        inner join sys_role r on r.role_id = ur.role_id and r.role_key in ('agent', 'mark_agent')
+        where u.del_flag = '0'
+          and u.rel_mark_template = #{templateId}
+        order by u.user_id asc
+        limit 1
+    </select>
 </mapper>

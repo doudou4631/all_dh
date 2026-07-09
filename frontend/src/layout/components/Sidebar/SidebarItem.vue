@@ -69,7 +69,7 @@ const show = computed(() => {
 })
 </script>
 <template>
-  <div v-if="!item.hidden">
+  <div v-if="!item.hidden" :class="{ 'top-level-menu': !isNest }">
     <template v-if="show">
       <app-link v-if="onlyOneChild?.meta" :to="resolvePath(onlyOneChild.path, onlyOneChild.query)">
         <el-menu-item :index="resolvePath(onlyOneChild.path)" :class="{ 'submenu-title-noDropdown': !isNest }">

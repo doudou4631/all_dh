@@ -18,6 +18,8 @@ public class MarkTencentStatusItemVO {
 
     private String complainStatus;
 
+    private Boolean marked;
+
     private String detail;
 
     private String errorMessage;
