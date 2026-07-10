@@ -14,7 +14,6 @@ import { RoutesAlias } from '../routesAlias'
 
 const whiteList: string[] = [
   RoutesAlias.Login,
-  RoutesAlias.Register,
   '/free-query2',
   '/free_query2',
   '/free-query-marked',

@@ -105,3 +105,15 @@ spring:
         wall:
           config:
             multi-statement-allow: true
+
+# Taidixiong二次申诉接口
+tdx:
+  second:
+    base-url: ${TDX_SECOND_BASE_URL:http://47.108.132.88:4300}
+    token: ${TDX_SECOND_TOKEN:}
+    default-line: ${TDX_SECOND_DEFAULT_LINE:line1}
+    timeout-ms: ${TDX_SECOND_TIMEOUT_MS:10000}
+
+mark:
+  xiaomi:
+    auto-detect-interval-ms: ${MARK_XIAOMI_AUTO_DETECT_INTERVAL_MS:1800000}

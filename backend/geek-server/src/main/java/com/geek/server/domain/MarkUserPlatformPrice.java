@@ -39,4 +39,8 @@ public class MarkUserPlatformPrice extends BaseEntity {
     @Schema(title = "剩余次数（按平台）")
     @Excel(name = "剩余次数")
     private Long remainCount;
+
+    @Schema(title = "状态（0开启 1关闭）")
+    @Excel(name = "状态")
+    private String status;
 }

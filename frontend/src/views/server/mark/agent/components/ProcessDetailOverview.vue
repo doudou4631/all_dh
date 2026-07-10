@@ -175,10 +175,10 @@ function verifyCodeText(row) {
   return '-'
 }
 function submitRemarkText(row) {
-  const note = String(row?.processNote || '').trim()
-  if (note) return note
-  const remark = String(row?.orderRemark || '').trim()
-  return remark || '-'
+  const itemRemark = String(row?.remark || '').trim()
+  if (itemRemark) return itemRemark
+  const orderRemark = String(row?.orderRemark || '').trim()
+  return orderRemark || '-'
 }
 function processedTimeText(row) {
   if (!row || row.processStatus === '0') return '-'

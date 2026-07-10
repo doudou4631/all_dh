@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS `mark_user_platform_price` (
   `platform_code` varchar(64) NOT NULL COMMENT '平台编码',
   `platform_name` varchar(128) DEFAULT NULL COMMENT '平台名称',
   `unit_price` bigint(20) NOT NULL DEFAULT '1' COMMENT '单价（每号码积分）',
+  `status` char(1) NOT NULL DEFAULT '0' COMMENT '状态（0开启 1关闭）',
   `create_by` varchar(64) DEFAULT '' COMMENT '创建者',
   `create_time` datetime DEFAULT NULL COMMENT '创建时间',
   `update_by` varchar(64) DEFAULT '' COMMENT '更新者',

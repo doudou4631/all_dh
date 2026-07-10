@@ -35,7 +35,10 @@
                   </div>
 
                   <div class="tencent-form-panel">
-                    <div v-if="remainCount < 1" class="submit-warning-bar">
+                    <div v-if="!platformEnabled" class="submit-warning-bar">
+                      {{ platformClosedMessage }}
+                    </div>
+                    <div v-else-if="remainCount < 1" class="submit-warning-bar">
                       当前{{ platformName }}平台剩余次数不足，无法提交。
                     </div>
 
@@ -71,6 +74,8 @@
                         type="primary"
                         plain
                         class="tencent-action-btn"
+                        :loading="smsSending"
+                        :disabled="!platformEnabled || remainCount < 1 || submitting"
                         @click="handleFetchSms"
                       >
                         获取短信
@@ -79,7 +84,7 @@
                         type="primary"
                         class="tencent-action-btn"
                         :loading="submitting"
-                        :disabled="remainCount < 1"
+                        :disabled="!platformEnabled || remainCount < 1"
                         v-hasPermi="['server:markUser:order:add']"
                         @click="handleSubmit"
                       >
@@ -127,6 +132,7 @@
                     placeholder="订单号/手机号/用户名"
                     style="width: 220px"
                     @keyup.enter="handleQuery"
+                    @clear="handleQuery"
                   />
                 </el-form-item>
                 <el-form-item label="处理状态">
@@ -135,6 +141,8 @@
                     clearable
                     placeholder="状态"
                     style="width: 120px"
+                    @change="handleQuery"
+                    @clear="handleQuery"
                   >
                     <el-option label="待处理" value="0" />
                     <el-option label="处理中" value="3" />
@@ -216,10 +224,13 @@ import {
   listMarkUserPlatformPrice,
   listMarkUserOrder,
   submitMarkUserTencent,
+  sendMarkUserTdxSecondCode,
+  submitMarkUserTdxSecond,
   getMarkUserTencentSubmitResult,
   getMarkUserOrderDetail
 } from '@/api/server/markUser'
 import { useRoute } from 'vue-router'
+import { ElMessageBox } from 'element-plus'
 import {
   TENCENT_PLATFORM_CODE,
   resolveTencentStylePlatformName
@@ -241,8 +252,10 @@ const isTdSecondPlatform = computed(() => activePlatformCode.value === 'td_secon
 
 const activeTab = ref('submit')
 const submitting = ref(false)
+const smsSending = ref(false)
 const remainCount = ref(0)
 const platformName = ref(routePlatformName.value)
+const platformEnabled = ref(true)
 const submitResult = ref(null)
 
 const form = reactive({
@@ -269,6 +282,15 @@ const queryParams = reactive({
 
 const resultRows = computed(() => {
   if (!submitResult.value) return []
+  if (isTdSecondPlatform.value) {
+    return [
+      { label: '提交订单号', value: submitResult.value.orderNo || '-' },
+      { label: '手机号', value: submitResult.value.phone || '-' },
+      { label: 'TDX订单ID', value: submitResult.value.tdxId || '-' },
+      { label: '申诉流水号', value: submitResult.value.orderpicinumber || '-' },
+      { label: '处理结果', value: submitResult.value.message || '提交成功' }
+    ]
+  }
   const phoneCount = Number(submitResult.value.phoneCount || 0)
   return [
     { label: '提交订单号', value: submitResult.value.orderNo || '-' },
@@ -278,6 +300,7 @@ const resultRows = computed(() => {
     }
   ]
 })
+const platformClosedMessage = computed(() => `${platformName.value}平台未开启，请联系管理员`)
 
 function normalizePhone(value) {
   return String(value || '').replace(/[^\d]/g, '')
@@ -301,8 +324,37 @@ function handleResetForm() {
   resetSubmitState()
 }
 
-function handleFetchSms() {
-  window.open(SMS_APPLY_URL, '_blank', 'noopener,noreferrer')
+async function handleFetchSms() {
+  if (!isTdSecondPlatform.value) {
+    window.open(SMS_APPLY_URL, '_blank', 'noopener,noreferrer')
+    return
+  }
+  const phone = normalizePhone(form.phone)
+  if (!/^\d{11}$/.test(phone)) {
+    proxy.$modal.msgWarning('请输入11位手机号')
+    return
+  }
+  if (!platformEnabled.value) {
+    proxy.$modal.msgError(platformClosedMessage.value)
+    return
+  }
+  if (remainCount.value < 1) {
+    proxy.$modal.msgError(`当前${platformName.value}平台剩余次数不足`)
+    return
+  }
+  smsSending.value = true
+  try {
+    const res = await sendMarkUserTdxSecondCode({
+      phone,
+      line: 'line1'
+    })
+    const data = res?.data || {}
+    proxy.$modal.alertSuccess(data.message || res?.msg || '短信验证码已发送，请查收')
+  } catch {
+    // request interceptor will show backend message
+  } finally {
+    smsSending.value = false
+  }
 }
 
 async function resolveSubmitOrderNo(payload) {
@@ -395,8 +447,10 @@ async function loadPlatformInfo() {
     if (item?.platformName) {
       platformName.value = item.platformName
     }
+    platformEnabled.value = item ? String(item.status ?? '0') !== '1' : false
     remainCount.value = Number.isFinite(remain) ? Math.max(0, remain) : 0
   } catch {
+    platformEnabled.value = false
     remainCount.value = 0
   }
 }
@@ -405,6 +459,10 @@ async function handleSubmit() {
   const phone = normalizePhone(form.phone)
   if (!/^\d{11}$/.test(phone)) {
     proxy.$modal.msgWarning('请输入11位手机号')
+    return
+  }
+  if (!platformEnabled.value) {
+    proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
   if (remainCount.value < 1) {
@@ -419,6 +477,35 @@ async function handleSubmit() {
   pollAborted = false
   submitting.value = true
   try {
+    if (isTdSecondPlatform.value) {
+      const res = await submitMarkUserTdxSecond({
+        platformCode: activePlatformCode.value,
+        phone,
+        smsCode: form.smsCode,
+        line: 'line1',
+        rotate: false
+      })
+      const result = res?.data || null
+      if (result?.orderId || result?.itemId) {
+        submitResult.value = {
+          ...result,
+          phone,
+          message: result?.message || res?.msg || '提交成功'
+        }
+        form.phone = ''
+        form.smsCode = ''
+        await loadPlatformInfo()
+        if (activeTab.value === 'record') {
+          await getList()
+        }
+        await ElMessageBox.alert(buildTdxSecondResultHtml(submitResult.value), '提交结果', {
+          type: 'success',
+          dangerouslyUseHTMLString: true,
+          confirmButtonText: '确定'
+        })
+      }
+      return
+    }
     const res = await submitMarkUserTencent({
       platformCode: activePlatformCode.value,
       phone,
@@ -437,6 +524,28 @@ async function handleSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
+function buildTdxSecondResultHtml(result) {
+  const rows = [
+    ['处理结果', result?.message || '提交成功'],
+    ['手机号', result?.phone || '-'],
+    ['TDX订单ID', result?.tdxId || '-'],
+    ['申诉流水号', result?.orderpicinumber || '-'],
+    ['本系统订单号', result?.orderNo || '-']
+  ]
+  return `<div style="line-height:1.9;text-align:left;">${rows
+    .map(([label, value]) => `<div><strong>${escapeHtml(label)}：</strong>${escapeHtml(value)}</div>`)
+    .join('')}</div>`
 }
 
 async function copyText(text) {
@@ -485,7 +594,12 @@ function downloadCsv(filename, rows) {
 
 function isAutoProcessingRecord(row) {
   const code = String(row?.platformCode || '').trim().toLowerCase()
-  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin'].includes(code)
+  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz'].includes(code)
+}
+
+function isManualPendingStatus3Record(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return ['td_gaopin'].includes(code)
 }
 
 function recordStatusLabel(row) {
@@ -573,15 +687,18 @@ function resetQuery() {
 }
 
 function handleRecordDateRangeChange(value) {
+  queryParams.pageNum = 1
   if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
     recordDateRange.value = []
     queryParams.params = {}
+    getList()
     return
   }
   queryParams.params = {
     beginTime: value[0],
     endTime: value[1]
   }
+  getList()
 }
 
 function handleRecordSelectionChange(rows) {
@@ -608,11 +725,8 @@ function exportRecordRows() {
 
 let recordPollTimer = null
 function startRecordPolling() {
+  // User task records should not auto-poll; refresh only on search/reset/page change.
   stopRecordPolling()
-  recordPollTimer = window.setInterval(() => {
-    if (activeTab.value !== 'record') return
-    getList()
-  }, 5000)
 }
 
 function stopRecordPolling() {
@@ -625,7 +739,6 @@ function stopRecordPolling() {
 function syncRecordTabData() {
   if (activeTab.value === 'record') {
     getList()
-    startRecordPolling()
   } else {
     stopRecordPolling()
   }

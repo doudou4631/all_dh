@@ -24,4 +24,10 @@ const platformTitle = computed(() => String(route.query.platformName || route.me
   margin: 0;
   max-width: none;
 }
+
+@media (max-width: 768px) {
+  .mark-agent-process-platform {
+    padding: 8px !important;
+  }
+}
 </style>

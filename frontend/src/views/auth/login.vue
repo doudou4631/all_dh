@@ -6,11 +6,9 @@ import { onMounted, ref, useTemplateRef } from "vue";
 import Verify from '@/components/Verifition/Verify.vue'
 import { getCaptcha } from "@/api/captcha";
 import { sendEmailCode, sendPhoneCode } from "@/api/login";
-import { RoutesAlias } from "@/router/routesAlias";
 import { useStorage } from "@vueuse/core";
 
 const props = defineProps<{
-  register: boolean,
   captchaEnabled: boolean,
   method: 'password' | 'phone' | 'email'
 }>()
@@ -190,10 +188,6 @@ onMounted(() => {
         <span v-if="!loading">登 录</span>
         <span v-else>登 录 中...</span>
       </el-button>
-      <div class="register-link" v-if="register">
-        <span class="question-text">没有账号？</span>
-        <router-link class="link-type" :to="RoutesAlias.Register">立即注册</router-link>
-      </div>
     </el-form-item>
   </el-form>
 </template>
@@ -229,44 +223,4 @@ onMounted(() => {
 }
 
 
-.register-link {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 5px;
-
-  .question-text {
-    color: #606266;
-    margin-right: 8px;
-    font-size: 14px;
-  }
-
-  .link-type {
-    color: #409EFF;
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 14px;
-    position: relative;
-    transition: all 0.3s ease;
-
-    &::after {
-      content: '';
-      position: absolute;
-      bottom: -2px;
-      left: 0;
-      width: 0;
-      height: 2px;
-      background-color: #409EFF;
-      transition: width 0.3s ease;
-    }
-
-    &:hover {
-      color: #66b1ff;
-
-      &::after {
-        width: 100%;
-      }
-    }
-  }
-}
 </style>

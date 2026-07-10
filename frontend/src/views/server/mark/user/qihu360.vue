@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container mark-user-qihu360-page">
     <el-card shadow="never" class="qihu360-page-card" :body-style="{ padding: '0' }">
       <div class="platform-main">
@@ -29,7 +29,10 @@
                       </span>
                     </div>
                     <div class="qihu360-submit-actions">
-                      <div v-if="!hasSubmitQuota" class="submit-warning-bar">
+                      <div v-if="!platformEnabled" class="submit-warning-bar">
+                        {{ platformClosedMessage }}
+                      </div>
+                      <div v-else-if="!hasSubmitQuota" class="submit-warning-bar">
                         当前平台剩余次数不足，无法提交。
                       </div>
                       <div v-else-if="insufficientRemain && validPhones.length" class="submit-warning-bar">
@@ -48,7 +51,7 @@
                           type="primary"
                           class="qihu360-action-btn"
                           :loading="submitting"
-                          :disabled="!validPhones.length || !hasSubmitQuota || insufficientRemain"
+                          :disabled="!validPhones.length || !platformEnabled || !hasSubmitQuota || insufficientRemain"
                           v-hasPermi="['server:markUser:order:clear']"
                           @click="handleSubmit"
                         >
@@ -61,6 +64,21 @@
                         >
                           重置
                         </el-button>
+                        <el-select
+                          v-if="showCoverageRemarkSelect"
+                          v-model="coverageRemark"
+                          class="qihu360-remark-select"
+                          placeholder="请选择备注"
+                          clearable
+                          :disabled="submitting"
+                        >
+                          <el-option
+                            v-for="item in coverageRemarkOptions"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                          />
+                        </el-select>
                       </div>
                     </div>
                   </div>
@@ -97,10 +115,11 @@
                     placeholder="订单号/手机号/用户名"
                     style="width: 220px"
                     @keyup.enter="handleQuery"
+                    @clear="handleQuery"
                   />
                 </el-form-item>
                 <el-form-item label="处理状态">
-                  <el-select v-model="queryParams.orderStatus" clearable placeholder="状态" style="width: 120px">
+                  <el-select v-model="queryParams.orderStatus" clearable placeholder="状态" style="width: 120px" @change="handleQuery" @clear="handleQuery">
                     <el-option label="待处理" value="0" />
                     <el-option label="处理中" value="3" />
                     <el-option label="处理完成" value="1" />
@@ -211,7 +230,19 @@ const submitting = ref(false)
 const remainCount = ref(0)
 const unitPrice = ref(1)
 const platformName = ref(resolve360PlatformNameFallback(activePlatformCode.value))
+const platformEnabled = ref(true)
 const submitResult = ref(null)
+const coverageRemark = ref('快递送餐')
+const coverageRemarkOptions = [
+  { label: '快递送餐', value: '快递送餐' },
+  { label: '房产中介', value: '房产中介' },
+  { label: '保险理财', value: '保险理财' }
+]
+const showCoverageRemarkSelect = computed(() => {
+  const code = String(activePlatformCode.value || '').trim().toLowerCase()
+  const name = String(platformName.value || '').trim().toLowerCase()
+  return code === 'sanliuling' || name.includes('fugai') || name.includes('覆盖')
+})
 
 const loading = ref(false)
 const total = ref(0)
@@ -246,6 +277,7 @@ const validPhones = computed(() => {
 const expectedDeductAmount = computed(() => validPhones.value.length * unitPrice.value)
 const insufficientRemain = computed(() => expectedDeductAmount.value > remainCount.value)
 const hasSubmitQuota = computed(() => remainCount.value >= unitPrice.value)
+const platformClosedMessage = computed(() => `${platformName.value}平台未开启，请联系管理员`)
 
 const resultRows = computed(() => {
   if (!submitResult.value) return []
@@ -271,16 +303,30 @@ async function loadPlatformInfo() {
   try {
     const resp = await listMarkUserPlatformPrice()
     const list = Array.isArray(resp?.data) ? resp.data : []
-    const matched = list.find((item) => String(item.platformCode || '').toLowerCase() === activePlatformCode.value)
-      || list.find((item) => is360PlatformNameMatch(item))
+    const matched = list.find((item) => {
+      const rawCode = String(item.platformCode || '').trim().toLowerCase()
+      const code = rawCode === '360' ? 'sanliuling' : rawCode
+      if (code === activePlatformCode.value) return true
+      if (activePlatformCode.value !== 'sanliuling') return false
+      const name = String(item.platformName || item.name || '').trim().toLowerCase()
+      return is360PlatformNameMatch(item) && (rawCode === '360' || name.includes('fugai') || name.includes('覆盖'))
+    })
     if (matched) {
       platformName.value = matched.platformName || platformName.value
+      platformEnabled.value = String(matched.status ?? '0') !== '1'
       remainCount.value = Number(matched.remainCount ?? 0)
       const price = Number(matched.unitPrice ?? 1)
       unitPrice.value = Number.isFinite(price) && price > 0 ? price : 1
+    } else {
+      platformName.value = resolve360PlatformNameFallback(activePlatformCode.value)
+      platformEnabled.value = false
+      remainCount.value = 0
+      unitPrice.value = 1
     }
   } catch (error) {
+    platformEnabled.value = false
     remainCount.value = 0
+    unitPrice.value = 1
   }
 }
 
@@ -288,6 +334,10 @@ async function handleSubmit() {
   const phones = validPhones.value
   if (!phones.length) {
     proxy.$modal.msgWarning('请输入有效号码（每行1个，7-15位数字）')
+    return
+  }
+  if (!platformEnabled.value) {
+    proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
   if (!hasSubmitQuota.value) {
@@ -298,6 +348,11 @@ async function handleSubmit() {
     proxy.$modal.msgError(`当前平台剩余次数不足，本次需 ${expectedDeductAmount.value} 次，剩余 ${remainCount.value} 次`)
     return
   }
+  const remark = String(coverageRemark.value || '').trim()
+  if (showCoverageRemarkSelect.value && !remark) {
+    proxy.$modal.msgWarning('请选择备注类型')
+    return
+  }
   submitting.value = true
   try {
     const res = await createMarkUserClearOrder({
@@ -305,7 +360,7 @@ async function handleSubmit() {
       platformName: platformName.value,
       phones,
       requestNo: '',
-      remark: ''
+      remark
     })
     const order = res?.data?.order || res?.data || {}
     const phoneCount = Number(order.totalCount || phones.length || 0)
@@ -314,6 +369,7 @@ async function handleSubmit() {
       phoneCount
     }
     phonesText.value = ''
+    coverageRemark.value = '快递送餐'
     await loadPlatformInfo()
     proxy.$modal.msgSuccess(`正常提交了${phoneCount}个手机号码`)
     if (activeTab.value === 'record') {
@@ -328,6 +384,8 @@ async function handleSubmit() {
 
 function handleReset() {
   phonesText.value = ''
+  coverageRemark.value = '快递送餐'
+  submitResult.value = null
 }
 
 function handleExtractPhones() {
@@ -373,7 +431,12 @@ async function copyText(text) {
 
 function isAutoProcessingRecord(row) {
   const code = String(row?.platformCode || '').trim().toLowerCase()
-  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin'].includes(code)
+  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz'].includes(code)
+}
+
+function isManualPendingStatus3Record(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return ['td_gaopin'].includes(code)
 }
 
 function recordStatusLabel(row) {
@@ -451,15 +514,18 @@ function resetQuery() {
 }
 
 function handleRecordDateRangeChange(value) {
+  queryParams.pageNum = 1
   if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
     recordDateRange.value = []
     queryParams.params = {}
+    getList()
     return
   }
   queryParams.params = {
     beginTime: value[0],
     endTime: value[1]
   }
+  getList()
 }
 
 function handleRecordSelectionChange(rows) {
@@ -504,11 +570,8 @@ function exportRecordRows() {
 
 let recordPollTimer = null
 function startRecordPolling() {
+  // User task records should not auto-poll; refresh only on search/reset/page change.
   stopRecordPolling()
-  recordPollTimer = window.setInterval(() => {
-    if (activeTab.value !== 'record') return
-    getList()
-  }, 5000)
 }
 
 function stopRecordPolling() {
@@ -521,7 +584,6 @@ function stopRecordPolling() {
 function syncRecordTabData() {
   if (activeTab.value === 'record') {
     getList()
-    startRecordPolling()
   } else {
     stopRecordPolling()
   }
@@ -722,6 +784,10 @@ onBeforeUnmount(() => {
   padding: 0 14px;
   margin: 0;
   font-size: 13px;
+}
+
+.qihu360-remark-select {
+  width: 128px;
 }
 
 .qihu360-action-btn--extract {

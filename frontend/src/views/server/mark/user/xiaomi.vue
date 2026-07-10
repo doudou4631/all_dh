@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container mark-user-xiaomi-page">
     <el-card shadow="never" class="xiaomi-page-card" :body-style="{ padding: '0' }">
       <div class="platform-main">
@@ -29,7 +29,10 @@
                       </span>
                     </div>
                     <div class="xiaomi-submit-actions">
-                      <div v-if="!hasSubmitQuota" class="submit-warning-bar">
+                      <div v-if="!platformEnabled" class="submit-warning-bar">
+                        {{ platformClosedMessage }}
+                      </div>
+                      <div v-else-if="!hasSubmitQuota" class="submit-warning-bar">
                         当前平台剩余次数不足，无法提交。
                       </div>
                       <div v-else-if="insufficientRemain && validPhones.length" class="submit-warning-bar">
@@ -48,7 +51,7 @@
                           type="primary"
                           class="xiaomi-action-btn"
                           :loading="submitting"
-                          :disabled="!validPhones.length || !hasSubmitQuota || insufficientRemain"
+                          :disabled="!validPhones.length || !platformEnabled || !hasSubmitQuota || insufficientRemain"
                           v-hasPermi="['server:markUser:order:clear']"
                           @click="handleSubmit"
                         >
@@ -97,10 +100,11 @@
                     placeholder="订单号/手机号/用户名"
                     style="width: 220px"
                     @keyup.enter="handleQuery"
+                    @clear="handleQuery"
                   />
                 </el-form-item>
                 <el-form-item label="处理状态">
-                  <el-select v-model="queryParams.orderStatus" clearable placeholder="状态" style="width: 120px">
+                  <el-select v-model="queryParams.orderStatus" clearable placeholder="状态" style="width: 120px" @change="handleQuery" @clear="handleQuery">
                     <el-option label="待处理" value="0" />
                     <el-option label="处理中" value="3" />
                     <el-option label="处理完成" value="1" />
@@ -203,6 +207,7 @@ const submitting = ref(false)
 const remainCount = ref(0)
 const unitPrice = ref(1)
 const platformName = ref(routePlatformName.value)
+const platformEnabled = ref(true)
 const submitResult = ref(null)
 
 const loading = ref(false)
@@ -238,6 +243,7 @@ const validPhones = computed(() => {
 const expectedDeductAmount = computed(() => validPhones.value.length * unitPrice.value)
 const insufficientRemain = computed(() => expectedDeductAmount.value > remainCount.value)
 const hasSubmitQuota = computed(() => remainCount.value >= unitPrice.value)
+const platformClosedMessage = computed(() => `${platformName.value}平台未开启，请联系管理员`)
 
 const resultRows = computed(() => {
   if (!submitResult.value) return []
@@ -267,14 +273,17 @@ async function loadPlatformInfo() {
     const matched = list.find((item) => String(item.platformCode || '').toLowerCase() === activePlatformCode.value)
     if (matched) {
       platformName.value = matched.platformName || platformName.value
+      platformEnabled.value = String(matched.status ?? '0') !== '1'
       remainCount.value = Number(matched.remainCount ?? 0)
       const price = Number(matched.unitPrice ?? 1)
       unitPrice.value = Number.isFinite(price) && price > 0 ? price : 1
     } else {
+      platformEnabled.value = false
       remainCount.value = 0
       unitPrice.value = 1
     }
   } catch (error) {
+    platformEnabled.value = false
     remainCount.value = 0
     unitPrice.value = 1
   }
@@ -284,6 +293,10 @@ async function handleSubmit() {
   const phones = validPhones.value
   if (!phones.length) {
     proxy.$modal.msgWarning('请输入有效号码（每行1个，7-15位数字）')
+    return
+  }
+  if (!platformEnabled.value) {
+    proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
   if (!hasSubmitQuota.value) {
@@ -369,7 +382,12 @@ async function copyText(text) {
 
 function isAutoProcessingRecord(row) {
   const code = String(row?.platformCode || '').trim().toLowerCase()
-  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin'].includes(code)
+  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz'].includes(code)
+}
+
+function isManualPendingStatus3Record(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return ['td_gaopin'].includes(code)
 }
 
 function recordStatusLabel(row) {
@@ -447,15 +465,18 @@ function resetQuery() {
 }
 
 function handleRecordDateRangeChange(value) {
+  queryParams.pageNum = 1
   if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
     recordDateRange.value = []
     queryParams.params = {}
+    getList()
     return
   }
   queryParams.params = {
     beginTime: value[0],
     endTime: value[1]
   }
+  getList()
 }
 
 function handleRecordSelectionChange(rows) {
@@ -500,11 +521,8 @@ function exportRecordRows() {
 
 let recordPollTimer = null
 function startRecordPolling() {
+  // User task records should not auto-poll; refresh only on search/reset/page change.
   stopRecordPolling()
-  recordPollTimer = window.setInterval(() => {
-    if (activeTab.value !== 'record') return
-    getList()
-  }, 5000)
 }
 
 function stopRecordPolling() {
@@ -517,7 +535,6 @@ function stopRecordPolling() {
 function syncRecordTabData() {
   if (activeTab.value === 'record') {
     getList()
-    startRecordPolling()
   } else {
     stopRecordPolling()
   }

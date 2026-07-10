@@ -60,4 +60,10 @@ public class MarkAgentOrderItemVO extends BaseEntity {
 
     @Schema(title = "Platform codes filter, comma separated")
     private String platformCodes;
+
+    @Schema(title = "Pending only filter")
+    private String pendingOnly;
+
+    @Schema(title = "Processing only filter")
+    private String processingOnly;
 }

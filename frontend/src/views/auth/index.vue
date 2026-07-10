@@ -7,38 +7,24 @@ import Oauth from "./oauth.vue";
 import { getToken } from '@/utils/auth';
 import { RoutesAlias } from '@/router/routesAlias';
 import BackgroundAnimation from './background-animation.vue';
-// 页面加载状态
-const pageLoaded = ref(false);
-const successCount = ref(0);
-const targetSuccessCount = 100;
-
-// 数字增长动画
-function startCountAnimation() {
-  const duration = 3000; // 动画持续时间（毫秒）
-  const step = Math.ceil(targetSuccessCount / (duration / 50)); // 每50毫秒增加的数值
-  const interval = setInterval(() => {
-    successCount.value += step;
-    if (successCount.value >= targetSuccessCount) {
-      successCount.value = targetSuccessCount;
-      clearInterval(interval);
-    }
-  }, 50);
-}
-// 验证码开关
-const captchaEnabled = ref(false);
-// 注册开关
-const register = ref(false);
 
 const route = useRoute();
+const router = useRouter()
+const pageLoaded = ref(false)
+const captchaEnabled = ref(false)
+const successCount = ref(0)
+
+function startCountAnimation() {
+  successCount.value = 999
+}
 
 onMounted(async () => {
   if (getToken()) {
-    useRouter().push(RoutesAlias.Home)
+    router.push(RoutesAlias.Home)
     return;
   }
   try {
     captchaEnabled.value = await getConfigKey("sys.account.captchaEnabled").then(res => res.msg === 'true')
-    register.value = await getConfigKey("sys.account.registerUser").then(res => res.msg === 'true')
   } finally {
     // 设置页面加载状态为true，触发动画
     pageLoaded.value = true;
@@ -89,7 +75,7 @@ const title = computed(() => import.meta.env.VITE_APP_TITLE || '后台管理系�
         <el-segmented v-if="methods.length > 1" v-model="method" :options="methods" block />
         <div class="container-form">
           <router-view v-slot="{ Component }">
-            <component :is="Component" :register="register" :captchaEnabled="captchaEnabled" :method="method" />
+            <component :is="Component" :captchaEnabled="captchaEnabled" :method="method" />
           </router-view>
         </div>
         <Oauth />

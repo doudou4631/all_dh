@@ -26,7 +26,7 @@
         <el-descriptions-item label="消息备注" :span="2">{{ summary.remark || '-' }}</el-descriptions-item>
       </el-descriptions>
       <div class="quick-actions">
-        <el-button type="primary" plain @click="goPage('/mark/agentDownstream')">下级代理</el-button>
+        <el-button type="primary" plain @click="goPage('/mark/agentDownstream')">用户管理</el-button>
         <el-button type="success" plain @click="goPage('/mark/agentAccount')">账户管理</el-button>
         <el-button @click="goPage('/mark/agentWallet')">资金流水</el-button>
         <el-button @click="goPage('/mark/agentAudit')">订单审核</el-button>
@@ -50,4 +50,31 @@ onMounted(() => { loadSummary() })
 .balance-value { color: var(--el-color-primary); font-size: 18px; font-weight: 600; }
 .unit-platform { margin-left: 4px; color: var(--el-text-color-secondary); font-size: 12px; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+
+@media (max-width: 768px) {
+  .panel-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .quick-actions :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .mark-agent-summary-page :deep(.el-descriptions__table) {
+    min-width: 640px;
+  }
+
+  .mark-agent-summary-page :deep(.el-descriptions) {
+    overflow-x: auto;
+  }
+}
 </style>

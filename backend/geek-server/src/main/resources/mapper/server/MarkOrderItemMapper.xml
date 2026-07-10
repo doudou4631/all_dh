@@ -205,13 +205,24 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="query != null and query.processStatus != null and query.processStatus != ''">
                 and moi.process_status = #{query.processStatus}
             </if>
-            <if test="query != null and query.params != null and query.params.pendingOnly != null and query.params.pendingOnly.toString() == '1'">
-                and moi.process_status = '0'
-                and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
-            </if>
-            <if test="query != null and query.params != null and query.params.processingOnly != null and query.params.processingOnly.toString() == '1'">
+            <if test="query != null and ((query.pendingOnly != null and query.pendingOnly.toString() == '1') or (query.params != null and query.params.pendingOnly != null and query.params.pendingOnly.toString() == '1'))">
                 and (
-                    moi.process_status = '3'
+                    (
+                        moi.process_status = '0'
+                        and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
+                    )
+                    or (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) in ('td_gaopin')
+                    )
+                )
+            </if>
+            <if test="query != null and ((query.processingOnly != null and query.processingOnly.toString() == '1') or (query.params != null and query.params.processingOnly != null and query.params.processingOnly.toString() == '1'))">
+                and (
+                    (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) not in ('td_gaopin')
+                    )
                     or (
                         moi.process_status = '0'
                         and lower(mo.platform_code) in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
@@ -243,6 +254,32 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where moi.process_status = '0'
           and mo.audit_status = '1'
           and mo.platform_code = 'td_gaopin'
+          and (
+              moi.update_time is null
+              or (
+                  timestampdiff(minute, moi.create_time, now()) &lt; 10
+                  and moi.update_time &lt;= date_sub(now(), interval 3 minute)
+              )
+              or (
+                  timestampdiff(minute, moi.create_time, now()) &gt;= 10
+                  and timestampdiff(minute, moi.create_time, now()) &lt; 30
+                  and moi.update_time &lt;= date_sub(now(), interval 5 minute)
+              )
+              or (
+                  timestampdiff(minute, moi.create_time, now()) &gt;= 30
+                  and timestampdiff(minute, moi.create_time, now()) &lt; 60
+                  and moi.update_time &lt;= date_sub(now(), interval 5 minute)
+              )
+              or (
+                  timestampdiff(minute, moi.create_time, now()) &gt;= 60
+                  and timestampdiff(minute, moi.create_time, now()) &lt; 120
+                  and moi.update_time &lt;= date_sub(now(), interval 10 minute)
+              )
+              or (
+                  timestampdiff(minute, moi.create_time, now()) &gt;= 120
+                  and moi.update_time &lt;= date_sub(now(), interval 15 minute)
+              )
+          )
         order by moi.update_time asc, moi.id asc
         limit #{limit}
     </select>

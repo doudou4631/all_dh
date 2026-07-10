@@ -62,6 +62,24 @@ export function submitMarkUserTencent(data) {
   })
 }
 
+// Taidixiong二次发送短信验证码
+export function sendMarkUserTdxSecondCode(data) {
+  return request({
+    url: '/server/markUser/tdxSecond/sendCode',
+    method: 'post',
+    data
+  })
+}
+
+// Taidixiong二次提交申诉
+export function submitMarkUserTdxSecond(data) {
+  return request({
+    url: '/server/markUser/tdxSecond/submit',
+    method: 'post',
+    data
+  })
+}
+
 // 腾讯提交结果查询
 export function getMarkUserTencentSubmitResult(itemId) {
   return request({

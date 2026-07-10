@@ -164,6 +164,15 @@ export function batchMarkSuccess(data) {
   })
 }
 
+// 代理批量标记失败
+export function batchMarkFailed(data) {
+  return request({
+    url: '/server/markAgent/item/batchMarkFailed',
+    method: 'post',
+    data
+  })
+}
+
 // 代理整单处理（可传 processStatus=1成功/2失败）
 export function completeMarkOrder(orderId, data) {
   return request({
@@ -185,6 +194,15 @@ export function listMarkAgentQuotaPlatformOptions(userId) {
 export function adjustMarkAgentQuota(data) {
   return request({
     url: '/server/markAgent/quota/adjust',
+    method: 'post',
+    data
+  })
+}
+
+// 代理开启/关闭下线平台
+export function setMarkAgentPlatformStatus(data) {
+  return request({
+    url: '/server/markAgent/quota/status',
     method: 'post',
     data
   })

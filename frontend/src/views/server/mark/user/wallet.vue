@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container mark-user-wallet-page">
     <el-card shadow="never" class="mb10">
       <el-row :gutter="16">

@@ -18,11 +18,14 @@ import com.geek.server.domain.UserPlatformUrlConfig;
 import com.geek.server.domain.dto.OptimizedBatchItemOutcome;
 import com.geek.server.domain.entity.BatchTask;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
+import com.geek.server.domain.dto.MarkAgentPlatformStatusRequest;
 import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
 import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
 import com.geek.server.domain.dto.MarkTencentSubmitRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSendCodeRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSubmitRequest;
 import com.geek.server.domain.vo.ApiRequestVO;
 import com.geek.server.domain.vo.MarkAgentAuditStatsVO;
 import com.geek.server.domain.vo.MarkAgentDownstreamSummaryVO;
@@ -32,6 +35,8 @@ import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.domain.vo.MarkPhoneCheckItemVO;
+import com.geek.server.domain.vo.MarkTdxSecondSendCodeResultVO;
+import com.geek.server.domain.vo.MarkTdxSecondSubmitResultVO;
 import com.geek.server.domain.vo.MarkTencentStatusItemVO;
 import com.geek.server.domain.vo.MarkTencentStatusQueryResultVO;
 import com.geek.server.domain.vo.MarkTencentSubmitResultVO;
@@ -45,6 +50,7 @@ import com.geek.server.mapper.MarkUserPlatformQuotaMapper;
 import com.geek.server.mapper.MarkWalletLogMapper;
 import com.geek.server.service.IMarkOrderService;
 import com.geek.server.service.IOptimizedBatchApiExecutor;
+import com.geek.server.service.TdxSecondAppealService;
 import com.geek.server.service.IUserAggregateConfigService;
 import com.geek.server.service.IUserPlatformUrlConfigService;
 import com.geek.server.service.IMarkUserNoticeService;
@@ -89,12 +95,15 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private static final String TENCENT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
     private static final String TENCENT_AUTO_OPERATOR = "tencent-auto";
     private static final long TENCENT_AUTO_PROCESS_DELAY_MS = 30_000L;
+    private static final String TDX_SECOND_PLATFORM_CODE = "td_second";
+    private static final String TDX_SECOND_AUTO_OPERATOR = "tdx-second-api";
     private static final String TD_GAOPIN_AUTO_OPERATOR = "td-gaopin-auto";
-    private static final int TD_GAOPIN_AUTO_BATCH_LIMIT = 50;
+    private static final int TD_GAOPIN_AUTO_BATCH_LIMIT = 200;
     private static final String XIAOMI_AUTO_OPERATOR = "xiaomi-auto";
     private static final int XIAOMI_AUTO_BATCH_LIMIT = 50;
     private static final String TD_GAOPIN_HF_KEY = "高频标记至少需要10个工作日或找平台方帮忙处理";
     private static final String TD_GAOPIN_FRAUD_KEY = "疑似诈骗";
+    private static final String TD_GAOPIN_DUPLICATE_APPEAL_KEY = "号码当天已提交过申诉，不可重复提交";
     private static final Pattern JSONP_WRAPPER_PATTERN = Pattern.compile("^[\\w$]+\\((.*)\\)\\s*;?$", Pattern.DOTALL);
     private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
 
@@ -145,6 +154,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     @Autowired
     private ApplicationContext applicationContext;
 
+    @Autowired
+    private TdxSecondAppealService tdxSecondAppealService;
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MarkOrderDetailVO createOrder(MarkOrderCreateRequest request) {
@@ -158,9 +170,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             throw new ServiceException("平台编码不能为空");
         }
         assertNotLegacyTencentBatchPlatform(platformCode);
-        if (!isPlatformAvailableForUser(currentUserId, platformCode)) {
-            throw new ServiceException("当前账号未开通该平台");
-        }
+        assertPlatformAvailableForSubmit(currentUserId, platformCode, request.getPlatformName());
 
         List<String> normalizedPhones = normalizePhones(request.getPhones());
         if (normalizedPhones.isEmpty()) {
@@ -290,9 +300,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             throw new ServiceException("平台编码不能为空");
         }
         assertNotLegacyTencentBatchPlatform(platformCode);
-        if (!isPlatformAvailableForUser(currentUserId, platformCode)) {
-            throw new ServiceException("当前账号未开通该平台");
-        }
+        assertPlatformAvailableForSubmit(currentUserId, platformCode, request.getPlatformName());
         List<String> normalizedPhones = normalizePhones(request.getPhones());
         if (normalizedPhones.isEmpty()) {
             throw new ServiceException("没有可用号码");
@@ -688,6 +696,150 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 tencentPlatformCode,
                 tencentPlatformName
         );
+    }
+
+    @Override
+    public MarkTdxSecondSendCodeResultVO sendTdxSecondCode(MarkTdxSecondSendCodeRequest request) {
+        if (request == null) {
+            throw new ServiceException("请求参数不能为空");
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        assertPlatformAvailableForSubmit(currentUserId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
+        long unitPrice = getEffectiveUnitPrice(currentUserId, TDX_SECOND_PLATFORM_CODE);
+        assertUserPlatformQuotaSufficient(currentUserId, TDX_SECOND_PLATFORM_CODE, unitPrice);
+        return tdxSecondAppealService.sendCode(request.getPhone(), request.getLine());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarkTdxSecondSubmitResultVO submitTdxSecond(MarkTdxSecondSubmitRequest request) {
+        if (request == null) {
+            throw new ServiceException("请求参数不能为空");
+        }
+        String requestedPlatformCode = normalizePlatformCode(request.getPlatformCode());
+        if (StringUtils.isNotBlank(requestedPlatformCode)
+                && !TDX_SECOND_PLATFORM_CODE.equals(requestedPlatformCode)) {
+            throw new ServiceException("当前接口仅支持Taidixiong二次平台");
+        }
+
+        Long currentUserId = SecurityUtils.getUserId();
+        String currentUserName = SecurityUtils.getUsername();
+        assertPlatformAvailableForSubmit(currentUserId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
+
+        String phone = normalizeSinglePhone(request.getPhone());
+        if (!phone.matches("\\d{11}")) {
+            throw new ServiceException("手机号应为11位数字");
+        }
+        String smsCode = StringUtils.trimToEmpty(request.getSmsCode());
+        if (!smsCode.matches("\\d{6}")) {
+            throw new ServiceException("验证码应为6位数字");
+        }
+
+        Date now = DateUtils.getNowDate();
+        String platformName = resolvePlatformNameByUser(
+                currentUserId,
+                TDX_SECOND_PLATFORM_CODE,
+                "Taidixiong二次"
+        );
+        long unitPrice = getEffectiveUnitPrice(currentUserId, TDX_SECOND_PLATFORM_CODE);
+        assertUserPlatformQuotaSufficient(currentUserId, TDX_SECOND_PLATFORM_CODE, unitPrice);
+
+        MarkTdxSecondSubmitResultVO apiResult = tdxSecondAppealService.submit(
+                phone,
+                smsCode,
+                request.getLine(),
+                request.getRotate()
+        );
+
+        MarkUserPlatformQuota quota = lockUserPlatformQuota(
+                currentUserId,
+                TDX_SECOND_PLATFORM_CODE,
+                platformName,
+                currentUserName,
+                now
+        );
+        long balanceBefore = sanitizeRemainCount(quota.getRemainCount());
+        assertUserPlatformQuotaSufficient(balanceBefore, unitPrice);
+        long balanceAfter = balanceBefore - unitPrice;
+        quota.setPlatformName(platformName);
+        quota.setRemainCount(balanceAfter);
+        quota.setUpdateBy(currentUserName);
+        quota.setUpdateTime(now);
+        markUserPlatformQuotaMapper.updateMarkUserPlatformQuota(quota);
+
+        Long assignedAgentId = resolveAssignedAgentId(currentUserId);
+        MarkOrder order = new MarkOrder();
+        order.setOrderNo(generateOrderNo());
+        order.setUserId(currentUserId);
+        order.setPlatformCode(TDX_SECOND_PLATFORM_CODE);
+        order.setPlatformName(platformName);
+        order.setTotalCount(1);
+        order.setSuccessCount(1);
+        order.setFailedCount(0);
+        order.setTotalAmount(unitPrice);
+        order.setRefundAmount(0L);
+        order.setOrderStatus("2");
+        order.setAuditStatus("1");
+        order.setAuditOpinion("TDX二次接口自动完成");
+        order.setAuditBy(TDX_SECOND_AUTO_OPERATOR);
+        order.setAuditTime(now);
+        order.setCompletedTime(now);
+        order.setRemark("TDX二次申诉成功");
+        if (assignedAgentId != null) {
+            order.setAssignedAgentId(assignedAgentId);
+        }
+        order.setCreateBy(currentUserName);
+        order.setCreateTime(now);
+        order.setUpdateBy(TDX_SECOND_AUTO_OPERATOR);
+        order.setUpdateTime(now);
+        markOrderMapper.insertMarkOrder(order);
+
+        String processNote = buildTdxSecondProcessNote(apiResult, request.getLine());
+        MarkOrderItem item = new MarkOrderItem();
+        item.setOrderId(order.getId());
+        item.setPhone(phone);
+        item.setUnitPrice(unitPrice);
+        item.setItemAmount(unitPrice);
+        item.setProcessStatus("1");
+        item.setProcessResult("TDX二次申诉成功");
+        item.setProcessNote(processNote);
+        item.setProcessedBy(TDX_SECOND_AUTO_OPERATOR);
+        item.setProcessedTime(now);
+        item.setRefunded("0");
+        item.setRemark(smsCode);
+        item.setCreateBy(currentUserName);
+        item.setCreateTime(now);
+        item.setUpdateBy(TDX_SECOND_AUTO_OPERATOR);
+        item.setUpdateTime(now);
+        markOrderItemMapper.insertMarkOrderItem(item);
+
+        insertWalletLog(
+                currentUserId,
+                order.getId(),
+                item.getId(),
+                TDX_SECOND_PLATFORM_CODE,
+                platformName,
+                "DEDUCT",
+                -unitPrice,
+                balanceBefore,
+                balanceAfter,
+                "TDX二次申诉成功扣次",
+                currentUserName,
+                now
+        );
+        markUserNoticeService.sendOrderSubmitNotice(
+                currentUserId,
+                order.getId(),
+                order.getOrderNo(),
+                platformName,
+                currentUserName
+        );
+
+        apiResult.setItemId(item.getId());
+        apiResult.setOrderId(order.getId());
+        apiResult.setOrderNo(order.getOrderNo());
+        apiResult.setProcessStatus("1");
+        return apiResult;
     }
 
     @Override
@@ -1147,8 +1299,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (StringUtils.isBlank(platformCode)) {
             throw new ServiceException("平台编码不能为空");
         }
-        if (!isPlatformAvailableForUser(targetUser.getUserId(), platformCode)) {
-            throw new ServiceException("目标用户未开通该平台");
+        if (!isPlatformConfiguredForUser(targetUser.getUserId(), platformCode)) {
+            throw new ServiceException("目标用户未配置该平台");
         }
         String adjustType = normalizeAdjustType(request.getAdjustType());
         long changeCount = request.getChangeCount() == null ? 0L : request.getChangeCount();
@@ -1212,6 +1364,55 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         resultVO.setBalanceAfter(balanceAfter);
         resultVO.setRemainCount(balanceAfter);
         return resultVO;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public MarkUserPlatformPrice updateAgentUserPlatformStatus(MarkAgentPlatformStatusRequest request) {
+        if (request == null) {
+            throw new ServiceException("请求参数不能为空");
+        }
+        SysUser targetUser = requireUser(request.getUserId());
+        assertAgentAdjustAllowed(targetUser);
+
+        String platformCode = normalizePlatformCode(request.getPlatformCode());
+        if (StringUtils.isBlank(platformCode)) {
+            throw new ServiceException("平台编码不能为空");
+        }
+        if (!isPlatformConfiguredForUser(targetUser.getUserId(), platformCode)) {
+            throw new ServiceException("目标用户未配置该平台");
+        }
+
+        String status = normalizePlatformStatus(request.getStatus());
+        Date now = DateUtils.getNowDate();
+        String operator = SecurityUtils.getUsername();
+        String platformName = resolvePlatformNameByUser(targetUser.getUserId(), platformCode, request.getPlatformName());
+        MarkUserPlatformPrice price = markUserPlatformPriceMapper.selectByUserAndPlatform(targetUser.getUserId(), platformCode);
+        if (price == null) {
+            price = new MarkUserPlatformPrice();
+            price.setUserId(targetUser.getUserId());
+            price.setPlatformCode(platformCode);
+            price.setPlatformName(platformName);
+            price.setUnitPrice(resolveDefaultUnitPrice(targetUser.getUserId(), platformCode));
+            price.setStatus(status);
+            price.setCreateBy(operator);
+            price.setCreateTime(now);
+            price.setUpdateBy(operator);
+            price.setUpdateTime(now);
+            markUserPlatformPriceMapper.insertMarkUserPlatformPrice(price);
+        } else {
+            price.setPlatformCode(platformCode);
+            price.setPlatformName(StringUtils.defaultIfBlank(price.getPlatformName(), platformName));
+            if (price.getUnitPrice() == null || price.getUnitPrice() <= 0) {
+                price.setUnitPrice(resolveDefaultUnitPrice(targetUser.getUserId(), platformCode));
+            }
+            price.setStatus(status);
+            price.setUpdateBy(operator);
+            price.setUpdateTime(now);
+            markUserPlatformPriceMapper.updateMarkUserPlatformPrice(price);
+        }
+        MarkUserPlatformPrice result = markUserPlatformPriceMapper.selectByUserAndPlatform(targetUser.getUserId(), platformCode);
+        return result == null ? price : result;
     }
 
     private void refundOrderItem(MarkOrder order, MarkOrderItem item, String currentUserName, Date now) {
@@ -1636,15 +1837,6 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         for (Long orderId : affectedOrderIds) {
             refreshOrderStats(orderId, currentUserName);
         }
-        if (updatedCount > 0) {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    processXiaomiPendingItemsAuto();
-                } catch (Exception ex) {
-                    log.warn("小米批量处理后立即检测失败", ex);
-                }
-            });
-        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("updatedCount", updatedCount);
         result.put("skippedCount", skippedCount);
@@ -1657,77 +1849,30 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (item == null || !"3".equals(StringUtils.defaultIfBlank(item.getProcessStatus(), "0"))) {
             return;
         }
-        processXiaomiOrderItemWithQuery(item, XIAOMI_AUTO_OPERATOR, false);
-    }
-
-    @Override
-    public Map<String, Object> batchDetectXiaomiItems(List<Long> itemIds) {
-        if (itemIds == null || itemIds.isEmpty()) {
-            throw new ServiceException("请选择至少一条明细");
-        }
-        String operator = SecurityUtils.getUsername();
-        int detectedCount = 0;
-        int successCount = 0;
-        int stillMarkedCount = 0;
-        int queryFailedCount = 0;
-        int skippedCount = 0;
-        MarkOrderServiceImpl self = applicationContext.getBean(MarkOrderServiceImpl.class);
-        for (Long itemId : itemIds) {
-            if (itemId == null) {
-                skippedCount++;
-                continue;
-            }
-            MarkOrderItem item = markOrderItemMapper.selectMarkOrderItemById(itemId);
-            if (item == null || !"3".equals(StringUtils.defaultIfBlank(item.getProcessStatus(), "0"))) {
-                skippedCount++;
-                continue;
-            }
-            MarkOrder order = requireOrder(item.getOrderId());
-            try {
-                assertAgentReadable(order, true);
-                assertAuditPassed(order);
-            } catch (ServiceException ex) {
-                skippedCount++;
-                continue;
-            }
-            if (!isXiaomiPlatform(order.getPlatformCode())) {
-                skippedCount++;
-                continue;
-            }
-            self.processXiaomiOrderItemManualDetect(itemId, operator);
-            MarkOrderItem after = markOrderItemMapper.selectMarkOrderItemById(itemId);
-            if (after == null) {
-                skippedCount++;
-                continue;
-            }
-            detectedCount++;
-            String afterStatus = StringUtils.defaultIfBlank(after.getProcessStatus(), "0");
-            if ("1".equals(afterStatus)) {
-                successCount++;
-            } else if ("3".equals(afterStatus)) {
-                stillMarkedCount++;
-            } else {
-                queryFailedCount++;
-            }
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("detectedCount", detectedCount);
-        result.put("successCount", successCount);
-        result.put("stillMarkedCount", stillMarkedCount);
-        result.put("queryFailedCount", queryFailedCount);
-        result.put("skippedCount", skippedCount);
-        return result;
+        processXiaomiOrderItemWithQuery(item, XIAOMI_AUTO_OPERATOR);
     }
 
     @Override
     public Map<String, Object> batchMarkSuccessOrderItems(List<Long> itemIds) {
+        return batchMarkOrderItems(itemIds, "1", "success", "代理批量标记成功");
+    }
+
+    @Override
+    public Map<String, Object> batchMarkFailedOrderItems(List<Long> itemIds) {
+        return batchMarkOrderItems(itemIds, "2", "failed", "代理批量标记失败");
+    }
+
+    private Map<String, Object> batchMarkOrderItems(List<Long> itemIds,
+                                                   String targetStatus,
+                                                   String processResult,
+                                                   String processNote) {
         if (itemIds == null || itemIds.isEmpty()) {
             throw new ServiceException("请选择至少一条明细");
         }
         MarkOrderItemProcessRequest request = new MarkOrderItemProcessRequest();
-        request.setProcessStatus("1");
-        request.setProcessResult("success");
-        request.setProcessNote("代理批量标记成功");
+        request.setProcessStatus(targetStatus);
+        request.setProcessResult(processResult);
+        request.setProcessNote(processNote);
         int updatedCount = 0;
         int skippedCount = 0;
         MarkOrderServiceImpl self = applicationContext.getBean(MarkOrderServiceImpl.class);
@@ -1742,20 +1887,16 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 continue;
             }
             String currentStatus = StringUtils.defaultIfBlank(item.getProcessStatus(), "0");
-            if ("1".equals(currentStatus)) {
+            if (targetStatus.equals(currentStatus)) {
                 skippedCount++;
                 continue;
             }
-            if (!"0".equals(currentStatus) && !"2".equals(currentStatus) && !"3".equals(currentStatus)) {
+            if (!canBatchChangeStatus(currentStatus, targetStatus)) {
                 skippedCount++;
                 continue;
             }
             MarkOrder order = requireOrder(item.getOrderId());
             if (isTencentPlatformCode(order.getPlatformCode())) {
-                skippedCount++;
-                continue;
-            }
-            if (isTdGaopinPlatform(order.getPlatformCode()) && "0".equals(currentStatus)) {
                 skippedCount++;
                 continue;
             }
@@ -1774,20 +1915,21 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return result;
     }
 
-    @Transactional(rollbackFor = Exception.class)
-    public void processXiaomiOrderItemManualDetect(Long itemId, String operator) {
-        MarkOrderItem item = markOrderItemMapper.selectMarkOrderItemById(itemId);
-        if (item == null || !"3".equals(StringUtils.defaultIfBlank(item.getProcessStatus(), "0"))) {
-            return;
+    private boolean canBatchChangeStatus(String currentStatus, String targetStatus) {
+        if ("1".equals(targetStatus)) {
+            return "0".equals(currentStatus) || "2".equals(currentStatus) || "3".equals(currentStatus);
         }
-        processXiaomiOrderItemWithQuery(item, operator, true);
+        if ("2".equals(targetStatus)) {
+            return "0".equals(currentStatus) || "1".equals(currentStatus) || "3".equals(currentStatus);
+        }
+        return false;
     }
 
     private void processXiaomiOrderItemWithQuery(MarkOrderItem item) {
-        processXiaomiOrderItemWithQuery(item, XIAOMI_AUTO_OPERATOR, false);
+        processXiaomiOrderItemWithQuery(item, XIAOMI_AUTO_OPERATOR);
     }
 
-    private void processXiaomiOrderItemWithQuery(MarkOrderItem item, String operator, boolean manualDetect) {
+    private void processXiaomiOrderItemWithQuery(MarkOrderItem item, String operator) {
         MarkOrderItem latest = markOrderItemMapper.selectMarkOrderItemById(item.getId());
         if (latest == null || !"3".equals(StringUtils.defaultIfBlank(latest.getProcessStatus(), "0"))) {
             return;
@@ -1818,7 +1960,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (isXiaomiNoMark(checkItem)) {
             item.setProcessStatus("1");
             item.setProcessResult("无标记");
-            item.setProcessNote(manualDetect ? "代理批量检测：号码已无标记，处理完成" : "自动检测：号码已无标记，处理完成");
+            item.setProcessNote("自动检测：号码已无标记，处理完成");
             item.setProcessedBy(operator);
             item.setProcessedTime(now);
             item.setUpdateBy(operator);
@@ -1831,7 +1973,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             String detail = StringUtils.defaultIfBlank(StringUtils.trimToNull(checkItem.getDetail()), "有标记");
             item.setProcessStatus("3");
             item.setProcessResult("有标记:" + detail);
-            item.setProcessNote(manualDetect ? "代理批量检测：仍有标记，继续等待" : "自动检测：仍有标记，继续等待");
+            item.setProcessNote("自动检测：仍有标记，继续等待");
             item.setUpdateBy(operator);
             item.setUpdateTime(now);
             markOrderItemMapper.updateMarkOrderItem(item);
@@ -2099,7 +2241,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     }
 
     private boolean isTdGaopinAutoCompleteDetail(String detail) {
-        return "有标记".equals(StringUtils.trimToNull(detail));
+        String normalized = StringUtils.trimToNull(detail);
+        return "有标记".equals(normalized)
+                || StringUtils.contains(normalized, TD_GAOPIN_DUPLICATE_APPEAL_KEY);
     }
 
     private void notifyTencentProcessResult(MarkOrder order, MarkOrderItem item, boolean accepted) {
@@ -2204,6 +2348,21 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             return "-";
         }
         return Boolean.TRUE.equals(resultVO.getAccepted()) ? "腾讯提交成功" : "腾讯提交失败";
+    }
+
+    private String buildTdxSecondProcessNote(MarkTdxSecondSubmitResultVO resultVO, String line) {
+        if (resultVO == null) {
+            return "TDX二次申诉成功";
+        }
+        StringBuilder note = new StringBuilder("TDX二次申诉成功");
+        if (resultVO.getTdxId() != null) {
+            note.append("｜tdxId=").append(resultVO.getTdxId());
+        }
+        if (StringUtils.isNotBlank(resultVO.getOrderpicinumber())) {
+            note.append("｜orderpicinumber=").append(resultVO.getOrderpicinumber());
+        }
+        note.append("｜line=").append(StringUtils.defaultIfBlank(StringUtils.trimToNull(line), "line1"));
+        return StringUtils.abbreviate(note.toString(), 500);
     }
 
     private String buildTencentRealtimeStatusText(Integer phoneType, String complainStatus) {
@@ -2463,7 +2622,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         List<MarkUserPlatformPrice> savedPrices = markUserPlatformPriceMapper.selectMarkUserPlatformPriceList(query);
         Map<String, MarkUserPlatformPrice> savedMap = savedPrices.stream()
                 .filter(item -> StringUtils.isNotBlank(item.getPlatformCode()))
-                .collect(Collectors.toMap(MarkUserPlatformPrice::getPlatformCode, item -> item, (a, b) -> a, LinkedHashMap::new));
+                .collect(Collectors.toMap(item -> normalizePlatformCode(item.getPlatformCode()), item -> item, (a, b) -> a, LinkedHashMap::new));
         List<MarkUserPlatformQuota> quotas = markUserPlatformQuotaMapper.selectByUserId(userId);
         Map<String, Long> quotaMap = new LinkedHashMap<>();
         for (MarkUserPlatformQuota quota : quotas) {
@@ -2516,6 +2675,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 price.setPlatformName(platformName);
             } else if (price.getUnitPrice() == null || price.getUnitPrice() <= 0) {
                 price.setUnitPrice(defaultUnitPrice);
+            }
+            if (StringUtils.isBlank(price.getStatus())) {
+                price.setStatus("0");
             }
             price.setRemainCount(sanitizeRemainCount(quotaMap.get(normalizePlatformCode(platformCode))));
             result.add(price);
@@ -2646,7 +2808,52 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             return false;
         }
         List<MarkUserPlatformPrice> prices = buildPlatformPriceListByUser(userId);
+        return prices.stream().anyMatch(item -> StringUtils.equals(normalizedCode, normalizePlatformCode(item.getPlatformCode()))
+                && isPlatformPriceEnabled(item));
+    }
+
+    private boolean isPlatformConfiguredForUser(Long userId, String platformCode) {
+        String normalizedCode = normalizePlatformCode(platformCode);
+        if (StringUtils.isBlank(normalizedCode)) {
+            return false;
+        }
+        List<MarkUserPlatformPrice> prices = buildPlatformPriceListByUser(userId);
         return prices.stream().anyMatch(item -> StringUtils.equals(normalizedCode, normalizePlatformCode(item.getPlatformCode())));
+    }
+
+    private void assertPlatformAvailableForSubmit(Long userId, String platformCode, String requestPlatformName) {
+        if (isPlatformAvailableForUser(userId, platformCode)) {
+            return;
+        }
+        String platformName = resolvePlatformNameByUser(userId, platformCode, requestPlatformName);
+        throw new ServiceException(platformName + "平台未开启，请联系管理员");
+    }
+
+    private boolean isPlatformPriceEnabled(MarkUserPlatformPrice price) {
+        return price != null && !"1".equals(StringUtils.trimToEmpty(price.getStatus()));
+    }
+
+    private String normalizePlatformStatus(String status) {
+        String normalized = StringUtils.lowerCase(StringUtils.trimToEmpty(status));
+        if ("0".equals(normalized) || "enable".equals(normalized) || "enabled".equals(normalized)
+                || "open".equals(normalized) || "true".equals(normalized)) {
+            return "0";
+        }
+        if ("1".equals(normalized) || "disable".equals(normalized) || "disabled".equals(normalized)
+                || "close".equals(normalized) || "closed".equals(normalized) || "false".equals(normalized)) {
+            return "1";
+        }
+        throw new ServiceException("平台状态仅支持开启或关闭");
+    }
+
+    private Long resolveDefaultUnitPrice(Long userId, String platformCode) {
+        String normalizedCode = normalizePlatformCode(platformCode);
+        Map<String, TemplatePlatformConfig> templateConfigMap = resolveTemplatePlatformConfigMapByUser(userId);
+        TemplatePlatformConfig templateConfig = templateConfigMap.get(normalizedCode);
+        if (templateConfig != null && templateConfig.getUnitPrice() != null && templateConfig.getUnitPrice() > 0) {
+            return templateConfig.getUnitPrice();
+        }
+        return 1L;
     }
 
     private String resolvePlatformName(String platformCode, String requestPlatformName) {
@@ -3154,6 +3361,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             if (platformPrice == null || StringUtils.isBlank(platformPrice.getPlatformCode())) {
                 continue;
             }
+            if (!isPlatformPriceEnabled(platformPrice)) {
+                continue;
+            }
             String platformCode = StringUtils.trimToEmpty(platformPrice.getPlatformCode());
             String platformName = StringUtils.trimToEmpty(platformPrice.getPlatformName());
             if (isTencentPlatformCode(platformCode) || StringUtils.contains(platformName, "腾讯")) {
@@ -3174,6 +3384,9 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         List<MarkUserPlatformPrice> platformPrices = buildPlatformPriceListByUser(userId);
         for (MarkUserPlatformPrice platformPrice : platformPrices) {
             if (platformPrice == null || StringUtils.isBlank(platformPrice.getPlatformCode())) {
+                continue;
+            }
+            if (!isPlatformPriceEnabled(platformPrice)) {
                 continue;
             }
             String platformCode = StringUtils.trimToEmpty(platformPrice.getPlatformCode());

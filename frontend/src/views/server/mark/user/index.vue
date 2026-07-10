@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container mark-user-order-page">
     <el-card shadow="never" class="platform-card" :body-style="{ padding: '0' }">
       <el-empty v-if="platformOptions.length === 0" description="当前未配置可用平台" />
@@ -48,7 +48,10 @@
                           <span>重复 {{ submitPhoneStats.duplicateCount }}</span>
                           <span>无效 {{ submitPhoneStats.invalidCount }}</span>
                         </div>
-                        <div v-if="!hasSubmitQuota" class="submit-warning-bar">
+                        <div v-if="!activePlatformEnabled" class="submit-warning-bar">
+                          {{ activePlatformClosedMessage }}
+                        </div>
+                        <div v-else-if="!hasSubmitQuota" class="submit-warning-bar">
                           当前平台剩余次数不足，无法查询提交。
                         </div>
                         <div v-else-if="insufficientRemain" class="submit-warning-bar">
@@ -95,7 +98,7 @@
                               type="success"
                               size="small"
                               class="query-result-btn query-result-btn--primary"
-                              :disabled="precheckSubmittableSelectedCount === 0 || clearSubmitLoading || precheckLoading || !hasSubmitQuota"
+                              :disabled="precheckSubmittableSelectedCount === 0 || clearSubmitLoading || precheckLoading || !activePlatformEnabled || !hasSubmitQuota"
                               :loading="clearSubmitLoading"
                               @click="submitSelectedMarkedPhones"
                             >
@@ -186,6 +189,7 @@
                       clearable
                       placeholder="订单号/手机号/用户名"
                       @keyup.enter="handleQuery"
+                      @clear="handleQuery"
                     />
                   </div>
                   <div class="record-search-field record-search-field--status">
@@ -195,6 +199,8 @@
                       size="small"
                       clearable
                       placeholder="状态"
+                      @change="handleQuery"
+                      @clear="handleQuery"
                     >
                       <el-option label="待处理" value="0" />
                       <el-option label="处理中" value="3" />
@@ -373,13 +379,16 @@ const activePlatformName = computed(() => {
 
 const activeUnitPrice = computed(() => {
   const price = Number(activePlatform.value?.unitPrice ?? 1)
-  return Number.isFinite(price) ? price : 1
+  return Number.isFinite(price) && price > 0 ? price : 1
 })
 
 const activeRemainCount = computed(() => {
   const remain = Number(activePlatform.value?.remainCount ?? 0)
   return Number.isFinite(remain) ? Math.max(0, remain) : 0
 })
+
+const activePlatformEnabled = computed(() => String(activePlatform.value?.status ?? '0') !== '1')
+const activePlatformClosedMessage = computed(() => `${activePlatformName.value}平台未开启，请联系管理员`)
 
 const routePlatformCode = computed(() => resolvePlatformCodeFromRoute(route))
 const showPlatformSwitcher = computed(() => !routePlatformCode.value)
@@ -487,11 +496,11 @@ function extractPhoneNumbersFromText(text) {
 }
 
 const submitPhoneStats = computed(() => parsePhonesWithStats(submitForm.phonesText))
-const canSubmit = computed(() => !!activePlatform.value && submitPhoneStats.value.validCount > 0 && hasSubmitQuota.value)
 const expectedSubmitCount = computed(() => submitPhoneStats.value.validCount)
 const expectedDeductAmount = computed(() => expectedSubmitCount.value * activeUnitPrice.value)
 const insufficientRemain = computed(() => expectedDeductAmount.value > activeRemainCount.value)
 const hasSubmitQuota = computed(() => activeRemainCount.value >= activeUnitPrice.value)
+const canSubmit = computed(() => !!activePlatform.value && activePlatformEnabled.value && submitPhoneStats.value.validCount > 0 && hasSubmitQuota.value && !insufficientRemain.value)
 const precheckTableData = computed(() => Array.isArray(precheckDialogData.value.items) ? precheckDialogData.value.items : [])
 const hasPrecheckResult = computed(() => precheckTableData.value.length > 0 || precheckDialogData.value.totalCount > 0)
 
@@ -1217,7 +1226,6 @@ function restorePageState(platformCode) {
 function syncRecordTabData() {
   if (activeSubTab.value === 'record') {
     getList()
-    startRecordPolling()
   } else {
     stopRecordPolling()
   }
@@ -1241,15 +1249,18 @@ function resetQuery() {
 }
 
 function handleRecordDateRangeChange(value) {
+  queryParams.pageNum = 1
   if (!Array.isArray(value) || value.length !== 2 || !value[0] || !value[1]) {
     recordDateRange.value = []
     queryParams.params = {}
+    getList()
     return
   }
   queryParams.params = {
     beginTime: value[0],
     endTime: value[1]
   }
+  getList()
 }
 
 function clearSubmitPhones() {
@@ -1276,8 +1287,16 @@ async function submitBatchOrder() {
     proxy.$modal.msgError('当前未选择平台')
     return
   }
+  if (!activePlatformEnabled.value) {
+    proxy.$modal.msgError(activePlatformClosedMessage.value)
+    return
+  }
   if (!hasSubmitQuota.value) {
     proxy.$modal.msgError('当前平台剩余次数不足，无法查询提交')
+    return
+  }
+  if (insufficientRemain.value) {
+    proxy.$modal.msgError(`当前平台剩余次数不足，本次需 ${expectedDeductAmount.value} 次，剩余 ${activeRemainCount.value} 次`)
     return
   }
   const phones = submitPhoneStats.value.validPhones
@@ -1297,11 +1316,13 @@ async function submitBatchOrder() {
 }
 
 async function afterCreateOrderSuccess(res, submittedCount = 0) {
+  const order = res?.data?.order || res?.data || {}
   await loadSummaryAndPrice()
-  const count = Number(submittedCount || res?.data?.order?.totalCount || res?.data?.totalCount || 0)
+  const count = Number(submittedCount || order.totalCount || 0)
+  const deductAmount = Number(order.totalAmount ?? (count * activeUnitPrice.value))
   const remain = activeRemainCount.value
   if (count > 0) {
-    proxy.$modal.msgSuccess(`提交成功，已提交 ${count} 个号码，扣除 ${count} 次，当前剩余 ${remain} 次`)
+    proxy.$modal.msgSuccess(`提交成功，已提交 ${count} 个号码，扣除 ${deductAmount} 次，当前剩余 ${remain} 次`)
   } else {
     proxy.$modal.msgSuccess(res?.msg || '下单成功')
   }
@@ -1326,6 +1347,10 @@ async function submitSelectedMarkedPhones() {
   }
   if (!precheckSourcePayload.value) {
     proxy.$modal.msgWarning('暂无可提交结果，请先执行预查询')
+    return
+  }
+  if (!activePlatformEnabled.value) {
+    proxy.$modal.msgError(activePlatformClosedMessage.value)
     return
   }
   if (!hasSubmitQuota.value) {
@@ -1392,11 +1417,8 @@ watch(activePlatformCode, (newCode, oldCode) => {
 
 let recordPollTimer = null
 function startRecordPolling() {
+  // User task records should not auto-poll; refresh only on search/reset/page change.
   stopRecordPolling()
-  recordPollTimer = window.setInterval(() => {
-    if (activeSubTab.value !== 'record') return
-    getList()
-  }, 5000)
 }
 function stopRecordPolling() {
   if (recordPollTimer) {
@@ -1932,7 +1954,25 @@ onBeforeUnmount(() => {
   }
 
   .platform-nav-tabs :deep(.el-tabs__header) {
+    width: 100% !important;
     margin-bottom: 0;
+    margin-right: 0;
+    overflow-x: auto;
+  }
+
+  .platform-nav-tabs :deep(.el-tabs__nav) {
+    display: flex;
+    flex-direction: row !important;
+    white-space: nowrap;
+  }
+
+  .platform-nav-tabs :deep(.el-tabs__item) {
+    flex: 0 0 auto;
+    min-width: 92px;
+    justify-content: center;
+    text-align: center;
+    white-space: nowrap;
+    padding: 8px 12px;
   }
 
   .submit-pane {
@@ -1963,6 +2003,44 @@ onBeforeUnmount(() => {
 
   .precheck-filter-bar :deep(.el-select),
   .precheck-filter-bar :deep(.el-input) {
+    width: 100% !important;
+  }
+
+  .submit-action-row,
+  .record-action-group {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .submit-action-row :deep(.el-button),
+  .record-action-group :deep(.el-button) {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .record-search-panel {
+    overflow-x: visible;
+  }
+
+  .record-search-bar {
+    width: 100%;
+    min-width: 0;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .record-search-field,
+  .record-search-field--keyword,
+  .record-search-field--actions {
+    width: 100%;
+    flex: 0 0 auto;
+    margin-left: 0;
+  }
+
+  .record-search-field :deep(.el-input),
+  .record-search-field :deep(.el-select),
+  .record-search-field :deep(.el-date-editor) {
     width: 100% !important;
   }
 }

@@ -204,7 +204,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { listMarkAgentOrderItem, feedbackMarkOrderItem, batchProcessXiaomi, batchDetectXiaomi, batchMarkSuccess } from '@/api/server/markAgent'
+import { listMarkAgentOrderItem, feedbackMarkOrderItem, batchProcessXiaomi, batchMarkSuccess } from '@/api/server/markAgent'
 import {
   MARK_ITEM_PROCESS_STATUS_OPTIONS,
   MARK_ITEM_FEEDBACK_OPTIONS,
@@ -213,9 +213,7 @@ import {
   markItemProcessStatusTagType,
   isXiaomiPlatform as isXiaomiPlatformRow,
   canBatchProcessXiaomi,
-  canBatchDetectXiaomi,
   canBatchSuccessXiaomi,
-  canSelectXiaomiBatchRow,
   XIAOMI_PLATFORM_CODE
 } from '@/utils/markProcessStatus'
 
@@ -243,7 +241,6 @@ const loading = ref(false)
 const exportLoading = ref(false)
 const submittingId = ref(null)
 const batchSubmitting = ref(false)
-const batchDetecting = ref(false)
 const batchSuccessSubmitting = ref(false)
 const selectedRows = ref([])
 const total = ref(0)
@@ -269,7 +266,6 @@ const rowFeedbackOptions = MARK_ITEM_FEEDBACK_OPTIONS
 const processStatusLabel = markItemProcessStatusLabel
 const processStatusTagType = markItemProcessStatusTagType
 const selectedProcessRows = computed(() => (selectedRows.value || []).filter((row) => canBatchProcessXiaomi(row)))
-const selectedDetectRows = computed(() => (selectedRows.value || []).filter((row) => canBatchDetectXiaomi(row)))
 const selectedSuccessRows = computed(() => (selectedRows.value || []).filter((row) => canBatchSuccessXiaomi(row)))
 
 function isXiaomiPlatform(row) {
@@ -298,7 +294,7 @@ function canManualProcess(row) {
   return status === '0' || status === '1' || status === '2' || status === '3'
 }
 function rowSelectable(row) {
-  return canSelectXiaomiBatchRow(row)
+  return canBatchProcessXiaomi(row) || canBatchSuccessXiaomi(row)
 }
 function handleSelectionChange(rows) {
   selectedRows.value = rows || []
@@ -313,7 +309,6 @@ function shouldRunXiaomiAutoRefresh() {
   if (status === '1' || status === '2') return false
   return true
 }
-const xiaomiAutoDetecting = computed(() => shouldRunXiaomiAutoRefresh())
 function shouldRunTdGaopinAutoDetect() {
   if (!hasTdGaopinPending(itemList.value)) return false
   const status = queryParams.processStatus
@@ -397,7 +392,6 @@ function getList() {
       loading.value = false
       setupTencentAutoRefresh()
       setupTdGaopinAutoRefresh()
-      setupXiaomiAutoRefresh()
     })
 }
 function hasTencentPending(items) {
@@ -438,24 +432,6 @@ function setupTdGaopinAutoRefresh() {
     refreshItemList().then(() => {
       if (!shouldRunTdGaopinAutoDetect()) {
         clearTdGaopinAutoRefresh()
-      }
-    })
-  }, 30000)
-}
-let xiaomiRefreshTimer = null
-function clearXiaomiAutoRefresh() {
-  if (xiaomiRefreshTimer) {
-    clearInterval(xiaomiRefreshTimer)
-    xiaomiRefreshTimer = null
-  }
-}
-function setupXiaomiAutoRefresh() {
-  clearXiaomiAutoRefresh()
-  if (!shouldRunXiaomiAutoRefresh()) return
-  xiaomiRefreshTimer = setInterval(() => {
-    refreshItemList().then(() => {
-      if (!shouldRunXiaomiAutoRefresh()) {
-        clearXiaomiAutoRefresh()
       }
     })
   }, 30000)

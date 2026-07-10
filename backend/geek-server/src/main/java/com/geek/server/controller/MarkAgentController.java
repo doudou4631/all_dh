@@ -5,10 +5,12 @@ import com.geek.common.core.controller.BaseController;
 import com.geek.common.core.domain.AjaxResult;
 import com.geek.common.core.page.TableDataInfo;
 import com.geek.common.enums.BusinessType;
+import com.geek.common.utils.ServletUtils;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
+import com.geek.server.domain.dto.MarkAgentPlatformStatusRequest;
 import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderItemBatchIdsRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
@@ -106,9 +108,30 @@ public class MarkAgentController extends BaseController {
     @PreAuthorize("@ss.hasPermi('server:markAgent:order:list')")
     @GetMapping("/item/list")
     public TableDataInfo listOrderItem(MarkAgentOrderItemVO query) {
+        normalizeItemStatusFilter(query);
         startPage();
         List<MarkAgentOrderItemVO> list = markOrderService.selectAgentOrderItemList(query);
         return getDataTable(list);
+    }
+
+    private void normalizeItemStatusFilter(MarkAgentOrderItemVO query) {
+        if (query == null) {
+            return;
+        }
+        String pendingOnly = StringUtils.defaultIfBlank(
+                ServletUtils.getParameter("pendingOnly"),
+                ServletUtils.getParameter("params[pendingOnly]")
+        );
+        if (StringUtils.isNotBlank(pendingOnly)) {
+            query.setPendingOnly(pendingOnly);
+        }
+        String processingOnly = StringUtils.defaultIfBlank(
+                ServletUtils.getParameter("processingOnly"),
+                ServletUtils.getParameter("params[processingOnly]")
+        );
+        if (StringUtils.isNotBlank(processingOnly)) {
+            query.setProcessingOnly(processingOnly);
+        }
     }
 
     @Operation(summary = "代理订单详情")
@@ -165,14 +188,6 @@ public class MarkAgentController extends BaseController {
         return success("自动检测已执行");
     }
 
-    @Operation(summary = "小米待处理订单自动检测")
-    @PreAuthorize("@ss.hasPermi('server:markAgent:order:list')")
-    @PostMapping("/item/autoDetectXiaomi")
-    public AjaxResult autoDetectXiaomi() {
-        markOrderService.processXiaomiPendingItemsAuto();
-        return success("自动检测已执行");
-    }
-
     @Operation(summary = "小米批量处理（开启自动检测）")
     @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
     @Log(title = "小米批量处理", businessType = BusinessType.UPDATE)
@@ -181,20 +196,20 @@ public class MarkAgentController extends BaseController {
         return AjaxResult.success("批量处理已开启", markOrderService.batchProcessXiaomiItems(request.getItemIds()));
     }
 
-    @Operation(summary = "小米批量手动检测")
-    @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
-    @Log(title = "小米批量检测", businessType = BusinessType.UPDATE)
-    @PostMapping("/item/batchDetectXiaomi")
-    public AjaxResult batchDetectXiaomi(@Valid @RequestBody MarkOrderItemBatchIdsRequest request) {
-        return AjaxResult.success("批量检测完成", markOrderService.batchDetectXiaomiItems(request.getItemIds()));
-    }
-
     @Operation(summary = "代理批量标记成功")
     @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
     @Log(title = "代理批量标记成功", businessType = BusinessType.UPDATE)
     @PostMapping("/item/batchMarkSuccess")
     public AjaxResult batchMarkSuccess(@Valid @RequestBody MarkOrderItemBatchIdsRequest request) {
         return AjaxResult.success("批量标记成功", markOrderService.batchMarkSuccessOrderItems(request.getItemIds()));
+    }
+
+    @Operation(summary = "代理批量标记失败")
+    @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
+    @Log(title = "代理批量标记失败", businessType = BusinessType.UPDATE)
+    @PostMapping("/item/batchMarkFailed")
+    public AjaxResult batchMarkFailed(@Valid @RequestBody MarkOrderItemBatchIdsRequest request) {
+        return AjaxResult.success("批量标记失败", markOrderService.batchMarkFailedOrderItems(request.getItemIds()));
     }
 
     @Operation(summary = "代理整单处理（完成/成功/失败）")
@@ -222,5 +237,13 @@ public class MarkAgentController extends BaseController {
     @PostMapping("/quota/adjust")
     public AjaxResult adjustQuota(@Valid @RequestBody MarkAgentPlatformQuotaAdjustRequest request) {
         return AjaxResult.success("操作成功", markOrderService.adjustAgentUserPlatformQuota(request));
+    }
+
+    @Operation(summary = "代理开启/关闭下线平台")
+    @PreAuthorize("@ss.hasPermi('server:pointRecord:add')")
+    @Log(title = "代理平台开关", businessType = BusinessType.UPDATE)
+    @PostMapping("/quota/status")
+    public AjaxResult updatePlatformStatus(@Valid @RequestBody MarkAgentPlatformStatusRequest request) {
+        return AjaxResult.success("操作成功", markOrderService.updateAgentUserPlatformStatus(request));
     }
 }

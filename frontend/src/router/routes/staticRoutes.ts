@@ -1,7 +1,7 @@
 import { RouteItem } from '@/types/route'
 const Layout = () => import('@/layout/index.vue')
 
-// 公共路由,配置详情请参见RouteItem定义
+// ????,???????RouteItem??
 export const constantRoutes: RouteItem[] = [
   {
     path: '/redirect',
@@ -24,12 +24,6 @@ export const constantRoutes: RouteItem[] = [
         name: 'Login',
         component: () => import('@/views/auth/login.vue'),
         hidden: true
-      },
-      {
-        path: 'register',
-        name: 'Register',
-        component: () => import('@/views/auth/register.vue'),
-        hidden: true
       }
     ]
   },
@@ -37,7 +31,7 @@ export const constantRoutes: RouteItem[] = [
     path: '/free-query2',
     component: () => import('@/views/public/free-query2/index.vue'),
     hidden: true,
-    meta: { title: '号码免费查询2' }
+    meta: { title: '??????2' }
   },
   {
     path: '/free_query2',
@@ -48,7 +42,7 @@ export const constantRoutes: RouteItem[] = [
     path: '/free-query-marked',
     component: () => import('@/views/public/free-query-marked/index.vue'),
     hidden: true,
-    meta: { title: '号码免费查询（仅标记结果）' }
+    meta: { title: '?????????????' }
   },
   {
     path: '/free_query_marked',
@@ -65,7 +59,7 @@ export const constantRoutes: RouteItem[] = [
         path: 'notice',
         component: () => import('@/views/server/user/notice.vue'),
         name: 'UserSysNotice',
-        meta: { title: '系统公告', icon: 'message' }
+        meta: { title: '????', icon: 'message' }
       }
     ]
   },
@@ -83,7 +77,7 @@ export const constantRoutes: RouteItem[] = [
         path: '/index',
         component: () => import('@/views/index.vue'),
         name: 'Index',
-        meta: { title: '首页', icon: 'dashboard', affix: true }
+        meta: { title: '??', icon: 'dashboard', affix: true }
       }
     ]
   },
@@ -97,12 +91,12 @@ export const constantRoutes: RouteItem[] = [
         path: 'profile',
         component: () => import('@/views/system/user/profile/index.vue'),
         name: 'Profile',
-        meta: { title: '个人中心', icon: 'user' }
+        meta: { title: '????', icon: 'user' }
       }
     ]
   },
   {
-    path: "/:pathMatch(.*)*",
+    path: '/:pathMatch(.*)*',
     component: () => import('@/views/error/404.vue'),
     hidden: true
   },

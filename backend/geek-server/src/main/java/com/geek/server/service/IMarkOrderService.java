@@ -4,9 +4,12 @@ import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
+import com.geek.server.domain.dto.MarkAgentPlatformStatusRequest;
 import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSendCodeRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSubmitRequest;
 import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
 import com.geek.server.domain.dto.MarkTencentSubmitRequest;
 import com.geek.server.domain.vo.MarkAgentDownstreamSummaryVO;
@@ -15,6 +18,8 @@ import com.geek.server.domain.vo.MarkAgentOrderItemVO;
 import com.geek.server.domain.vo.MarkAgentPlatformQuotaAdjustResultVO;
 import com.geek.server.domain.vo.MarkOrderDetailVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
+import com.geek.server.domain.vo.MarkTdxSecondSendCodeResultVO;
+import com.geek.server.domain.vo.MarkTdxSecondSubmitResultVO;
 import com.geek.server.domain.vo.MarkTencentStatusQueryResultVO;
 import com.geek.server.domain.vo.MarkTencentSubmitResultVO;
 import com.geek.server.domain.vo.MarkWalletSummaryVO;
@@ -31,6 +36,8 @@ public interface IMarkOrderService {
     MarkOrderPrecheckResultVO precheckOrder(MarkOrderCreateRequest request);
     MarkTencentStatusQueryResultVO queryTencentStatus(MarkTencentStatusQueryRequest request);
     MarkTencentSubmitResultVO submitTencent(MarkTencentSubmitRequest request);
+    MarkTdxSecondSendCodeResultVO sendTdxSecondCode(MarkTdxSecondSendCodeRequest request);
+    MarkTdxSecondSubmitResultVO submitTdxSecond(MarkTdxSecondSubmitRequest request);
 
     MarkTencentSubmitResultVO selectMyTencentSubmitResult(Long itemId);
 
@@ -78,13 +85,15 @@ public interface IMarkOrderService {
 
     MarkAgentPlatformQuotaAdjustResultVO adjustAgentUserPlatformQuota(MarkAgentPlatformQuotaAdjustRequest request);
 
+    MarkUserPlatformPrice updateAgentUserPlatformStatus(MarkAgentPlatformStatusRequest request);
+
     void processTdGaopinPendingItemsAuto();
 
     void processXiaomiPendingItemsAuto();
 
     java.util.Map<String, Object> batchProcessXiaomiItems(java.util.List<Long> itemIds);
 
-    java.util.Map<String, Object> batchDetectXiaomiItems(java.util.List<Long> itemIds);
-
     java.util.Map<String, Object> batchMarkSuccessOrderItems(java.util.List<Long> itemIds);
+
+    java.util.Map<String, Object> batchMarkFailedOrderItems(java.util.List<Long> itemIds);
 }

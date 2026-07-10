@@ -4,5 +4,4 @@
 export enum RoutesAlias {
   Home = '/index', // 首页
   Login = '/auth/login', // 登录
-  Register = '/auth/register', // 注册
 }

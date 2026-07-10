@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="app-container mark-user-order-detail-page">
     <el-card shadow="never">
       <template #header>
@@ -13,6 +13,7 @@
             placeholder="订单号/手机号"
             style="width: 200px;"
             @keyup.enter="handleQuery"
+            @clear="handleQuery"
           />
         </el-form-item>
         <el-form-item label="平台">
@@ -26,7 +27,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="处理状态">
-          <el-select v-model="queryParams.orderStatus" clearable placeholder="全部状态" style="width: 130px;">
+          <el-select v-model="queryParams.orderStatus" clearable placeholder="全部状态" style="width: 130px;" @change="handleQuery" @clear="handleQuery">
             <el-option label="待处理" value="0" />
             <el-option label="处理中" value="3" />
             <el-option label="处理完成" value="1" />
@@ -186,7 +187,12 @@ function formatDateTime(value) {
 
 function isAutoProcessingRecord(row) {
   const code = String(row?.platformCode || '').trim().toLowerCase()
-  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz', 'td_gaopin'].includes(code)
+  return ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz'].includes(code)
+}
+
+function isManualPendingStatus3Record(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return ['td_gaopin'].includes(code)
 }
 
 function recordStatusLabel(row) {
@@ -195,7 +201,7 @@ function recordStatusLabel(row) {
   if (auditStatus === '2') return '已拒绝'
   if (auditStatus === '3') return '已打回'
   const itemStatus = String(row?.itemProcessStatus ?? '')
-  if (itemStatus === '3') return '处理中'
+  if (itemStatus === '3') return isManualPendingStatus3Record(row) ? '待处理' : '处理中'
   if (itemStatus === '0') return isAutoProcessingRecord(row) ? '处理中' : '待处理'
   if (itemStatus === '1') return '处理完成'
   if (itemStatus === '2') return '处理失败'
@@ -264,14 +270,17 @@ function normalizeKeyword() {
 }
 
 function handleDateRangeChange(value) {
-  if (Array.isArray(value) && value.length === 2) {
+  queryParams.pageNum = 1
+  if (Array.isArray(value) && value.length === 2 && value[0] && value[1]) {
     queryParams.params = {
       beginTime: value[0],
       endTime: value[1]
     }
+    getList()
     return
   }
   queryParams.params = {}
+  getList()
 }
 
 async function copyText(text) {

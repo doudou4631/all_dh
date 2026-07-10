@@ -85,7 +85,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="keyword != null and keyword != ''">
                 and (
                     mo.order_no like concat('%', #{keyword}, '%')
+                    or mo.request_no like concat('%', #{keyword}, '%')
                     or su.user_name like concat('%', #{keyword}, '%')
+                    or su.nick_name like concat('%', #{keyword}, '%')
                     or exists (
                         select 1
                         from mark_order_item moi
@@ -156,28 +158,41 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="keyword != null and keyword != ''">
                 and (
                     mo.order_no like concat('%', #{keyword}, '%')
+                    or mo.request_no like concat('%', #{keyword}, '%')
                     or su.user_name like concat('%', #{keyword}, '%')
+                    or su.nick_name like concat('%', #{keyword}, '%')
                     or moi.phone like concat('%', #{keyword}, '%')
                 )
             </if>
             <if test="userId != null"> and mo.user_id = #{userId}</if>
             <if test="assignedAgentId != null"> and mo.assigned_agent_id = #{assignedAgentId}</if>
             <if test="platformCode != null and platformCode != ''"> and mo.platform_code = #{platformCode}</if>
-            <if test="orderStatus != null and orderStatus == '0'">
-                and moi.process_status = '0'
-                and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
-            </if>
-            <if test="orderStatus != null and orderStatus == '3'">
+            <if test='orderStatus != null and orderStatus == "0"'>
                 and (
-                    moi.process_status = '3'
+                    (
+                        moi.process_status = '0'
+                        and lower(mo.platform_code) not in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
+                    )
+                    or (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) in ('td_gaopin')
+                    )
+                )
+            </if>
+            <if test='orderStatus != null and orderStatus == "3"'>
+                and (
+                    (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) not in ('td_gaopin')
+                    )
                     or (
                         moi.process_status = '0'
                         and lower(mo.platform_code) in ('tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz')
                     )
                 )
             </if>
-            <if test="orderStatus != null and orderStatus == '1'"> and moi.process_status = '1'</if>
-            <if test="orderStatus != null and orderStatus == '2'"> and moi.process_status = '2'</if>
+            <if test='orderStatus != null and orderStatus == "1"'> and moi.process_status = '1'</if>
+            <if test='orderStatus != null and orderStatus == "2"'> and moi.process_status = '2'</if>
             <if test="auditStatus != null and auditStatus != ''"> and mo.audit_status = #{auditStatus}</if>
             <if test="params != null and params.auditHistoryOnly != null"> and mo.audit_status in ('1','2','3')</if>
             <if test="phone != null and phone != ''"> and moi.phone like concat('%', #{phone}, '%')</if>

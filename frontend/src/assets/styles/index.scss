@@ -139,6 +139,108 @@ aside {
   }
 }
 
+@media (max-width: 768px) {
+  .app-container {
+    padding: 8px !important;
+    overflow-x: hidden;
+  }
+
+  .app-container .el-card {
+    --el-card-border-radius: 0.5rem;
+  }
+
+  .app-container .el-card__body {
+    padding: 10px !important;
+  }
+
+  .app-container .el-form--inline {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .app-container .el-form--inline .el-form-item {
+    width: 100%;
+    margin-right: 0 !important;
+    margin-bottom: 0 !important;
+    align-items: stretch;
+  }
+
+  .app-container .el-form--inline .el-form-item__label {
+    width: 70px;
+    justify-content: flex-start;
+    padding-right: 8px;
+  }
+
+  .app-container .el-form--inline .el-form-item__content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .app-container .el-form--inline .el-input,
+  .app-container .el-form--inline .el-select,
+  .app-container .el-form--inline .el-date-editor,
+  .app-container .el-form--inline .el-textarea {
+    width: 100% !important;
+  }
+
+  .app-container .el-tabs__nav-wrap {
+    overflow-x: auto;
+  }
+
+  .app-container .el-table {
+    min-width: 720px;
+  }
+
+  .app-container .el-table__inner-wrapper,
+  .app-container .el-table__body-wrapper,
+  .app-container .el-table__header-wrapper {
+    overflow-x: auto;
+  }
+
+  .app-container .el-dialog,
+  .el-dialog {
+    width: 94vw !important;
+    margin-top: 8vh !important;
+  }
+
+  .pagination-container {
+    margin-top: 12px;
+    overflow-x: auto;
+    justify-content: flex-start !important;
+  }
+
+  .xiaomi-submit-buttons,
+  .baidu-submit-buttons,
+  .qihu360-submit-buttons,
+  .tencent-submit-buttons {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px !important;
+    width: 100%;
+  }
+
+  .xiaomi-submit-buttons .el-button,
+  .baidu-submit-buttons .el-button,
+  .qihu360-submit-buttons .el-button,
+  .tencent-submit-buttons .el-button {
+    width: 100%;
+    margin-left: 0 !important;
+  }
+
+  .xiaomi-result-table,
+  .baidu-result-table,
+  .qihu360-result-table,
+  .tencent-result-table {
+    min-width: 560px;
+  }
+
+  .record-table {
+    min-width: 860px;
+  }
+}
+
 .components-container {
   margin: 30px 50px;
   position: relative;

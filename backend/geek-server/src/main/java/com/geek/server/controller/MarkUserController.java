@@ -9,6 +9,8 @@ import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkUserNotice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSendCodeRequest;
+import com.geek.server.domain.dto.MarkTdxSecondSubmitRequest;
 import com.geek.server.domain.dto.MarkTencentStatusQueryRequest;
 import com.geek.server.domain.dto.MarkTencentSubmitRequest;
 import com.geek.server.service.IMarkOrderService;
@@ -85,6 +87,22 @@ public class MarkUserController extends BaseController {
     @PostMapping("/tencent/submit")
     public AjaxResult submitTencent(@Valid @RequestBody MarkTencentSubmitRequest request) {
         return AjaxResult.success("提交完成", markOrderService.submitTencent(request));
+    }
+
+    @Operation(summary = "Taidixiong二次发送短信验证码")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:add')")
+    @Log(title = "Taidixiong二次发送短信验证码", businessType = BusinessType.OTHER)
+    @PostMapping("/tdxSecond/sendCode")
+    public AjaxResult sendTdxSecondCode(@Valid @RequestBody MarkTdxSecondSendCodeRequest request) {
+        return AjaxResult.success("短信验证码已发送", markOrderService.sendTdxSecondCode(request));
+    }
+
+    @Operation(summary = "Taidixiong二次申诉提交")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:add')")
+    @Log(title = "Taidixiong二次申诉提交", businessType = BusinessType.OTHER)
+    @PostMapping("/tdxSecond/submit")
+    public AjaxResult submitTdxSecond(@Valid @RequestBody MarkTdxSecondSubmitRequest request) {
+        return AjaxResult.success("提交完成", markOrderService.submitTdxSecond(request));
     }
 
     @Operation(summary = "腾讯提交结果查询")

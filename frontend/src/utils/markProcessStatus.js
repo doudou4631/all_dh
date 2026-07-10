@@ -1,5 +1,7 @@
 export const AUTO_PROCESSING_PLATFORMS = ['tencent_mark', 'tengxun', 'tencent', 'tx', 'txwz']
 
+export const MANUAL_PENDING_PROCESS_STATUS3_PLATFORMS = ['td_gaopin']
+
 export const XIAOMI_PLATFORM_CODE = 'xiaomi'
 
 export const MARK_ITEM_PROCESS_STATUS_OPTIONS = [
@@ -19,6 +21,11 @@ export function isAutoProcessingPlatform(row) {
   return AUTO_PROCESSING_PLATFORMS.includes(code)
 }
 
+export function isManualPendingStatus3Platform(row) {
+  const code = String(row?.platformCode || '').trim().toLowerCase()
+  return MANUAL_PENDING_PROCESS_STATUS3_PLATFORMS.includes(code)
+}
+
 export function isXiaomiPlatform(row) {
   const code = String(row?.platformCode || '').trim().toLowerCase()
   return code === XIAOMI_PLATFORM_CODE
@@ -26,6 +33,7 @@ export function isXiaomiPlatform(row) {
 
 export function markItemProcessStatusLabel(status, row) {
   const code = String(status ?? '')
+  if (code === '3' && row && isManualPendingStatus3Platform(row)) return '待处理'
   if (code === '3') return '处理中'
   if (code === '0' && row && isAutoProcessingPlatform(row)) return '处理中'
   const map = { '0': '待处理', '1': '处理完成', '2': '处理失败', '3': '处理中' }
@@ -36,6 +44,7 @@ export function markItemProcessStatusTagType(status, row) {
   const code = String(status ?? '')
   if (code === '1') return 'success'
   if (code === '2') return 'danger'
+  if (code === '3' && row && isManualPendingStatus3Platform(row)) return 'info'
   if (code === '3') return 'warning'
   if (code === '0' && row && isAutoProcessingPlatform(row)) return 'warning'
   return 'info'
@@ -49,12 +58,18 @@ export function buildMarkItemProcessStatusQuery(rawQuery = {}) {
     platformCode: rawQuery.platformCode,
     platformCodes: rawQuery.platformCodes,
     processStatus: null,
+    pendingOnly: null,
+    processingOnly: null,
     params: { ...(rawQuery.params || {}) }
   }
   const statusFilter = String(rawQuery.processStatus ?? '').trim()
   if (statusFilter === 'processing' || statusFilter === '3') {
+    params.processStatus = '3'
+    params.processingOnly = '1'
     params.params.processingOnly = '1'
   } else if (statusFilter === 'pending' || statusFilter === '0') {
+    params.processStatus = '0'
+    params.pendingOnly = '1'
     params.params.pendingOnly = '1'
   } else if (statusFilter === '1' || statusFilter === '2') {
     params.processStatus = statusFilter
@@ -66,17 +81,13 @@ export function canBatchProcessXiaomi(row) {
   return isXiaomiPlatform(row) && String(row?.processStatus || '0') === '0'
 }
 
-export function canBatchDetectXiaomi(row) {
-  return isXiaomiPlatform(row) && String(row?.processStatus || '0') === '3'
-}
-
 export function canBatchSuccessXiaomi(row) {
   const status = String(row?.processStatus || '0')
   return isXiaomiPlatform(row) && (status === '0' || status === '2' || status === '3')
 }
 
 export function canSelectXiaomiBatchRow(row) {
-  return canBatchProcessXiaomi(row) || canBatchDetectXiaomi(row) || canBatchSuccessXiaomi(row)
+  return canBatchProcessXiaomi(row) || canBatchSuccessXiaomi(row)
 }
 
 /** @deprecated use canBatchProcessXiaomi */
