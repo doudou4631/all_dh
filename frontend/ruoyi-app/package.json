@@ -1,0 +1,28 @@
+{
+  "name": "mark-user-ruoyi-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:h5": "cross-env UNI_INPUT_DIR=. uni",
+    "build:h5": "cross-env UNI_INPUT_DIR=. uni build"
+  },
+  "dependencies": {
+    "@dcloudio/uni-app": "3.0.0-5010520260709002",
+    "@dcloudio/uni-components": "3.0.0-5010520260709002",
+    "@dcloudio/uni-h5": "3.0.0-5010520260709002",
+    "pinia": "^3.0.4",
+    "vue": "^3.4.21",
+    "vue-i18n": "^9.1.9"
+  },
+  "devDependencies": {
+    "@dcloudio/types": "^3.4.8",
+    "@dcloudio/uni-cli-shared": "3.0.0-5010520260709002",
+    "@dcloudio/vite-plugin-uni": "3.0.0-5010520260709002",
+    "@vue/runtime-core": "^3.4.21",
+    "cross-env": "^10.0.0",
+    "rollup": "4.14.3",
+    "sass": "^1.97.3",
+    "vite": "5.2.8"
+  }
+}

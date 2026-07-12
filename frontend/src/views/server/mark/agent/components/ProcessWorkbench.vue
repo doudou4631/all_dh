@@ -86,17 +86,6 @@
           </el-button>
           <el-button
             v-if="isXiaomiWorkbench"
-            type="primary"
-            plain
-            :disabled="!selectedDetectRows.length || batchDetecting"
-            :loading="batchDetecting"
-            v-hasPermi="['server:markAgent:item:feedback']"
-            @click="handleBatchDetect"
-          >
-            批量检测
-          </el-button>
-          <el-button
-            v-if="isXiaomiWorkbench"
             type="success"
             plain
             :disabled="!selectedSuccessRows.length || batchSuccessSubmitting"
@@ -302,13 +291,6 @@ function handleSelectionChange(rows) {
 function hasXiaomiProcessingItems(items) {
   return (items || []).some((row) => isXiaomiPlatform(row) && String(row?.processStatus || '0') === '3')
 }
-function shouldRunXiaomiAutoRefresh() {
-  if (!isXiaomiWorkbench.value) return false
-  if (!hasXiaomiProcessingItems(itemList.value)) return false
-  const status = queryParams.processStatus
-  if (status === '1' || status === '2') return false
-  return true
-}
 function shouldRunTdGaopinAutoDetect() {
   if (!hasTdGaopinPending(itemList.value)) return false
   const status = queryParams.processStatus
@@ -329,9 +311,6 @@ const autoDetectBanner = computed(() => {
   }
   if (tdGaopinAutoDetecting.value) {
     return '泰迪高频后台每30秒自动检测，本页面同步刷新状态'
-  }
-  if (xiaomiAutoDetecting.value) {
-    return '已开启自动检测，每30秒查询号码状态；无标记自动成功，有标记保持处理中'
   }
   return ''
 })
@@ -453,27 +432,6 @@ function handleBatchMarkSubmitted() {
     getList()
   }).catch(() => {}).finally(() => {
     batchSubmitting.value = false
-  })
-}
-function handleBatchDetect() {
-  const itemIds = selectedDetectRows.value.map((row) => row.id).filter(Boolean)
-  if (!itemIds.length) {
-    proxy.$modal.msgWarning('请先勾选处理中的号码')
-    return
-  }
-  proxy.$modal.confirm(`确认对选中的 ${itemIds.length} 条号码执行批量检测？将立即查询标记状态。`).then(() => {
-    batchDetecting.value = true
-    return batchDetectXiaomi({ itemIds })
-  }).then((res) => {
-    const detectedCount = res?.data?.detectedCount ?? 0
-    const successCount = res?.data?.successCount ?? 0
-    const stillMarkedCount = res?.data?.stillMarkedCount ?? 0
-    const skippedCount = res?.data?.skippedCount ?? 0
-    proxy.$modal.msgSuccess(`批量检测完成：检测 ${detectedCount} 条，成功 ${successCount} 条，仍有标记 ${stillMarkedCount} 条${skippedCount ? `，跳过 ${skippedCount} 条` : ''}`)
-    selectedRows.value = []
-    getList()
-  }).catch(() => {}).finally(() => {
-    batchDetecting.value = false
   })
 }
 function handleBatchSuccess() {
@@ -639,7 +597,6 @@ onMounted(() => {
 onBeforeUnmount(() => {
   clearTencentAutoRefresh()
   clearTdGaopinAutoRefresh()
-  clearXiaomiAutoRefresh()
 })
 </script>
 

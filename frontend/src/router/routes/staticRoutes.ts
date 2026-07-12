@@ -1,7 +1,7 @@
 import { RouteItem } from '@/types/route'
 const Layout = () => import('@/layout/index.vue')
 
-// ????,???????RouteItem??
+// 公共路由，所有用户都可以访问
 export const constantRoutes: RouteItem[] = [
   {
     path: '/redirect',
@@ -31,7 +31,7 @@ export const constantRoutes: RouteItem[] = [
     path: '/free-query2',
     component: () => import('@/views/public/free-query2/index.vue'),
     hidden: true,
-    meta: { title: '??????2' }
+    meta: { title: '免费查询2' }
   },
   {
     path: '/free_query2',
@@ -42,7 +42,7 @@ export const constantRoutes: RouteItem[] = [
     path: '/free-query-marked',
     component: () => import('@/views/public/free-query-marked/index.vue'),
     hidden: true,
-    meta: { title: '?????????????' }
+    meta: { title: '免费查询标记结果' }
   },
   {
     path: '/free_query_marked',
@@ -59,7 +59,7 @@ export const constantRoutes: RouteItem[] = [
         path: 'notice',
         component: () => import('@/views/server/user/notice.vue'),
         name: 'UserSysNotice',
-        meta: { title: '????', icon: 'message' }
+        meta: { title: '系统通知', icon: 'message' }
       }
     ]
   },
@@ -77,7 +77,7 @@ export const constantRoutes: RouteItem[] = [
         path: '/index',
         component: () => import('@/views/index.vue'),
         name: 'Index',
-        meta: { title: '??', icon: 'dashboard', affix: true }
+        meta: { title: '首页', icon: 'dashboard', affix: true }
       }
     ]
   },
@@ -91,7 +91,7 @@ export const constantRoutes: RouteItem[] = [
         path: 'profile',
         component: () => import('@/views/system/user/profile/index.vue'),
         name: 'Profile',
-        meta: { title: '????', icon: 'user' }
+        meta: { title: '个人中心', icon: 'user' }
       }
     ]
   },

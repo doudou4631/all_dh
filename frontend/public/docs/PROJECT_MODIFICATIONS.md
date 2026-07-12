@@ -135,14 +135,9 @@
 |------|----------|
 | `frontend/src/views/server/mark/admin/template.vue` | 绑定编码 + 平台备注 + 展示名称 |
 
-### 4.4 页面生成脚本（Windows UTF-8）
+### 4.4 历史页面生成脚本说明
 
-| 脚本 | 用途 |
-|------|------|
-| `tools/gen_user_tencent.py` | 生成/更新 `tencent.vue` |
-| `tools/gen_user_xiaomi.py` | 生成/更新 `xiaomi.vue` |
-| `tools/gen_user_baidu.py` | 生成/更新 `baidu.vue` |
-| `tools/gen_user_qihu360.py` | 生成/更新 `qihu360.vue` |
+原 `tools/` 目录中的页面生成、修复、检查脚本均为一次性辅助脚本，已在 2026-07-12 清理删除；后续以前端源码和 Git 历史为准。
 
 ---
 
@@ -260,7 +255,6 @@
 
 脚本：
 
-- `tools/fix_and_start.ps1` — 检查 MySQL、启动后端/前端
 - `backend/rebuild_and_restart.ps1` — 编译并重启后端
 
 ### 10.3 测试账号

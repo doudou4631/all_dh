@@ -216,7 +216,16 @@ sudo find /www/backup/deploy -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm
 - `db-backups/<TS>/verifynum_full.sql.gz` 存在且文件大小正常
 - 若有关键表备份，`db-backups/<TS>/key_tables.sql(.gz)` 也已下载完成
 ## 10. 全量备份执行记录（按时间倒序）
-### 10.1 20260609_032942
+### 10.1 20260712_121417
+- 备份策略：按 5.3 执行（整库 + 关键表 + 元信息）
+- 服务器目录：`/www/backup/deploy/20260712_121417`
+- 本地目录：`db-backups/20260712_121417`
+- 本地落盘文件：
+  - `verifynum_full.sql.gz`（8559464 bytes）
+  - `key_tables.sql.gz`（13975 bytes）
+  - `backup-meta.txt`（81 bytes）
+- 完整性校验：`gzip -t` 已通过（`verifynum_full.sql.gz`、`key_tables.sql.gz`）
+### 10.2 20260609_032942
 - 备份策略：按 5.3 执行（整库 + 关键表 + 元信息）
 - 服务器目录：`/www/backup/deploy/20260609_032942`
 - 本地目录：`db-backups/20260609_032942`
@@ -225,7 +234,7 @@ sudo find /www/backup/deploy -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm
   - `key_tables.sql.gz`（11525 bytes）
   - `backup-meta.txt`（81 bytes）
 - 完整性校验：`gzip -t` 已通过（`verifynum_full.sql.gz`、`key_tables.sql.gz`）
-### 10.2 20260609_030137
+### 10.3 20260609_030137
 - 备份策略：按 5.3 执行（整库 + 关键表 + 元信息）
 - 服务器目录：`/www/backup/deploy/20260609_030137`
 - 本地目录：`db-backups/20260609_030137`
