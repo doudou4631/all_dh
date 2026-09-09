@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkPlatformMappingMapper">
+  <resultMap id="MappingResult" type="MarkPlatformMapping">
+    <id property="id" column="id"/><result property="sourcePlatformName" column="source_platform_name"/>
+    <result property="sourcePlatformCode" column="source_platform_code"/><result property="sourceEnabled" column="source_enabled"/>
+    <result property="targetPlatformName" column="target_platform_name"/><result property="targetPlatformCode" column="target_platform_code"/>
+    <result property="targetEnabled" column="target_enabled"/><result property="mappingEnabled" column="mapping_enabled"/>
+    <result property="sortNum" column="sort_num"/>
+  </resultMap>
+  <sql id="columns">select id, source_platform_name, source_platform_code, source_enabled, target_platform_name, target_platform_code, target_enabled, mapping_enabled, sort_num from mark_platform_mapping</sql>
+  <select id="selectList" resultMap="MappingResult"><include refid="columns"/><where>
+    <if test="sourcePlatformCode != null and sourcePlatformCode != ''">and source_platform_code = #{sourcePlatformCode}</if>
+    <if test="targetPlatformCode != null and targetPlatformCode != ''">and target_platform_code = #{targetPlatformCode}</if>
+  </where> order by sort_num, source_platform_code, target_platform_code</select>
+  <select id="selectById" parameterType="long" resultMap="MappingResult"><include refid="columns"/> where id = #{id}</select>
+  <insert id="insert" parameterType="MarkPlatformMapping" useGeneratedKeys="true" keyProperty="id">insert into mark_platform_mapping (source_platform_name, source_platform_code, source_enabled, target_platform_name, target_platform_code, target_enabled, mapping_enabled, sort_num) values (#{sourcePlatformName}, #{sourcePlatformCode}, #{sourceEnabled}, #{targetPlatformName}, #{targetPlatformCode}, #{targetEnabled}, #{mappingEnabled}, #{sortNum})</insert>
+  <update id="update" parameterType="MarkPlatformMapping">update mark_platform_mapping set source_platform_name=#{sourcePlatformName}, source_platform_code=#{sourcePlatformCode}, target_platform_name=#{targetPlatformName}, target_platform_code=#{targetPlatformCode}, sort_num=#{sortNum} where id=#{id}</update>
+  <delete id="deleteById">delete from mark_platform_mapping where id=#{id}</delete>
+  <update id="updateSourceEnabled">update mark_platform_mapping set source_enabled=#{enabled} where id=#{id}</update>
+  <update id="updateTargetEnabled">update mark_platform_mapping set target_enabled=#{enabled} where id=#{id}</update>
+  <update id="updateSourceName">update mark_platform_mapping set source_platform_name=#{name} where source_platform_code=#{code}</update>
+  <update id="updateTargetName">update mark_platform_mapping set target_platform_name=#{name} where target_platform_code=#{code}</update>
+  <update id="updateSourceSort">update mark_platform_mapping set sort_num=#{sortNum} where source_platform_code=#{code}</update>
+  <update id="updateMappingEnabled">update mark_platform_mapping set mapping_enabled=#{enabled} where id=#{id}</update>
+</mapper>

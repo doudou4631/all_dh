@@ -1,0 +1,1 @@
+const t="number-query-single-result-delay-seconds",S=10,_=60;function n(e){const E=Number(e);return Number.isFinite(E)?Math.min(60,Math.max(0,Math.round(E))):10}function s(){const e=localStorage.getItem(t);return e===null?10:n(e)}function r(e){const E=n(e);return localStorage.setItem(t,String(E)),E}export{S as D,_ as M,s as g,r as s};

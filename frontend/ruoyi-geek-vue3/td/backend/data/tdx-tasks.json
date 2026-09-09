@@ -1,0 +1,475 @@
+[
+  {
+    "id": "tdx-task-1785861892784",
+    "phone": "13035788697",
+    "line": "line1",
+    "username": "tdx-integration",
+    "companyname": "tdx二次申诉",
+    "businessType": "tdx",
+    "orderstatenote": "168512",
+    "batchLabel": "tdx二次申诉",
+    "orderId": "2084676441692012544",
+    "wxCode": "0f2ynFkl2jvXbi4ezoll2u2YQF2ynFkt",
+    "loginToken": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI1NDIyOTUiLCJ1c2VySWQiOjU0MjI5NSwicGhvbmUiOiIxMzAzNTc4ODY5NyIsIm5pY2tOYW1lIjoiIiwiZXhwaXJlVGltZSI6MTc4NjcyNTg5Mjg4MCwiaWF0IjoxNzg1ODYxODkyLCJleHAiOjE3ODY3MjU4OTJ9.X5O_db70BSHreGsONZDgnuQ_7qtg6MyyVAukgN7UXWtF8Y5jrWDVnXimLj4SuKgnJC4jogU02mHAlwzVtagJIw",
+    "status": "completed",
+    "currentStep": "申诉已处理完成",
+    "skipCheckAppletPhone": true,
+    "createdAt": "2026-08-05 00:44:52",
+    "updatedAt": "2026-08-05 00:44:56",
+    "failreason": "",
+    "notes": [
+      {
+        "title": "提交后自动执行申诉",
+        "description": "提交后已自动创建/关联任务并完成申诉处理。",
+        "meta": "2026-08-05 00:44:56"
+      },
+      {
+        "title": "任务已创建",
+        "description": "已为 13035788697 创建 tdx二次申诉 任务。",
+        "meta": "2026-08-05 00:44:52"
+      },
+      {
+        "title": "会话结果",
+        "description": "上游会话准备成功，正在立即执行补交申诉。",
+        "meta": "已就绪"
+      }
+    ],
+    "result": {
+      "tokenSaved": true,
+      "orderId": "2084676441692012544",
+      "wxCode": "0f2ynFkl2jvXbi4ezoll2u2YQF2ynFkt",
+      "execution": {
+        "ok": true,
+        "mode": "live",
+        "result": {
+          "status": "completed",
+          "message": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。",
+          "orderId": "2084676441692012544",
+          "wxCode": "0f2ynFkl2jvXbi4ezoll2u2YQF2ynFkt",
+          "sessionId": 1411177,
+          "progress": {
+            "id": "6a72170848b6f30001c1493e",
+            "phone": "13035788697",
+            "status": 4,
+            "statusDesc": "已处理",
+            "createTime": "2026-08-05",
+            "auditTime": "2026-08-05",
+            "opinion": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。"
+          },
+          "refundSuggested": false,
+          "failureReason": "",
+          "steps": [
+            {
+              "key": "answers-start",
+              "title": "Create questionnaire session",
+              "description": "Create a Teddy questionnaire session for 13035788697 and bind it to 2084676441692012544.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/start",
+              "meta": "live / answers-start",
+              "status": "completed",
+              "note": "Questionnaire session created: 1411177",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "check-applet-phone",
+              "title": "Verify phone binding",
+              "description": "Check whether the current wxCode/openId can continue the appeal flow.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/forward/inter/checkAppletPhone",
+              "meta": "live / check-applet-phone",
+              "status": "completed",
+              "note": "Skipped during admin resubmit because SMS precheck already passed.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "submit-answers",
+              "title": "Submit questionnaire answers",
+              "description": "Replay the configured answers in sequence and advance the questionnaire.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/submit-and-next",
+              "meta": "live / submit-answers",
+              "status": "completed",
+              "note": "The fixed questionnaire answers were submitted successfully.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "upload-evidence",
+              "title": "Upload evidence image",
+              "description": "Upload the placeholder evidence image for the attachment step.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/submit-and-next",
+              "meta": "live / upload-evidence",
+              "status": "completed",
+              "note": "The placeholder evidence image was uploaded successfully.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "query-progress",
+              "title": "Query processing progress",
+              "description": "Poll the upstream progress endpoint and write back the latest result.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/forward/inter/queryAppletProgressList",
+              "meta": "live / query-progress",
+              "status": "completed",
+              "note": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。",
+              "statusLabel": "Completed"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "id": "tdx-task-1785861606584",
+    "phone": "15315719563",
+    "line": "line1",
+    "username": "tdx-integration",
+    "companyname": "tdx二次申诉",
+    "businessType": "tdx",
+    "orderstatenote": "555810",
+    "batchLabel": "tdx二次申诉",
+    "orderId": "2084676441692012544",
+    "wxCode": "0a2y5Fkl2zyWbi4C6Inl2O0pdb2y5Fk4",
+    "loginToken": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI1NDIyOTMiLCJ1c2VySWQiOjU0MjI5MywicGhvbmUiOiIxNTMxNTcxOTU2MyIsIm5pY2tOYW1lIjoiIiwiZXhwaXJlVGltZSI6MTc4NjcyNTYwNzAyOCwiaWF0IjoxNzg1ODYxNjA3LCJleHAiOjE3ODY3MjU2MDd9.8WGpZEdRB3WDKrt-6ETKd_1TTCWxzDDxQDy1gf43suZFXrC5473D-iBjFUQOuRsJMGMvTeClqldzZFqPbU8P8g",
+    "status": "completed",
+    "currentStep": "申诉已处理完成",
+    "skipCheckAppletPhone": true,
+    "createdAt": "2026-08-05 00:40:06",
+    "updatedAt": "2026-08-05 00:40:12",
+    "failreason": "",
+    "notes": [
+      {
+        "title": "提交后自动执行申诉",
+        "description": "提交后已自动创建/关联任务并完成申诉处理。",
+        "meta": "2026-08-05 00:40:12"
+      },
+      {
+        "title": "任务已创建",
+        "description": "已为 15315719563 创建 tdx二次申诉 任务。",
+        "meta": "2026-08-05 00:40:06"
+      },
+      {
+        "title": "会话结果",
+        "description": "上游会话准备成功，正在立即执行补交申诉。",
+        "meta": "已就绪"
+      }
+    ],
+    "result": {
+      "tokenSaved": true,
+      "orderId": "2084676441692012544",
+      "wxCode": "0a2y5Fkl2zyWbi4C6Inl2O0pdb2y5Fk4",
+      "execution": {
+        "ok": true,
+        "mode": "live",
+        "result": {
+          "status": "completed",
+          "message": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。",
+          "orderId": "2084676441692012544",
+          "wxCode": "0a2y5Fkl2zyWbi4C6Inl2O0pdb2y5Fk4",
+          "sessionId": 1411169,
+          "progress": {
+            "id": "6a7215ec3872660001c047be",
+            "phone": "15315719563",
+            "status": 4,
+            "statusDesc": "已处理",
+            "createTime": "2026-08-05",
+            "auditTime": "2026-08-05",
+            "opinion": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。"
+          },
+          "refundSuggested": false,
+          "failureReason": "",
+          "steps": [
+            {
+              "key": "answers-start",
+              "title": "Create questionnaire session",
+              "description": "Create a Teddy questionnaire session for 15315719563 and bind it to 2084676441692012544.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/start",
+              "meta": "live / answers-start",
+              "status": "completed",
+              "note": "Questionnaire session created: 1411169",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "check-applet-phone",
+              "title": "Verify phone binding",
+              "description": "Check whether the current wxCode/openId can continue the appeal flow.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/forward/inter/checkAppletPhone",
+              "meta": "live / check-applet-phone",
+              "status": "completed",
+              "note": "Skipped during admin resubmit because SMS precheck already passed.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "submit-answers",
+              "title": "Submit questionnaire answers",
+              "description": "Replay the configured answers in sequence and advance the questionnaire.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/submit-and-next",
+              "meta": "live / submit-answers",
+              "status": "completed",
+              "note": "The fixed questionnaire answers were submitted successfully.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "upload-evidence",
+              "title": "Upload evidence image",
+              "description": "Upload the placeholder evidence image for the attachment step.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/answers/submit-and-next",
+              "meta": "live / upload-evidence",
+              "status": "completed",
+              "note": "The placeholder evidence image was uploaded successfully.",
+              "statusLabel": "Completed"
+            },
+            {
+              "key": "query-progress",
+              "title": "Query processing progress",
+              "description": "Poll the upstream progress endpoint and write back the latest result.",
+              "endpoint": "https://customer-apply-diversion.teddymobile.cn/api/v1/forward/inter/queryAppletProgressList",
+              "meta": "live / query-progress",
+              "status": "completed",
+              "note": "泰迪未来标记已取消，部分手机端可能需要3-5个工作日的同步时间，请耐心等待。",
+              "statusLabel": "Completed"
+            }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "id": "tdx-task-1785860587318",
+    "taskType": "sms-receive-session-retry",
+    "flow": "sms-receive",
+    "tdxIntegration": true,
+    "liveUserId": 1,
+    "phone": "15315719563",
+    "username": "tdx-integration",
+    "companyname": "tdx二次申诉",
+    "businessType": "tdx",
+    "orderstatenote": "819955",
+    "batchLabel": "tdx二次申诉",
+    "orderDealId": 0,
+    "orderpicinumber": "",
+    "status": "failed",
+    "currentStep": "后台自动处理失败，请管理员查看详情。",
+    "createdAt": "2026-08-05 00:23:07",
+    "updatedAt": "2026-08-05 00:24:25",
+    "failreason": "申诉处理失败，请管理员查看详情。",
+    "result": {
+      "status": "failed",
+      "message": "申诉处理失败，请管理员查看详情。",
+      "sessionRetry": true
+    },
+    "retryContext": {
+      "mode": "save-login-token",
+      "phone": "15315719563",
+      "orderId": "2084676441692012544",
+      "wxCode": "0a2KlXZv34jAw73Qri3w32KNgY0KlXZx",
+      "loginToken": "eyJhbGciOiJIUzUxMiJ9.eyJzdWIiOiI1NDIyOTMiLCJ1c2VySWQiOjU0MjI5MywicGhvbmUiOiIxNTMxNTcxOTU2MyIsIm5pY2tOYW1lIjoiIiwiZXhwaXJlVGltZSI6MTc4NjcyNDU4Nzc0OCwiaWF0IjoxNzg1ODYwNTg3LCJleHAiOjE3ODY3MjQ1ODd9.B-QSCJBAc6PHOSAV6AQuuoxDJt2nq-CJUU_kpTHFw-3d9Yv5Z8h8g9gjG92obTSrIDvO5k_HB8Va3e814URFgg",
+      "line": "line1"
+    },
+    "sessionRetry": {
+      "status": "failed",
+      "attempts": 6,
+      "maxAttempts": 6,
+      "nextRetryAtMs": 0,
+      "nextRetryAt": "",
+      "lastAttemptAtMs": 1785860665402,
+      "lastAttemptAt": "2026-08-05 00:24:25",
+      "lastError": "短信登录成功，但 token 保存失败：RIGHTCONTROL_DB_PASSWORD is not configured",
+      "lastFailureStep": "save-login-token",
+      "qmfNewOrderOpened": true
+    },
+    "debug": {
+      "lastSessionFailure": {
+        "detail": "短信登录成功，但 token 保存失败：RIGHTCONTROL_DB_PASSWORD is not configured",
+        "failureStep": "save-login-token",
+        "updatedAt": "2026-08-05 00:24:25"
+      },
+      "lastQueuedAt": "2026-08-05 00:23:07"
+    },
+    "notes": [
+      {
+        "title": "后台自动重试失败",
+        "description": "多次处理后仍未恢复，请管理员查看详情。",
+        "meta": "2026-08-05 00:24:25"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 6 次后台会话重试。",
+        "meta": "2026-08-05 00:24:25"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游授权/会话仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-05 00:24:10"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 5 次后台会话重试。",
+        "meta": "2026-08-05 00:24:10"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游授权/会话仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-05 00:23:55"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 4 次后台会话重试。",
+        "meta": "2026-08-05 00:23:55"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游授权/会话仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-05 00:23:40"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 3 次后台会话重试。",
+        "meta": "2026-08-05 00:23:40"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游授权/会话仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-05 00:23:25"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 2 次后台会话重试。",
+        "meta": "2026-08-05 00:23:25"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游授权/会话仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-05 00:23:10"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 1 次后台会话重试。",
+        "meta": "2026-08-05 00:23:10"
+      },
+      {
+        "title": "任务已创建",
+        "description": "已为 15315719563 创建 tdx二次申诉 后台重试任务。",
+        "meta": "2026-08-05 00:23:07"
+      },
+      {
+        "title": "上游异常自动重试排队",
+        "description": "检测到上游授权/会话异常，系统将自动在后台重试。",
+        "meta": "2026-08-05 00:23:07"
+      }
+    ]
+  },
+  {
+    "id": "tdx-task-1785858181313",
+    "taskType": "sms-receive-session-retry",
+    "flow": "sms-receive",
+    "tdxIntegration": true,
+    "liveUserId": 1,
+    "phone": "15315719563",
+    "username": "tdx-integration",
+    "companyname": "tdx二次申诉",
+    "businessType": "tdx",
+    "orderstatenote": "007356",
+    "batchLabel": "tdx二次申诉",
+    "orderDealId": 0,
+    "orderpicinumber": "",
+    "status": "failed",
+    "currentStep": "后台自动处理失败，请管理员查看详情。",
+    "createdAt": "2026-08-04 23:43:01",
+    "updatedAt": "2026-08-04 23:44:19",
+    "failreason": "申诉处理失败，请管理员查看详情。",
+    "result": {
+      "status": "failed",
+      "message": "申诉处理失败，请管理员查看详情。",
+      "sessionRetry": true
+    },
+    "retryContext": null,
+    "sessionRetry": {
+      "status": "failed",
+      "attempts": 6,
+      "maxAttempts": 6,
+      "nextRetryAtMs": 0,
+      "nextRetryAt": "",
+      "lastAttemptAtMs": 1785858259389,
+      "lastAttemptAt": "2026-08-04 23:44:19",
+      "lastError": "TDX live mode is not ready: 线路1(QMF) username is required in live mode; 线路1(QMF) password is required in live mode; 线路2(登峰) username is required in live mode; 线路2(登峰) password is required in live mode",
+      "lastFailureStep": "create-session-exception",
+      "qmfNewOrderOpened": false
+    },
+    "debug": {
+      "lastSessionFailure": {
+        "detail": "TDX live mode is not ready: 线路1(QMF) username is required in live mode; 线路1(QMF) password is required in live mode; 线路2(登峰) username is required in live mode; 线路2(登峰) password is required in live mode",
+        "failureStep": "create-session-exception",
+        "updatedAt": "2026-08-04 23:44:19"
+      },
+      "lastQueuedAt": "2026-08-04 23:43:01"
+    },
+    "notes": [
+      {
+        "title": "后台自动重试失败",
+        "description": "多次处理后仍未恢复，请管理员查看详情。",
+        "meta": "2026-08-04 23:44:19"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 6 次后台会话重试。",
+        "meta": "2026-08-04 23:44:19"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-04 23:44:04"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 5 次后台会话重试。",
+        "meta": "2026-08-04 23:44:04"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-04 23:43:49"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 4 次后台会话重试。",
+        "meta": "2026-08-04 23:43:49"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-04 23:43:34"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 3 次后台会话重试。",
+        "meta": "2026-08-04 23:43:34"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-04 23:43:19"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 2 次后台会话重试。",
+        "meta": "2026-08-04 23:43:19"
+      },
+      {
+        "title": "后台自动重试继续排队",
+        "description": "上游仍未恢复，系统将继续后台处理。",
+        "meta": "2026-08-04 23:43:04"
+      },
+      {
+        "title": "后台自动重试开始",
+        "description": "正在执行第 1 次后台会话重试。",
+        "meta": "2026-08-04 23:43:04"
+      },
+      {
+        "title": "任务已创建",
+        "description": "已为 15315719563 创建 tdx二次申诉 后台重试任务。",
+        "meta": "2026-08-04 23:43:01"
+      },
+      {
+        "title": "上游异常自动重试排队",
+        "description": "检测到上游授权/会话异常，系统将自动在后台重试。",
+        "meta": "2026-08-04 23:43:01"
+      }
+    ]
+  }
+]

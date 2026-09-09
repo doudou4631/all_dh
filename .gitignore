@@ -1,0 +1,24 @@
+# Local CodeGraph state
+.codegraph/
+
+# Local browser profiles, task artifacts, logs, and backups
+.edge-online-check/
+.edge-query-page-check/
+.edge-query-tabs-check/
+.local-logs/
+.tmp/
+backups/
+docs/正式服务器信息.md
+
+# IDE and build output
+**/.idea/
+**/target/
+**/node_modules/
+**/dist/
+**/*.log
+
+# Local credentials and deployment-only configuration
+frontend/ruoyi-geek-vue3/td/backend/.env
+backend/geek-admin/src/main/resources/application-auth.yml
+backend/geek-admin/src/main/resources/application-data.yml
+backend/geek-admin/src/main/resources/application.yml

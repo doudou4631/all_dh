@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS `free_query_record` (
+  `id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '记录ID',
+  `visitor_key` varchar(128) NOT NULL COMMENT '访客唯一标识，设备优先、IP兜底',
+  `ip_addr` varchar(64) DEFAULT NULL COMMENT '访问IP',
+  `user_agent` varchar(500) DEFAULT NULL COMMENT '浏览器设备信息',
+  `query_phone` varchar(32) DEFAULT NULL COMMENT '查询号码',
+  `result_details` text DEFAULT NULL COMMENT '命中平台与标记类型JSON',
+  `query_status` char(1) NOT NULL COMMENT '查询状态（0成功 1失败）',
+  `has_result` char(1) NOT NULL COMMENT '是否查到标记（0否 1是）',
+  `platform_total` int(11) NOT NULL DEFAULT 0 COMMENT '查询平台总数',
+  `platform_success` int(11) NOT NULL DEFAULT 0 COMMENT '成功响应平台数',
+  `marked_count` int(11) NOT NULL DEFAULT 0 COMMENT '命中平台数',
+  `response_time` bigint(20) NOT NULL DEFAULT 0 COMMENT '查询耗时（毫秒）',
+  `error_message` varchar(500) DEFAULT NULL COMMENT '失败原因',
+  `create_time` datetime NOT NULL COMMENT '查询时间',
+  PRIMARY KEY (`id`) USING BTREE,
+  KEY `idx_free_query_record_time` (`create_time`) USING BTREE,
+  KEY `idx_free_query_record_visitor` (`visitor_key`, `create_time`) USING BTREE,
+  KEY `idx_free_query_record_phone` (`query_phone`, `create_time`) USING BTREE,
+  KEY `idx_free_query_record_ip` (`ip_addr`, `create_time`) USING BTREE,
+  KEY `idx_free_query_record_status` (`query_status`, `has_result`) USING BTREE
+) ENGINE = InnoDB CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_520_ci COMMENT = '免费查询访问统计记录';

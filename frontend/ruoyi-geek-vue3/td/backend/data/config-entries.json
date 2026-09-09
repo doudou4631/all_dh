@@ -1,0 +1,26 @@
+[
+  {
+    "id": "config-001",
+    "codekey": "tdx_sms_login_url",
+    "codevalue": "https://customer-apply-diversion.teddymobile.cn/api/v1/as/auth/login-sms",
+    "qiyong": 1,
+    "remark": "泰迪熊短信登录接口",
+    "createtime": "2026-06-01 08:50:00"
+  },
+  {
+    "id": "config-002",
+    "codekey": "qmf_code_url",
+    "codevalue": "http://115.238.185.26:8881/code",
+    "qiyong": 1,
+    "remark": "QMF 取码接口",
+    "createtime": "2026-06-01 08:55:00"
+  },
+  {
+    "id": "config-003",
+    "codekey": "proxy_source_url",
+    "codevalue": "http://api3.ydaili.cn/tools/BMeasureApi.ashx",
+    "qiyong": 0,
+    "remark": "代理来源",
+    "createtime": "2026-06-01 08:58:00"
+  }
+]

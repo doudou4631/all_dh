@@ -1,0 +1,524 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkOrderItemMapper">
+
+    <resultMap type="MarkOrderItem" id="MarkOrderItemResult">
+        <result property="id" column="id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="phone" column="phone"/>
+        <result property="unitPrice" column="unit_price"/>
+        <result property="itemAmount" column="item_amount"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="processResult" column="process_result"/>
+        <result property="processNote" column="process_note"/>
+        <result property="processedBy" column="processed_by"/>
+        <result property="processedTime" column="processed_time"/>
+        <result property="refunded" column="refunded"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+        <result property="userRemark" column="user_remark"/>
+    </resultMap>
+
+    <sql id="selectMarkOrderItemVo">
+        select
+            moi.id,
+            moi.order_id,
+            moi.phone,
+            moi.unit_price,
+            moi.item_amount,
+            moi.process_status,
+            moi.process_result,
+            moi.process_note,
+            moi.processed_by,
+            moi.processed_time,
+            moi.refunded,
+            moi.create_by,
+            moi.create_time,
+            moi.update_by,
+            moi.update_time,
+            moi.remark,
+            moi.user_remark
+        from mark_order_item moi
+    </sql>
+
+    <select id="selectMarkOrderItemById" parameterType="Long" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        where moi.id = #{id}
+    </select>
+
+    <select id="selectMarkOrderItemList" parameterType="MarkOrderItem" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        <where>
+            <if test="orderId != null"> and moi.order_id = #{orderId}</if>
+            <if test="processStatus != null and processStatus != ''"> and moi.process_status = #{processStatus}</if>
+            <if test="phone != null and phone != ''"> and moi.phone like concat('%', #{phone}, '%')</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and moi.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and moi.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by moi.id asc
+    </select>
+
+    <select id="selectMarkOrderItemsByOrderId" parameterType="Long" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        where moi.order_id = #{orderId}
+        order by moi.id asc
+    </select>
+
+    <insert id="insertMarkOrderItem" parameterType="MarkOrderItem" useGeneratedKeys="true" keyProperty="id">
+        insert into mark_order_item
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">order_id,</if>
+            <if test="phone != null and phone != ''">phone,</if>
+            <if test="unitPrice != null">unit_price,</if>
+            <if test="itemAmount != null">item_amount,</if>
+            <if test="processStatus != null and processStatus != ''">process_status,</if>
+            <if test="processResult != null and processResult != ''">process_result,</if>
+            <if test="processNote != null and processNote != ''">process_note,</if>
+            <if test="processedBy != null and processedBy != ''">processed_by,</if>
+            <if test="processedTime != null">processed_time,</if>
+            <if test="refunded != null and refunded != ''">refunded,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+            <if test="userRemark != null">user_remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="orderId != null">#{orderId},</if>
+            <if test="phone != null and phone != ''">#{phone},</if>
+            <if test="unitPrice != null">#{unitPrice},</if>
+            <if test="itemAmount != null">#{itemAmount},</if>
+            <if test="processStatus != null and processStatus != ''">#{processStatus},</if>
+            <if test="processResult != null and processResult != ''">#{processResult},</if>
+            <if test="processNote != null and processNote != ''">#{processNote},</if>
+            <if test="processedBy != null and processedBy != ''">#{processedBy},</if>
+            <if test="processedTime != null">#{processedTime},</if>
+            <if test="refunded != null and refunded != ''">#{refunded},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+            <if test="userRemark != null">#{userRemark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateMarkOrderItem" parameterType="MarkOrderItem">
+        update mark_order_item
+        <trim prefix="set" suffixOverrides=",">
+            <if test="orderId != null">order_id = #{orderId},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="unitPrice != null">unit_price = #{unitPrice},</if>
+            <if test="itemAmount != null">item_amount = #{itemAmount},</if>
+            <if test="processStatus != null and processStatus != ''">process_status = #{processStatus},</if>
+            <if test="processResult != null">process_result = #{processResult},</if>
+            <if test="processNote != null">process_note = #{processNote},</if>
+            <if test="processedBy != null">processed_by = #{processedBy},</if>
+            <if test="processedTime != null">processed_time = #{processedTime},</if>
+            <if test="refunded != null and refunded != ''">refunded = #{refunded},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+            <if test="userRemark != null">user_remark = #{userRemark},</if>
+        </trim>
+        where id = #{id}
+    </update>
+
+    <update id="updateMyOrderItemRemarks">
+        update mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        set moi.user_remark = #{userRemark},
+            moi.update_by = #{updateBy},
+            moi.update_time = now()
+        where mo.user_id = #{userId}
+          and lower(mo.platform_code) != 'td_second'
+          and moi.id in
+          <foreach collection="itemIds" item="itemId" open="(" separator="," close=")">
+              #{itemId}
+          </foreach>
+    </update>
+
+    <sql id="agentReadableOrderScope">
+        <if test="!isAdmin">
+            and (
+                mo.assigned_agent_id = #{agentId}
+                or mo.user_id = #{agentId}
+                or su.parent_user_id = #{agentId}
+                or (mo.assigned_agent_id is null and su.create_by = #{agentUsername})
+                or exists (
+                    select 1
+                    from sys_user agent_u
+                    inner join sys_user_role aur on aur.user_id = agent_u.user_id
+                    inner join sys_role ar on ar.role_id = aur.role_id and ar.role_key in ('agent', 'mark_agent')
+                    where agent_u.user_id = #{agentId}
+                      and agent_u.del_flag = '0'
+                      and agent_u.rel_mark_template is not null
+                      and agent_u.rel_mark_template &gt; 0
+                      and su.rel_mark_template = agent_u.rel_mark_template
+                )
+                or exists (
+                    select 1
+                    from mark_platform_template mpt
+                    where mpt.id = su.rel_mark_template
+                      and mpt.owner_user_id = #{agentId}
+                      and mpt.status = '0'
+                )
+            )
+        </if>
+    </sql>
+
+    <resultMap type="com.geek.server.domain.vo.MarkAgentOrderItemVO" id="MarkAgentOrderItemResult">
+        <result property="id" column="id"/>
+        <result property="orderId" column="order_id"/>
+        <result property="orderNo" column="order_no"/>
+        <result property="platformCode" column="platform_code"/>
+        <result property="platformName" column="platform_name"/>
+        <result property="phone" column="phone"/>
+        <result property="processStatus" column="process_status"/>
+        <result property="processResult" column="process_result"/>
+        <result property="processNote" column="process_note"/>
+        <result property="processedBy" column="processed_by"/>
+        <result property="processedTime" column="processed_time"/>
+        <result property="createBy" column="create_by"/>
+        <result property="createTime" column="create_time"/>
+        <result property="updateBy" column="update_by"/>
+        <result property="updateTime" column="update_time"/>
+        <result property="remark" column="remark"/>
+        <result property="userName" column="user_name"/>
+        <result property="nickName" column="nick_name"/>
+        <result property="orderRemark" column="order_remark"/>
+    </resultMap>
+
+    <select id="selectAgentOrderItemList" resultMap="MarkAgentOrderItemResult">
+        select
+            moi.id,
+            moi.order_id,
+            mo.order_no,
+            mo.platform_code,
+            mo.platform_name,
+            moi.phone,
+            moi.process_status,
+            moi.process_result,
+            moi.process_note,
+            moi.processed_by,
+            moi.processed_time,
+            moi.create_by,
+            moi.create_time,
+            moi.update_by,
+            moi.update_time,
+            moi.remark,
+            su.user_name as user_name,
+            su.nick_name as nick_name,
+            mo.remark as order_remark
+        from mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        left join sys_user su on su.user_id = mo.user_id
+        <where>
+            and mo.audit_status = '1'
+            <include refid="agentReadableOrderScope"/>
+            and not exists (
+                select 1
+                from mark_agent_hidden_user mahu
+                where mahu.agent_user_id = #{agentId}
+                  and mahu.hidden_user_id = mo.user_id
+            )
+            <if test="query != null and query.userId != null">
+                and mo.user_id = #{query.userId}
+            </if>
+            <if test="query != null and query.userName != null and query.userName != ''">
+                and su.user_name like concat('%', #{query.userName}, '%')
+            </if>
+            <if test="query != null and query.phone != null and query.phone != ''">
+                and moi.phone like concat('%', #{query.phone}, '%')
+            </if>
+            <if test="query != null and query.processStatus != null and query.processStatus != ''">
+                and moi.process_status = #{query.processStatus}
+            </if>
+            <if test="query != null and ((query.pendingOnly != null and query.pendingOnly.toString().equals(&quot;1&quot;)) or (query.params != null and query.params.pendingOnly != null and query.params.pendingOnly.toString().equals(&quot;1&quot;)))">
+                and (
+                    (
+                        moi.process_status = '0'
+                        and lower(mo.platform_code) not in ('tengxun', 'tencent', 'tx', 'txwz')
+                    )
+                    or (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) in ('td_gaopin')
+                    )
+                )
+            </if>
+            <if test="query != null and ((query.processingOnly != null and query.processingOnly.toString().equals(&quot;1&quot;)) or (query.params != null and query.params.processingOnly != null and query.params.processingOnly.toString().equals(&quot;1&quot;)))">
+                and (
+                    (
+                        moi.process_status = '3'
+                        and lower(mo.platform_code) not in ('td_gaopin')
+                    )
+                    or (
+                        moi.process_status = '0'
+                        and lower(mo.platform_code) in ('tengxun', 'tencent', 'tx', 'txwz')
+                    )
+                )
+            </if>
+            <if test="query != null and query.params != null and query.params.processedOnly != null and query.params.processedOnly.toString().equals(&quot;1&quot;)">
+                and moi.process_status in ('1', '2')
+            </if>
+            <if test="query != null and query.platformCode != null and query.platformCode != ''">
+                and mo.platform_code = #{query.platformCode}
+            </if>
+            <if test="query != null and query.platformCodes != null and query.platformCodes != ''">
+                and find_in_set(mo.platform_code, #{query.platformCodes})
+            </if>
+            <if test="query != null and query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                <choose>
+                    <when test="query.params.dailyOverview != null and query.params.dailyOverview.toString() == '1'">
+                        and (
+                            (moi.processed_time is not null and moi.processed_time &gt;= #{query.params.beginTime})
+                            or (moi.processed_time is null and moi.create_time &gt;= #{query.params.beginTime})
+                        )
+                    </when>
+                    <otherwise>
+                        and moi.create_time &gt;= #{query.params.beginTime}
+                    </otherwise>
+                </choose>
+            </if>
+            <if test="query != null and query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                <choose>
+                    <when test="query.params.dailyOverview != null and query.params.dailyOverview.toString() == '1'">
+                        and (
+                            (moi.processed_time is not null and moi.processed_time &lt;= concat(#{query.params.endTime}, ' 23:59:59'))
+                            or (moi.processed_time is null and moi.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59'))
+                        )
+                    </when>
+                    <otherwise>
+                        and moi.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59')
+                    </otherwise>
+                </choose>
+            </if>
+        </where>
+        order by moi.create_time desc, moi.id desc
+    </select>
+
+    <select id="selectAgentProcessUserOptions" resultType="com.geek.server.domain.vo.MarkAgentProcessUserOptionVO">
+        select distinct
+            su.user_id as userId,
+            su.user_name as userName,
+            su.nick_name as nickName,
+            case when mahu.hidden_user_id is null then false else true end as hidden
+        from mark_order mo
+        inner join sys_user su on su.user_id = mo.user_id
+        left join mark_agent_hidden_user mahu
+          on mahu.agent_user_id = #{agentId}
+         and mahu.hidden_user_id = mo.user_id
+        where mo.audit_status = '1'
+        <include refid="agentReadableOrderScope"/>
+        order by su.user_name asc
+    </select>
+
+    <select id="countAgentReadableUser" resultType="int">
+        select count(*)
+        from sys_user su
+        where su.user_id = #{userId}
+          and su.del_flag = '0'
+          and (
+            #{isAdmin} = true
+            or su.user_id = #{agentId}
+            or su.parent_user_id = #{agentId}
+            or su.create_by = #{agentUsername}
+            or exists (
+                select 1
+                from sys_user agent_u
+                inner join sys_user_role aur on aur.user_id = agent_u.user_id
+                inner join sys_role ar on ar.role_id = aur.role_id and ar.role_key in ('agent', 'mark_agent')
+                where agent_u.user_id = #{agentId}
+                  and agent_u.del_flag = '0'
+                  and agent_u.rel_mark_template is not null
+                  and agent_u.rel_mark_template &gt; 0
+                  and su.rel_mark_template = agent_u.rel_mark_template
+            )
+            or exists (
+                select 1 from mark_platform_template mpt
+                where mpt.id = su.rel_mark_template
+                  and mpt.owner_user_id = #{agentId}
+                  and mpt.status = '0'
+            )
+          )
+    </select>
+
+    <insert id="insertAgentHiddenUser">
+        insert into mark_agent_hidden_user (agent_user_id, hidden_user_id, create_by, create_time)
+        values (#{agentId}, #{userId}, #{createBy}, now())
+        on duplicate key update create_by = values(create_by), create_time = values(create_time)
+    </insert>
+
+    <delete id="deleteAgentHiddenUser">
+        delete from mark_agent_hidden_user
+        where agent_user_id = #{agentId} and hidden_user_id = #{userId}
+    </delete>
+
+    <resultMap type="com.geek.server.domain.vo.MarkAgentDailyOverviewVO" id="MarkAgentDailyOverviewResult">
+        <result property="statDate" column="stat_date"/>
+        <result property="userId" column="user_id"/>
+        <result property="userName" column="user_name"/>
+        <result property="nickName" column="nick_name"/>
+        <result property="platformCount" column="platform_count"/>
+        <result property="orderCount" column="order_count"/>
+        <result property="itemCount" column="item_count"/>
+        <result property="successCount" column="success_count"/>
+        <result property="failedCount" column="failed_count"/>
+        <result property="processingCount" column="processing_count"/>
+        <result property="pendingCount" column="pending_count"/>
+        <result property="lastProcessedTime" column="last_processed_time"/>
+        <result property="platformSummaryJson" column="platform_summary_json"/>
+    </resultMap>
+
+    <select id="selectAgentDailyOverviewList" resultMap="MarkAgentDailyOverviewResult">
+        select
+            daily.stat_date,
+            daily.user_id,
+            daily.user_name,
+            daily.nick_name,
+            count(*) as platform_count,
+            sum(daily.order_count) as order_count,
+            sum(daily.item_count) as item_count,
+            sum(daily.success_count) as success_count,
+            sum(daily.failed_count) as failed_count,
+            sum(daily.processing_count) as processing_count,
+            sum(daily.pending_count) as pending_count,
+            max(daily.last_processed_time) as last_processed_time,
+            json_arrayagg(json_object(
+                'platformCode', daily.platform_code,
+                'platformName', daily.platform_name,
+                'orderCount', daily.order_count,
+                'itemCount', daily.item_count,
+                'successCount', daily.success_count,
+                'failedCount', daily.failed_count,
+                'processingCount', daily.processing_count,
+                'pendingCount', daily.pending_count,
+                'lastProcessedTime', date_format(daily.last_processed_time, '%Y-%m-%d %H:%i:%s')
+            )) as platform_summary_json
+        from (
+            select
+                date(coalesce(moi.processed_time, moi.create_time)) as stat_date,
+                mo.user_id,
+                su.user_name,
+                su.nick_name,
+                mo.platform_code,
+                coalesce(nullif(max(mo.platform_name), ''), mo.platform_code) as platform_name,
+                count(distinct mo.id) as order_count,
+                count(*) as item_count,
+                sum(case when moi.process_status = '1' then 1 else 0 end) as success_count,
+                sum(case when moi.process_status = '2' then 1 else 0 end) as failed_count,
+                sum(case
+                    when moi.process_status = '3' and lower(mo.platform_code) != 'td_gaopin' then 1
+                    when moi.process_status = '0' and lower(mo.platform_code) in ('tengxun', 'tencent', 'tx', 'txwz') then 1
+                    else 0
+                end) as processing_count,
+                sum(case
+                    when moi.process_status = '0' and lower(mo.platform_code) not in ('tengxun', 'tencent', 'tx', 'txwz') then 1
+                    when moi.process_status = '3' and lower(mo.platform_code) = 'td_gaopin' then 1
+                    else 0
+                end) as pending_count,
+                max(coalesce(moi.processed_time, moi.create_time)) as last_processed_time
+            from mark_order_item moi
+            inner join mark_order mo on mo.id = moi.order_id
+            left join sys_user su on su.user_id = mo.user_id
+            <where>
+                and mo.audit_status = '1'
+                <include refid="agentReadableOrderScope"/>
+                <if test="query != null and query.userId != null">
+                    and mo.user_id = #{query.userId}
+                </if>
+                <if test="query != null and query.platformCode != null and query.platformCode != ''">
+                    and mo.platform_code = #{query.platformCode}
+                </if>
+                <if test="query != null and query.params != null and query.params.beginTime != null and query.params.beginTime != ''">
+                    and (
+                        (moi.processed_time is not null and moi.processed_time &gt;= #{query.params.beginTime})
+                        or (moi.processed_time is null and moi.create_time &gt;= #{query.params.beginTime})
+                    )
+                </if>
+                <if test="query != null and query.params != null and query.params.endTime != null and query.params.endTime != ''">
+                    and (
+                        (moi.processed_time is not null and moi.processed_time &lt;= concat(#{query.params.endTime}, ' 23:59:59'))
+                        or (moi.processed_time is null and moi.create_time &lt;= concat(#{query.params.endTime}, ' 23:59:59'))
+                    )
+                </if>
+            </where>
+            group by
+                date(coalesce(moi.processed_time, moi.create_time)),
+                mo.user_id,
+                su.user_name,
+                su.nick_name,
+                mo.platform_code
+        ) daily
+        group by daily.stat_date, daily.user_id, daily.user_name, daily.nick_name
+        order by daily.stat_date desc, daily.user_name asc, daily.user_id asc
+    </select>
+
+    <select id="selectPendingTdGaopinProcessItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        inner join mark_platform_mapping mpm
+          on lower(mpm.source_platform_code) = lower(mo.platform_code)
+         and lower(mpm.target_platform_code) = 'td_gaopin'
+         and mpm.source_enabled = '0'
+         and mpm.target_enabled = '0'
+         and mpm.mapping_enabled = '0'
+        where moi.process_status = '0'
+          and mo.audit_status = '1'
+        order by moi.update_time asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectPendingProcessItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where (
+            moi.process_status = '0'
+            or (lower(#{platformCode}) = 'xiaomi' and moi.process_status = '3')
+        )
+          and mo.audit_status = '1'
+          and lower(mo.platform_code) = lower(#{platformCode})
+        order by coalesce(moi.update_time, moi.create_time) asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectPendingTdxSecondItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where moi.process_status = '3'
+          and mo.audit_status = '1'
+          and lower(mo.platform_code) = 'td_second'
+          and coalesce(moi.update_time, moi.create_time) &lt;= date_sub(now(), interval #{checkIntervalMinutes} minute)
+        order by coalesce(moi.update_time, moi.create_time) asc, moi.id asc
+        limit #{limit}
+    </select>
+
+    <select id="selectUserPendingTdGaopinPhones" resultType="String">
+        select distinct moi.phone
+        from mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        inner join mark_platform_mapping mpm
+          on lower(mpm.source_platform_code) = lower(mo.platform_code)
+         and lower(mpm.target_platform_code) = 'td_gaopin'
+         and mpm.source_enabled = '0'
+         and mpm.target_enabled = '0'
+         and mpm.mapping_enabled = '0'
+        where mo.user_id = #{userId}
+          and mo.audit_status = '1'
+          and moi.process_status = '0'
+          and moi.phone in
+        <foreach collection="phones" item="phone" open="(" separator="," close=")">
+            #{phone}
+        </foreach>
+    </select>
+</mapper>

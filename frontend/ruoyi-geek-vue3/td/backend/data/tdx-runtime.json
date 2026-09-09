@@ -1,0 +1,51 @@
+{
+  "currentOrderId": "2084699374397259777",
+  "currentWxCode": "0d2JBJkl2dwYbi4mBGml25erOt3JBJk3",
+  "currentLine": "line1",
+  "orderSessions": {
+    "2084676441692012544": {
+      "orderId": "2084676441692012544",
+      "wxCode": "0f2ynFkl2jvXbi4ezoll2u2YQF2ynFkt",
+      "line": "line1",
+      "savedAt": "2026-08-04T16:23:05.754Z",
+      "updatedAt": "2026-08-04T16:44:51.260Z",
+      "status": "active",
+      "cooldownUntil": "",
+      "lastFailure": "",
+      "lastCheckedAt": "2026-08-04T16:44:51.260Z"
+    },
+    "2084699374397259777": {
+      "orderId": "2084699374397259777",
+      "wxCode": "0d2JBJkl2dwYbi4mBGml25erOt3JBJk3",
+      "line": "line1",
+      "savedAt": "2026-08-04T17:54:13.360Z",
+      "updatedAt": "2026-08-04T17:54:13.360Z",
+      "status": "active",
+      "cooldownUntil": "",
+      "lastFailure": "",
+      "lastCheckedAt": "2026-08-04T17:54:13.360Z"
+    }
+  },
+  "usage": {
+    "2084676441692012544": 3,
+    "2084699374397259777": 0
+  },
+  "qmfSession": {
+    "token": "UeGOpDDaxxhKPkRnDcdq6mQGIBjIEw",
+    "savedAt": "2026-08-04T16:20:26.060Z",
+    "updatedAt": "2026-08-04T16:20:26.060Z",
+    "source": "qmfLogin"
+  },
+  "dengfengSession": null,
+  "loginTokens": {},
+  "lastPayload": {
+    "type": "teddyPhoneCheckPrecheck",
+    "targetPhone": "16758525229",
+    "payload": {
+      "code": 200,
+      "msg": "success",
+      "data": null,
+      "_httpStatus": 200
+    }
+  }
+}

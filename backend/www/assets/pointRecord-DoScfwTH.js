@@ -1,0 +1,1 @@
+import{X as r}from"./index-BXWz6qZt.js";function o(t){return r({url:"/server/pointRecord/list",method:"get",params:t})}function d(t){return r({url:"/server/pointRecord",method:"post",data:t})}function n(t){return r({url:"/server/pointRecord/adjust",method:"post",data:t})}function a(t){return r({url:"/server/pointRecord",method:"put",data:t})}export{d as a,n as b,o as l,a as u};

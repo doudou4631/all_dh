@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.UserPointMapper">
+    
+    <resultMap type="UserPoint" id="UserPointResult">
+        <result property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="pointBalance" column="point_balance" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectUserPointVo">
+        select 
+            up.id,
+            up.user_id,
+            up.point_balance,
+            up.create_by,
+            up.create_time,
+            up.update_by,
+            up.update_time,
+            up.remark
+        from user_point up
+    </sql>
+
+    <select id="selectUserPointList" parameterType="UserPoint" resultMap="UserPointResult">
+        <include refid="selectUserPointVo"/>
+        <where>
+            <if test="userId != null "> and up.user_id = #{userId}</if>
+            <if test="pointBalance != null "> and up.point_balance = #{pointBalance}</if>
+        </where>
+    </select>
+    
+    <select id="selectUserPointById" parameterType="Long" resultMap="UserPointResult">
+        <include refid="selectUserPointVo"/>
+        where up.id = #{id}
+    </select>
+        
+    <insert id="insertUserPoint" parameterType="UserPoint" useGeneratedKeys="true" keyProperty="id">
+        insert into user_point
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="pointBalance != null">point_balance,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="pointBalance != null">#{pointBalance},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <update id="updateUserPoint" parameterType="UserPoint">
+        update user_point
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="pointBalance != null">point_balance = #{pointBalance},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where user_point.id = #{id}
+    </update>
+
+    <delete id="deleteUserPointById" parameterType="Long">
+        delete from user_point where id = #{id}
+    </delete>
+
+    <delete id="deleteUserPointByIds" parameterType="String">
+        delete from user_point where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

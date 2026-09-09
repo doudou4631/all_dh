@@ -1,0 +1,1 @@
+const e=["baidu"],r="/mark/baiduMark",s="MarkUserBaidu",t="baidu";function d(a){if(!a)return!1;const n=String(a.platformCode||a.code||"").toLowerCase(),o=String(a.platformName||a.name||"");return e.includes(n)||o.includes("百度")}function c(a){return e.includes(String(a||"").toLowerCase())}export{t as B,s as a,r as b,d as c,c as i};

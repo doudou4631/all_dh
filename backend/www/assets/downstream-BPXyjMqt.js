@@ -1,0 +1,1 @@
+import e from"./ProcessDetailOverview-DbUjWqYP.js";import{o,e as t,i as r}from"./index-BuPPGqEf.js";import"./markAgent-xqbwmbTd.js";import"./AgentPastDateRangePicker-S8pEz6wb.js";import"./markProcessStatus-DQtzOJ91.js";const s=r({name:"MarkAgentProcessDownstream"}),l=Object.assign(s,{setup(a){return(n,c)=>(o(),t(e))}});export{l as default};

@@ -1,0 +1,1 @@
+import{u as a,h as c,o as n,c as u}from"./index-BuPPGqEf.js";const h={__name:"index",setup(p){const e=a(),t=c(),{params:o,query:r}=e,{path:s}=o;return t.replace({path:"/"+s,query:r}),(_,m)=>(n(),u("div"))}};export{h as default};

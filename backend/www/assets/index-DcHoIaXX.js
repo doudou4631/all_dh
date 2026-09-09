@@ -1,0 +1,1 @@
+import{_ as o}from"./index.vue_vue_type_script_setup_true_lang-BundfV65.js";import{o as s,c as n,a as t,E as l,p as c}from"./index-BuPPGqEf.js";const _={__name:"index",setup(p){const r=c("/prod-api/druid/login.html");return(u,e)=>(s(),n("div",null,[t(l(o),{src:r.value,"onUpdate:src":e[0]||(e[0]=a=>r.value=a)},null,8,["src"])]))}};export{_ as default};

@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.UserPlatformUrlConfigMapper">
+
+    <resultMap type="UserPlatformUrlConfig" id="UserPlatformUrlConfigResult">
+        <result property="id" column="id" />
+        <result property="platformId" column="platform_id" />
+        <result property="platformKey" column="platform_key" />
+        <result property="platformName" column="platform_name" />
+        <result property="bindingPlatformName" column="binding_platform_name" />
+        <result property="bindingEnabled" column="binding_enabled" />
+        <result property="bindingSort" column="binding_sort" />
+        <result property="url" column="url" />
+        <result property="status" column="status" />
+        <result property="requestIntervalMs" column="request_interval_ms" />
+        <result property="timeoutMs" column="timeout_ms" />
+        <result property="retryCount" column="retry_count" />
+        <result property="preActionType" column="pre_action_type" />
+        <result property="preActionConfig" column="pre_action_config" />
+        <result property="headersTemplate" column="headers_template" />
+        <result property="concurrencyLimit" column="concurrency_limit" />
+        <result property="sort" column="sort" />
+        <result property="freeQueryStatus" column="free_query_status" />
+        <result property="freeQuerySort" column="free_query_sort" />
+        <result property="freeQueryIcon" column="free_query_icon" />
+        <result property="freeQueryDescription" column="free_query_description" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectUserPlatformUrlConfigVo">
+        select
+            upuc.id,
+            upuc.platform_id,
+            upuc.platform_key,
+            upuc.platform_name,
+            m.target_platform_name as binding_platform_name,
+            case when m.id is not null and m.source_enabled = '0' and m.target_enabled = '0' and m.mapping_enabled = '0' then true else false end as binding_enabled,
+            m.sort_num as binding_sort,
+            upuc.url,
+            upuc.status,
+            upuc.request_interval_ms,
+            upuc.timeout_ms,
+            upuc.retry_count,
+            upuc.pre_action_type,
+            upuc.pre_action_config,
+            upuc.headers_template,
+            upuc.concurrency_limit,
+            upuc.sort,
+            upuc.free_query_status,
+            upuc.free_query_sort,
+            upuc.free_query_icon,
+            upuc.free_query_description,
+            upuc.create_by,
+            upuc.create_time,
+            upuc.update_by,
+            upuc.update_time,
+            upuc.remark
+        from user_platform_url_config upuc
+        left join mark_platform_mapping m
+          on m.target_platform_code collate utf8mb4_general_ci = upuc.platform_key collate utf8mb4_general_ci
+    </sql>
+
+    <select id="selectUserPlatformUrlConfigList" parameterType="UserPlatformUrlConfig" resultMap="UserPlatformUrlConfigResult">
+        <include refid="selectUserPlatformUrlConfigVo"/>
+        <where>
+            <if test="platformId != null  and platformId != ''"> and upuc.platform_id = #{platformId}</if>
+            <if test="platformKey != null and platformKey != ''"> and upuc.platform_key like concat('%', #{platformKey}, '%')</if>
+            <if test="platformName != null  and platformName != ''"> and upuc.platform_name like concat('%', #{platformName}, '%')</if>
+            <if test="url != null  and url != ''"> and upuc.url = #{url}</if>
+            <if test="status != null  and status != ''"> and upuc.status = #{status}</if>
+            <if test="freeQueryStatus != null and freeQueryStatus != ''"> and upuc.free_query_status = #{freeQueryStatus}</if>
+        </where>
+        <choose>
+            <when test="freeQueryStatus != null and freeQueryStatus != ''">
+                order by coalesce(upuc.free_query_sort, upuc.sort, upuc.id), upuc.id
+            </when>
+            <otherwise>
+                order by coalesce(m.sort_num, upuc.sort, upuc.id), upuc.id
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="selectUserPlatformUrlConfigById" parameterType="Long" resultMap="UserPlatformUrlConfigResult">
+        <include refid="selectUserPlatformUrlConfigVo"/>
+        where upuc.id = #{id}
+    </select>
+
+    <insert id="insertUserPlatformUrlConfig" parameterType="UserPlatformUrlConfig" useGeneratedKeys="true" keyProperty="id">
+        insert into user_platform_url_config
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="platformId != null and platformId != ''">platform_id,</if>
+            <if test="platformKey != null and platformKey != ''">platform_key,</if>
+            <if test="platformName != null and platformName != ''">platform_name,</if>
+            <if test="url != null and url != ''">url,</if>
+            <if test="status != null">status,</if>
+            <if test="requestIntervalMs != null">request_interval_ms,</if>
+            <if test="timeoutMs != null">timeout_ms,</if>
+            <if test="retryCount != null">retry_count,</if>
+            <if test="preActionType != null">pre_action_type,</if>
+            <if test="preActionConfig != null">pre_action_config,</if>
+            <if test="headersTemplate != null">headers_template,</if>
+            <if test="concurrencyLimit != null">concurrency_limit,</if>
+            <if test="freeQueryStatus != null">free_query_status,</if>
+            <if test="freeQuerySort != null">free_query_sort,</if>
+            <if test="freeQueryIcon != null">free_query_icon,</if>
+            <if test="freeQueryDescription != null">free_query_description,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+        </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="platformId != null and platformId != ''">#{platformId},</if>
+            <if test="platformKey != null and platformKey != ''">#{platformKey},</if>
+            <if test="platformName != null and platformName != ''">#{platformName},</if>
+            <if test="url != null and url != ''">#{url},</if>
+            <if test="status != null">#{status},</if>
+            <if test="requestIntervalMs != null">#{requestIntervalMs},</if>
+            <if test="timeoutMs != null">#{timeoutMs},</if>
+            <if test="retryCount != null">#{retryCount},</if>
+            <if test="preActionType != null">#{preActionType},</if>
+            <if test="preActionConfig != null">#{preActionConfig},</if>
+            <if test="headersTemplate != null">#{headersTemplate},</if>
+            <if test="concurrencyLimit != null">#{concurrencyLimit},</if>
+            <if test="freeQueryStatus != null">#{freeQueryStatus},</if>
+            <if test="freeQuerySort != null">#{freeQuerySort},</if>
+            <if test="freeQueryIcon != null">#{freeQueryIcon},</if>
+            <if test="freeQueryDescription != null">#{freeQueryDescription},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+        </trim>
+    </insert>
+
+    <update id="updateUserPlatformUrlConfig" parameterType="UserPlatformUrlConfig">
+        update user_platform_url_config
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="platformId != null and platformId != ''">platform_id = #{platformId},</if>
+            <if test="platformKey != null and platformKey != ''">platform_key = #{platformKey},</if>
+            <if test="platformName != null and platformName != ''">platform_name = #{platformName},</if>
+            <if test="url != null and url != ''">url = #{url},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="requestIntervalMs != null">request_interval_ms = #{requestIntervalMs},</if>
+            <if test="timeoutMs != null">timeout_ms = #{timeoutMs},</if>
+            <if test="retryCount != null">retry_count = #{retryCount},</if>
+            <if test="preActionType != null">pre_action_type = #{preActionType},</if>
+            <if test="preActionConfig != null">pre_action_config = #{preActionConfig},</if>
+            <if test="headersTemplate != null">headers_template = #{headersTemplate},</if>
+            <if test="concurrencyLimit != null">concurrency_limit = #{concurrencyLimit},</if>
+            <if test="sort != null">sort = #{sort},</if>
+            <if test="freeQueryStatus != null">free_query_status = #{freeQueryStatus},</if>
+            <if test="freeQuerySort != null">free_query_sort = #{freeQuerySort},</if>
+            <if test="freeQueryIcon != null">free_query_icon = #{freeQueryIcon},</if>
+            <if test="freeQueryDescription != null">free_query_description = #{freeQueryDescription},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where user_platform_url_config.id = #{id}
+    </update>
+
+    <delete id="deleteUserPlatformUrlConfigById" parameterType="Long">
+        delete from user_platform_url_config where id = #{id}
+    </delete>
+
+    <delete id="deleteUserPlatformUrlConfigByIds" parameterType="String">
+        delete from user_platform_url_config where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="selectUserPlatformUrlUserList" resultType="com.geek.server.domain.UserPlatformUrlConfig">
+        <include refid="selectUserPlatformUrlConfigVo"/>
+        <where>
+            <if test="ids != null and ids.length > 0">
+                AND upuc.id in
+                <foreach collection="ids" item="id" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </if>
+        </where>
+        order by upuc.sort
+    </select>
+</mapper>

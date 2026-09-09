@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.UserPointRecordMapper">
+    
+    <resultMap type="UserPointRecord" id="UserPointRecordResult">
+        <result property="id" column="id" />
+        <result property="userId" column="user_id" />
+        <result property="pointAmount" column="point_amount" />
+        <result property="pointType" column="point_type" />
+        <result property="reason" column="reason" />
+        <result property="operatorId" column="operator_id" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectUserPointRecordVo">
+        select 
+            upr.id,
+            upr.user_id,
+            upr.point_amount,
+            upr.point_type,
+            upr.reason,
+            upr.operator_id,
+            upr.create_by,
+            upr.create_time,
+            upr.update_by,
+            upr.update_time,
+            upr.remark
+        from user_point_record upr
+    </sql>
+
+    <select id="selectUserPointRecordList" parameterType="UserPointRecord" resultMap="UserPointRecordResult">
+        <include refid="selectUserPointRecordVo"/>
+        <where>
+            <if test="userId != null "> and upr.user_id = #{userId}</if>
+            <if test="pointAmount != null "> and upr.point_amount = #{pointAmount}</if>
+            <if test="pointType != null  and pointType != ''"> and upr.point_type = #{pointType}</if>
+            <if test="reason != null  and reason != ''"> and upr.reason = #{reason}</if>
+            <if test="operatorId != null "> and upr.operator_id = #{operatorId}</if>
+        </where>
+    </select>
+    
+    <select id="selectUserPointRecordById" parameterType="Long" resultMap="UserPointRecordResult">
+        <include refid="selectUserPointRecordVo"/>
+        where upr.id = #{id}
+    </select>
+        
+    <insert id="insertUserPointRecord" parameterType="UserPointRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into user_point_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="userId != null">user_id,</if>
+            <if test="pointAmount != null">point_amount,</if>
+            <if test="pointType != null and pointType != ''">point_type,</if>
+            <if test="reason != null and reason != ''">reason,</if>
+            <if test="operatorId != null">operator_id,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="userId != null">#{userId},</if>
+            <if test="pointAmount != null">#{pointAmount},</if>
+            <if test="pointType != null and pointType != ''">#{pointType},</if>
+            <if test="reason != null and reason != ''">#{reason},</if>
+            <if test="operatorId != null">#{operatorId},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <insert id="insertUserPointRecordBatch">
+        insert into user_point_record (
+            user_id, point_amount, point_type, reason, operator_id, create_by, create_time
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.userId}, #{item.pointAmount}, #{item.pointType}, #{item.reason}, #{item.operatorId},
+            #{item.createBy}, #{item.createTime}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateUserPointRecord" parameterType="UserPointRecord">
+        update user_point_record
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="pointAmount != null">point_amount = #{pointAmount},</if>
+            <if test="pointType != null and pointType != ''">point_type = #{pointType},</if>
+            <if test="reason != null and reason != ''">reason = #{reason},</if>
+            <if test="operatorId != null">operator_id = #{operatorId},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where user_point_record.id = #{id}
+    </update>
+
+    <delete id="deleteUserPointRecordById" parameterType="Long">
+        delete from user_point_record where id = #{id}
+    </delete>
+
+    <delete id="deleteUserPointRecordByIds" parameterType="String">
+        delete from user_point_record where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

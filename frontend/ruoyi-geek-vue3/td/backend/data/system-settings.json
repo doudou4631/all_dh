@@ -1,0 +1,92 @@
+﻿{
+  "base": [
+    {
+      "key": "loginTitle",
+      "label": "登录标题",
+      "value": "登录"
+    },
+    {
+      "key": "siteTitle",
+      "label": "站点标题",
+      "value": "业务管理系统"
+    },
+    {
+      "key": "supportContact",
+      "label": "运维联系人",
+      "value": "admin@example.com"
+    },
+    {
+      "key": "defaultMarkModule",
+      "label": "默认标记模块",
+      "value": "泰迪熊标记"
+    },
+    {
+      "key": "defaultQueueView",
+      "label": "默认队列视图",
+      "value": "待处理"
+    },
+    {
+      "key": "taskRetentionDays",
+      "label": "任务保留天数",
+      "value": "30"
+    },
+    {
+      "key": "cacheTime",
+      "label": "缓存时间（秒）",
+      "value": "0"
+    },
+    {
+      "key": "maxUploadKb",
+      "label": "上传大小上限（KB）",
+      "value": "2048"
+    },
+    {
+      "key": "uploadAllowlist",
+      "label": "上传白名单",
+      "value": "png|gif|jpg|jpeg|zip|rar"
+    },
+    {
+      "key": "loginNotice",
+      "label": "登录提示",
+      "value": ""
+    }
+  ],
+  "switches": [
+    {
+      "key": "uploadProtection",
+      "label": "上传防护",
+      "description": "严格拦截危险扩展名与脚本型文件。",
+      "enabled": true
+    },
+    {
+      "key": "redisCache",
+      "label": "Redis 缓存",
+      "description": "用于 orderId / wxCode 轮换与运行时状态缓存。",
+      "enabled": true
+    },
+    {
+      "key": "robotNotify",
+      "label": "机器人通知",
+      "description": "默认关闭，待真实通知服务联通后再开启。",
+      "enabled": false
+    },
+    {
+      "key": "auditWriteback",
+      "label": "审计写回",
+      "description": "关键动作会额外写入审计流，方便运营回溯。",
+      "enabled": true
+    },
+    {
+      "key": "tdxMarkEnabled",
+      "label": "泰迪熊标记",
+      "description": "当前优先上线的标记处理模块，可控制菜单与任务入口。",
+      "enabled": true
+    },
+    {
+      "key": "bulkActionEnabled",
+      "label": "批量操作",
+      "description": "允许在标记处理列表执行批量发码、执行清理与转人工。",
+      "enabled": true
+    }
+  ]
+}

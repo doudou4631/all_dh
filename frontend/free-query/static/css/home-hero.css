@@ -1,0 +1,89 @@
+/* Home hero — 与下方白色 query-card 左右对齐（通栏同宽） */
+.home-hero-wrap,
+.banner-top-wrap.home-hero-wrap {
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  background: transparent !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+.home-hero-img,
+.home-hero-wrap uni-image,
+.home-hero-wrap .uni-image,
+.home-hero-wrap img {
+  display: block !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  border-radius: 0 !important;
+  vertical-align: top !important;
+}
+
+/* 标题区：对齐截图框选范围，内部水平垂直居中 */
+.home-hero-title {
+  position: absolute !important;
+  left: 6% !important;
+  right: 6% !important;
+  bottom: 3% !important;
+  height: 24% !important;
+  z-index: 2 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  box-sizing: border-box !important;
+  padding: 0 8px !important;
+  pointer-events: none !important;
+}
+
+.home-hero-title__h {
+  font-size: clamp(28px, 8.2vw, 38px) !important;
+  font-weight: 700 !important;
+  color: #111 !important;
+  line-height: 1.2 !important;
+  letter-spacing: 1px !important;
+  margin: 0 !important;
+}
+
+.home-hero-title__s {
+  margin: 8px 0 0 !important;
+  font-size: clamp(15px, 4vw, 18px) !important;
+  font-weight: 400 !important;
+  color: #666 !important;
+  line-height: 1.35 !important;
+}
+
+/* 白卡片与 banner 同宽 */
+.content-section {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+.query-card {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-top: 0 !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  border-radius: 0 !important;
+  padding-top: 20px !important;
+}
+
+.query-headline {
+  display: none !important;
+}
+
+/* 隐藏首页客服悬浮球 / 弹窗（不含查询结果页 details-float） */
+.global-float-chat-ball-host {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body.online-service-enabled .global-float-chat-ball-host {
+  display: block !important;
+  visibility: visible !important;
+}

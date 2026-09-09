@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkInspectionMapper">
+  <resultMap id="PolicyResult" type="MarkInspectionPolicy">
+    <id property="id" column="id"/><result property="policyName" column="policy_name"/>
+    <result property="platformCode" column="platform_code"/><result property="platformName" column="platform_name"/>
+    <result property="intervalSeconds" column="interval_seconds"/><result property="batchLimit" column="batch_limit"/>
+    <result property="intervalValue" column="interval_value"/><result property="intervalUnit" column="interval_unit"/>
+    <result property="autoAction" column="auto_action"/>
+    <result property="status" column="status"/><result property="running" column="running"/>
+    <result property="lastRunTime" column="last_run_time"/><result property="nextRunTime" column="next_run_time"/>
+  </resultMap>
+  <resultMap id="LogResult" type="MarkInspectionRunLog">
+    <id property="id" column="id"/><result property="runNo" column="run_no"/><result property="policyId" column="policy_id"/>
+    <result property="policyName" column="policy_name"/><result property="platformCode" column="platform_code"/>
+    <result property="platformName" column="platform_name"/><result property="triggerType" column="trigger_type"/>
+    <result property="scannedCount" column="scanned_count"/><result property="matchedCount" column="matched_count"/>
+    <result property="successCount" column="success_count"/><result property="failedCount" column="failed_count"/>
+    <result property="skippedCount" column="skipped_count"/><result property="runStatus" column="run_status"/>
+    <result property="errorMessage" column="error_message"/><result property="startTime" column="start_time"/>
+    <result property="endTime" column="end_time"/>
+  </resultMap>
+  <resultMap id="DetailResult" type="MarkInspectionRunDetail">
+    <id property="id" column="id"/><result property="runLogId" column="run_log_id"/><result property="orderId" column="order_id"/>
+    <result property="orderItemId" column="order_item_id"/><result property="orderNo" column="order_no"/><result property="phone" column="phone"/>
+    <result property="detectionResult" column="detection_result"/><result property="qualified" column="qualified"/>
+    <result property="submissionStatus" column="submission_status"/><result property="submissionResult" column="submission_result"/>
+    <result property="processNote" column="process_note"/><result property="detectedTime" column="detected_time"/>
+  </resultMap>
+  <sql id="policyColumns">select id,policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,status,running,last_run_time,next_run_time from mark_inspection_policy</sql>
+  <select id="selectPolicyList" resultMap="PolicyResult"><include refid="policyColumns"/><where>
+    <if test="policyName != null and policyName != ''">and policy_name like concat('%',#{policyName},'%')</if>
+    <if test="platformCode != null and platformCode != ''">and platform_code=#{platformCode}</if>
+    <if test="status != null and status != ''">and status=#{status}</if>
+  </where>order by id desc</select>
+  <select id="selectPolicyById" resultMap="PolicyResult"><include refid="policyColumns"/> where id=#{id}</select>
+  <insert id="insertPolicy" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_policy(policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,status,running,next_run_time) values(#{policyName},#{platformCode},#{platformName},#{intervalSeconds},#{intervalValue},#{intervalUnit},#{batchLimit},#{autoAction},#{status},'0',#{nextRunTime})</insert>
+  <update id="updatePolicy">update mark_inspection_policy<set>
+    <if test="policyName != null">policy_name=#{policyName},</if><if test="platformCode != null">platform_code=#{platformCode},</if>
+    <if test="platformName != null">platform_name=#{platformName},</if><if test="intervalSeconds != null">interval_seconds=#{intervalSeconds},</if>
+    <if test="intervalValue != null">interval_value=#{intervalValue},</if><if test="intervalUnit != null">interval_unit=#{intervalUnit},</if>
+    <if test="batchLimit != null">batch_limit=#{batchLimit},</if><if test="autoAction != null">auto_action=#{autoAction},</if><if test="status != null">status=#{status},</if>
+    <if test="nextRunTime != null">next_run_time=#{nextRunTime},</if>
+  </set>where id=#{id}</update>
+  <delete id="deletePolicy">delete from mark_inspection_policy where id=#{id} and running='0'</delete>
+  <select id="selectDuePolicies" resultMap="PolicyResult"><include refid="policyColumns"/> where status='0' and running='0' and (next_run_time is null or next_run_time&lt;=#{now}) order by coalesce(next_run_time,'1970-01-01') limit 20</select>
+  <update id="claimPolicy">update mark_inspection_policy set running='1' where id=#{id} and status='0' and running='0'</update>
+  <update id="deferPolicy">update mark_inspection_policy set next_run_time=#{nextRunTime} where id=#{id} and status='0' and running='0'</update>
+  <update id="releasePolicy">update mark_inspection_policy set running='0',last_run_time=#{lastRunTime},next_run_time=#{nextRunTime} where id=#{id}</update>
+  <select id="selectLogList" resultMap="LogResult">select * from mark_inspection_run_log<where>
+    <if test="latestOnly == '1'">and id in (select max(x.id) from mark_inspection_run_log x group by x.policy_id, x.platform_code)</if>
+    <if test="policyName != null and policyName != ''">and policy_name like concat('%',#{policyName},'%')</if>
+    <if test="platformCode != null and platformCode != ''">and platform_code=#{platformCode}</if>
+    <if test="runStatus != null and runStatus != ''">and run_status=#{runStatus}</if>
+    <if test="successFilter == 'SUCCESS'">and success_count &gt; 0</if>
+    <if test="successFilter == 'NO_SUCCESS'">and success_count = 0</if>
+    <if test="triggerType != null and triggerType != ''">and trigger_type=#{triggerType}</if>
+  </where>order by id desc</select>
+  <select id="selectDetailList" resultMap="DetailResult">select * from mark_inspection_run_detail where run_log_id=#{runLogId} order by id asc</select>
+  <insert id="insertLog" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_run_log(run_no,policy_id,policy_name,platform_code,platform_name,trigger_type,scanned_count,matched_count,success_count,failed_count,skipped_count,run_status,start_time) values(#{runNo},#{policyId},#{policyName},#{platformCode},#{platformName},#{triggerType},0,0,0,0,0,#{runStatus},#{startTime})</insert>
+  <insert id="insertDetail" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_run_detail(run_log_id,order_id,order_item_id,order_no,phone,detection_result,qualified,submission_status,submission_result,process_note,detected_time) values(#{runLogId},#{orderId},#{orderItemId},#{orderNo},#{phone},#{detectionResult},#{qualified},#{submissionStatus},#{submissionResult},#{processNote},#{detectedTime})</insert>
+  <update id="updateLog">update mark_inspection_run_log set scanned_count=#{scannedCount},matched_count=#{matchedCount},success_count=#{successCount},failed_count=#{failedCount},skipped_count=#{skippedCount},run_status=#{runStatus},error_message=#{errorMessage},end_time=#{endTime} where id=#{id}</update>
+  <update id="failInterruptedRuns">
+    update mark_inspection_run_log
+    set run_status='FAILED', failed_count=greatest(failed_count,1),
+        error_message=#{errorMessage}, end_time=#{endTime}
+    where run_status='RUNNING'
+  </update>
+  <update id="releaseInterruptedPolicies">
+    update mark_inspection_policy p
+    set p.running='0', p.next_run_time=#{nextRunTime}
+    where p.running='1'
+      and not exists (
+        select 1 from mark_inspection_run_log l
+        where l.policy_id=p.id and l.run_status='RUNNING'
+      )
+  </update>
+  <delete id="deleteExpiredDetails">
+    delete d from mark_inspection_run_detail d
+    inner join mark_inspection_run_log l on l.id=d.run_log_id
+    where l.run_status!='RUNNING' and coalesce(l.end_time,l.start_time)&lt;#{cutoffTime}
+  </delete>
+  <delete id="deleteExpiredLogs">
+    delete from mark_inspection_run_log
+    where run_status!='RUNNING' and coalesce(end_time,start_time)&lt;#{cutoffTime}
+  </delete>
+</mapper>

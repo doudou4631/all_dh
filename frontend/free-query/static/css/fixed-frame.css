@@ -1,0 +1,165 @@
+/* 首页 / 查询结果页统一尺寸：左右最大 453px，高度随内容 */
+html, body {
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  background: #ffffff !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  display: block !important;
+}
+
+#phone-frame {
+  width: 100% !important;
+  max-width: 453px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 auto !important;
+  overflow: visible !important;
+  position: relative !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  transform: none !important;
+  contain: none !important;
+  padding-bottom: 0 !important;
+  box-sizing: border-box !important;
+}
+
+#phone-frame #app,
+#phone-frame uni-app,
+#phone-frame .uni-app--showtabbar,
+#phone-frame .uni-app--showtopwindow,
+#phone-frame .uni-app--maxwidth,
+#phone-frame .uni-page-wrapper,
+#phone-frame .uni-page-body,
+#phone-frame uni-page-body,
+#phone-frame uni-page,
+#phone-frame .main,
+#phone-frame .main-scroll,
+#phone-frame .content-section,
+#phone-frame .details-page,
+#phone-frame .details-page__content,
+#phone-frame .details-header,
+#phone-frame .details-footer {
+  width: 100% !important;
+  max-width: 453px !important;
+  min-width: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  transform: none !important;
+}
+
+#phone-frame .uni-page-wrapper,
+#phone-frame .uni-page-body,
+#phone-frame uni-page-body,
+#phone-frame uni-page,
+#phone-frame .main,
+#phone-frame .main-scroll,
+#phone-frame .details-page,
+#phone-frame .details-page__content {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
+
+/* 覆盖结果页原 min(100%,30rem) 等宽度限制，与首页同宽 */
+#phone-frame .details-footer,
+#phone-frame .details-footer__inner,
+#phone-frame [style*="30rem"],
+#phone-frame .pay-explain-popup,
+#phone-frame .pay-explain-popup__inner {
+  width: 100% !important;
+  max-width: 453px !important;
+  left: auto !important;
+  right: auto !important;
+  transform: none !important;
+}
+
+#phone-frame .main {
+  overflow: visible !important;
+}
+
+#phone-frame .home-hero-wrap,
+#phone-frame .home-hero-img,
+#phone-frame .banner-top-wrap,
+#phone-frame .query-card,
+#phone-frame .content-section,
+#phone-frame .home-bottom-poster,
+#phone-frame .details-header {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* 不要强制所有 uni-image height:auto，否则平台图标/底部大图会塌成空白 */
+#phone-frame .home-hero-img,
+#phone-frame .home-hero-img img,
+#phone-frame .home-bottom-poster__img,
+#phone-frame .home-bottom-poster__img img {
+  max-width: 100% !important;
+  width: 100% !important;
+  display: block !important;
+}
+
+#phone-frame .home-bottom-poster {
+  display: block !important;
+  width: 100% !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+}
+
+#phone-frame .platform-logo,
+#phone-frame .platform-logo uni-image,
+#phone-frame .platform-logo .u-image,
+#phone-frame .platform-logo .u-image__image,
+#phone-frame .platform-logo img,
+#phone-frame .hidden-img {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 44px !important;
+  height: 44px !important;
+  max-width: 44px !important;
+  max-height: 44px !important;
+  object-fit: contain !important;
+}
+
+/* 首页底部不再额外留白 */
+#phone-frame .main-scroll,
+#phone-frame .content-section,
+#phone-frame .home-bottom-poster,
+#phone-frame .main {
+  padding-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* 小屏：整页同宽；大屏：居中 453 */
+@media (min-width: 454px) {
+  #phone-frame {
+    width: 453px !important;
+    min-width: 453px !important;
+    max-width: 453px !important;
+  }
+
+  #phone-frame #app,
+  #phone-frame uni-app,
+  #phone-frame .uni-app--maxwidth,
+  #phone-frame .details-page,
+  #phone-frame .main {
+    width: 453px !important;
+    min-width: 453px !important;
+    max-width: 453px !important;
+  }
+}

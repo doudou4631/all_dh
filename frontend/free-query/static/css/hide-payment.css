@@ -1,0 +1,26 @@
+/* 全局隐藏原支付相关 UI */
+.details-footer,
+.details-footer__inner,
+.order-summary,
+.agreement-row,
+.details-card,
+.pay-explain-popup,
+.pay-explain-popup__inner,
+.platform-card__rows,
+.platform-card__radio,
+.platform-card__value--price,
+.platform-card__tip,
+.text-link {
+  display: none !important;
+  height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* 支付/订单相关页面整页隐藏提示由 JS 拦截跳转 */
+body.hide-payment-page #app {
+  display: none !important;
+}

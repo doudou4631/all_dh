@@ -1,0 +1,3 @@
+.loading-progress-popup .u-line-progress__line {
+  transition: width 0.1s linear !important;
+}

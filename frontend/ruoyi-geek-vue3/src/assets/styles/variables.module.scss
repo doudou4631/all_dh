@@ -1,0 +1,65 @@
+// base color
+$blue: #324157;
+$light-blue: #3a71a8;
+$red: #c03639;
+$pink: #e65d6e;
+$green: #30b08f;
+$tiffany: #4ab7bd;
+$yellow: #fec171;
+$panGreen: #30b08f;
+
+// 默认菜单主题风格（深色兜底）
+$base-menu-color: #bfcbd9;
+$base-menu-color-active: #f4f4f5;
+$base-menu-background: #001529;
+$base-logo-title-color: #ffffff;
+
+// 浅色商业风侧栏
+$base-menu-light-color: rgba(0, 0, 0, 0.65);
+$base-menu-light-background: #ffffff;
+$base-logo-light-title-color: #0f172a;
+
+$base-sub-menu-background: #000c17;
+$base-sub-menu-hover: #001528;
+
+// 商业简洁主色（Ant 系蓝）
+$color-primary: #1677ff;
+$color-success: #52c41a;
+$color-warning: #faad14;
+$color-danger: #ff4d4f;
+$color-info: #8c8c8c;
+
+// 更亮的内容区底色
+$page-background-color: #f5f7fa;
+
+// 侧边栏相关配置
+$base-sidebar-width: 232px;
+$hide-sidebar-width: 64px;
+
+// 顶部导航栏相关配置（纯白，与内容区区分）
+$navbar-height: 52px;
+$navbar-color: #ffffff;
+
+// 标签视图相关配置
+$tags-view-height: 40px;
+$tags-view-color: #ffffff;
+
+// the :export directive is the magic sauce for webpack
+// https://www.bluematador.com/blog/how-to-share-variables-between-js-and-sass
+:export {
+  menuColor: $base-menu-color;
+  menuLightColor: $base-menu-light-color;
+  menuColorActive: $base-menu-color-active;
+  menuBackground: $base-menu-background;
+  menuLightBackground: $base-menu-light-background;
+  subMenuBackground: $base-sub-menu-background;
+  subMenuHover: $base-sub-menu-hover;
+  sideBarWidth: $base-sidebar-width;
+  logoTitleColor: $base-logo-title-color;
+  logoLightTitleColor: $base-logo-light-title-color;
+  primaryColor: $color-primary;
+  successColor: $color-success;
+  dangerColor: $color-danger;
+  infoColor: $color-info;
+  warningColor: $color-warning;
+}

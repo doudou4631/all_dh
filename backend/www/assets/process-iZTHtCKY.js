@@ -1,0 +1,1 @@
+import{K as o}from"./index-BuPPGqEf.js";function r(t){return o({url:"/flowable/task/myProcess",method:"get",params:t})}function a(t){return o({url:"/flowable/task/flowFormData",method:"get",params:t})}function e(t){return o({url:"/flowable/task/stopProcess",method:"post",data:t})}export{a as f,r as m,e as s};

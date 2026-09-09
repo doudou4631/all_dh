@@ -1,0 +1,563 @@
+package com.geek.server.service.impl;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.geek.common.core.domain.entity.SysMenu;
+import com.geek.common.core.domain.entity.SysUser;
+import com.geek.common.exception.ServiceException;
+
+import com.geek.common.utils.DateUtils;
+import com.geek.common.utils.SecurityUtils;
+import com.geek.server.domain.MarkPlatformTemplate;
+import com.geek.server.mapper.MarkPlatformTemplateMapper;
+import com.geek.server.service.IMarkPlatformTemplateService;
+import com.geek.system.mapper.SysUserMapper;
+import com.mybatisflex.core.query.QueryChain;
+import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.stereotype.Service;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.HashSet;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * 标记平台模板服务实现
+ */
+@Service
+public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateService {
+    private static final Long MARK_USER_PARENT_MENU_ID = 900100000102L;
+    private static final String MARK_USER_MENU_COMPONENT = "server/mark/user/index";
+    private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
+
+    static {
+        LEGACY_PLATFORM_NAME_MAP.put("td_gaopin", "泰迪高频");
+        LEGACY_PLATFORM_NAME_MAP.put("td_second", "泰迪二次");
+        LEGACY_PLATFORM_NAME_MAP.put("qihu_second", "360二次");
+        LEGACY_PLATFORM_NAME_MAP.put("dianhuabang", "电话邦");
+    }
+
+    @Autowired
+    private MarkPlatformTemplateMapper markPlatformTemplateMapper;
+    @Autowired
+    private SysUserMapper sysUserMapper;
+    @Autowired
+    private ObjectMapper objectMapper;
+
+    @Override
+    public MarkPlatformTemplate selectMarkPlatformTemplateById(Long id) {
+        MarkPlatformTemplate template = markPlatformTemplateMapper.selectMarkPlatformTemplateById(id);
+        if (template == null) {
+            return null;
+        }
+        assertTemplateAccessible(template);
+        return template;
+    }
+    @Override
+    public MarkPlatformTemplate selectOwnerDefaultTemplate(Long ownerUserId) {
+        if (ownerUserId == null) {
+            return null;
+        }
+        if (!isAdminRole()) {
+            Long currentUserId = SecurityUtils.getUserId();
+            if (currentUserId == null || !ownerUserId.equals(currentUserId)) {
+                throw new ServiceException("无权访问该模板");
+            }
+        }
+        return markPlatformTemplateMapper.selectOwnerDefaultTemplate(ownerUserId);
+    }
+
+    @Override
+    public List<MarkPlatformTemplate> selectMarkPlatformTemplateList(MarkPlatformTemplate query) {
+        MarkPlatformTemplate filterQuery = copyTemplateQuery(query);
+        if (isAdminRole()) {
+            return markPlatformTemplateMapper.selectMarkPlatformTemplateList(filterQuery);
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        MarkPlatformTemplate ownerQuery = copyTemplateQuery(filterQuery);
+        ownerQuery.setOwnerUserId(currentUserId);
+        List<MarkPlatformTemplate> templates = new ArrayList<>(
+                markPlatformTemplateMapper.selectMarkPlatformTemplateList(ownerQuery)
+        );
+        appendRelatedBoundTemplatesIfMatched(templates, filterQuery, currentUserId);
+        templates.sort(Comparator
+                .comparing((MarkPlatformTemplate item) -> "1".equals(item.getIsDefault()) ? 0 : 1)
+                .thenComparing((MarkPlatformTemplate item) -> item.getId() == null ? Long.MIN_VALUE : item.getId(), Comparator.reverseOrder()));
+        return templates;
+    }
+    @Override
+    public List<MarkPlatformTemplate> selectEnabledTemplateOptionsForCurrentUser() {
+        MarkPlatformTemplate query = new MarkPlatformTemplate();
+        query.setStatus("0");
+        List<MarkPlatformTemplate> scopedTemplates = selectMarkPlatformTemplateList(query);
+        if (isAdminRole()) {
+            return scopedTemplates;
+        }
+        Map<Long, MarkPlatformTemplate> templateMap = new LinkedHashMap<>();
+        for (MarkPlatformTemplate template : scopedTemplates) {
+            if (template != null && template.getId() != null) {
+                templateMap.put(template.getId(), template);
+            }
+        }
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId == null) {
+            return new ArrayList<>(templateMap.values());
+        }
+        SysUser currentUser = sysUserMapper.selectOneById(currentUserId);
+        Long boundTemplateId = currentUser == null ? null : currentUser.getRelMarkTemplate();
+        if (boundTemplateId == null || templateMap.containsKey(boundTemplateId)) {
+            return new ArrayList<>(templateMap.values());
+        }
+        MarkPlatformTemplate boundTemplate = markPlatformTemplateMapper.selectMarkPlatformTemplateById(boundTemplateId);
+        if (boundTemplate != null && "0".equals(boundTemplate.getStatus())) {
+            try {
+                assertTemplateAccessible(boundTemplate);
+                templateMap.put(boundTemplate.getId(), boundTemplate);
+            } catch (ServiceException ignored) {
+                // 无权模板不加入候选
+            }
+        }
+        return new ArrayList<>(templateMap.values());
+    }
+
+    @Override
+    public List<Map<String, Object>> selectPlatformOptions() {
+        Map<String, String> dynamicPlatformMap = resolveMenuPlatformNameMap();
+        Map<String, String> sourceMap = new LinkedHashMap<>();
+        Set<String> systemCodes = new HashSet<>();
+        if (dynamicPlatformMap.isEmpty()) {
+            for (Map.Entry<String, String> entry : LEGACY_PLATFORM_NAME_MAP.entrySet()) {
+                sourceMap.put(entry.getKey(), entry.getValue());
+                systemCodes.add(entry.getKey());
+            }
+        } else {
+            for (Map.Entry<String, String> entry : dynamicPlatformMap.entrySet()) {
+                sourceMap.put(entry.getKey(), entry.getValue());
+                systemCodes.add(entry.getKey());
+            }
+        }
+        Map<String, String> templatePlatformMap = resolveTemplatePlatformNameMap();
+        for (Map.Entry<String, String> entry : templatePlatformMap.entrySet()) {
+            if (StringUtils.isNotBlank(entry.getValue())) {
+                sourceMap.put(entry.getKey(), entry.getValue());
+            }
+        }
+        List<Map<String, Object>> options = new ArrayList<>();
+        for (Map.Entry<String, String> entry : sourceMap.entrySet()) {
+            Map<String, Object> option = new LinkedHashMap<>();
+            option.put("code", entry.getKey());
+            option.put("name", StringUtils.defaultIfBlank(entry.getValue(), entry.getKey()));
+            option.put("isSystem", systemCodes.contains(entry.getKey()));
+            options.add(option);
+        }
+        return options;
+    }
+
+    @Override
+    public int insertMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate) {
+        if (markPlatformTemplate == null) {
+            throw new ServiceException("模板参数不能为空");
+        }
+        Long ownerUserId = SecurityUtils.getUserId();
+        if (ownerUserId == null) {
+            throw new ServiceException("无法识别模板归属人");
+        }
+        String templateName = normalizeTemplateName(markPlatformTemplate.getTemplateName());
+        markPlatformTemplate.setTemplateName(templateName);
+        checkTemplateNameUnique(ownerUserId, templateName, null);
+        markPlatformTemplate.setStatus(StringUtils.defaultIfBlank(markPlatformTemplate.getStatus(), "0"));
+        markPlatformTemplate.setOwnerUserId(ownerUserId);
+        String requestedDefault = StringUtils.defaultIfBlank(markPlatformTemplate.getIsDefault(), "0");
+        MarkPlatformTemplate ownerDefault = markPlatformTemplateMapper.selectOwnerDefaultTemplate(ownerUserId);
+        markPlatformTemplate.setIsDefault("1".equals(requestedDefault) || ownerDefault == null ? "1" : "0");
+        markPlatformTemplate.setCreateBy(SecurityUtils.getUsername());
+        markPlatformTemplate.setCreateTime(DateUtils.getNowDate());
+        int rows;
+        try {
+            rows = markPlatformTemplateMapper.insertMarkPlatformTemplate(markPlatformTemplate);
+        } catch (DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
+        if (rows > 0 && "1".equals(markPlatformTemplate.getIsDefault())) {
+            markPlatformTemplateMapper.clearOwnerDefaultTemplate(ownerUserId, markPlatformTemplate.getId());
+        }
+        ensureOwnerHasDefault(ownerUserId);
+        return rows;
+    }
+
+    @Override
+    public int updateMarkPlatformTemplate(MarkPlatformTemplate markPlatformTemplate) {
+        if (markPlatformTemplate == null || markPlatformTemplate.getId() == null) {
+            throw new ServiceException("模板参数不能为空");
+        }
+        MarkPlatformTemplate stored = markPlatformTemplateMapper.selectMarkPlatformTemplateById(markPlatformTemplate.getId());
+        if (stored == null) {
+            throw new ServiceException("模板不存在");
+        }
+        assertTemplateAccessible(stored);
+        Long ownerUserId = stored.getOwnerUserId();
+        String templateName = markPlatformTemplate.getTemplateName() == null
+                ? stored.getTemplateName()
+                : normalizeTemplateName(markPlatformTemplate.getTemplateName());
+        markPlatformTemplate.setTemplateName(templateName);
+        checkTemplateNameUnique(ownerUserId, templateName, markPlatformTemplate.getId());
+        markPlatformTemplate.setOwnerUserId(ownerUserId);
+        markPlatformTemplate.setIsDefault(normalizeDefaultFlag(
+                StringUtils.defaultIfBlank(markPlatformTemplate.getIsDefault(), stored.getIsDefault())
+        ));
+        markPlatformTemplate.setUpdateBy(SecurityUtils.getUsername());
+        markPlatformTemplate.setUpdateTime(DateUtils.getNowDate());
+        int rows;
+        try {
+            rows = markPlatformTemplateMapper.updateMarkPlatformTemplate(markPlatformTemplate);
+        } catch (DataIntegrityViolationException e) {
+            throw convertPersistenceException(e);
+        }
+        if (rows > 0 && "1".equals(markPlatformTemplate.getIsDefault())) {
+            markPlatformTemplateMapper.clearOwnerDefaultTemplate(ownerUserId, markPlatformTemplate.getId());
+        }
+        ensureOwnerHasDefault(ownerUserId);
+        return rows;
+    }
+
+    @Override
+    public int deleteMarkPlatformTemplateByIds(Long[] ids) {
+        if (ids == null || ids.length == 0) {
+            return 0;
+        }
+        Set<Long> affectedOwnerIds = new HashSet<>();
+        for (Long id : ids) {
+            MarkPlatformTemplate stored = markPlatformTemplateMapper.selectMarkPlatformTemplateById(id);
+            if (stored == null) {
+                continue;
+            }
+            assertTemplateAccessible(stored);
+            long bindingCount = markPlatformTemplateMapper.countActiveUserBindingsByTemplateId(id);
+            if (bindingCount > 0) {
+                String templateName = StringUtils.defaultIfBlank(stored.getTemplateName(), String.valueOf(id));
+                throw new ServiceException("模板【" + templateName + "】已绑定" + bindingCount + "个用户，请先迁移用户模板后再删除");
+            }
+            if (stored.getOwnerUserId() != null) {
+                affectedOwnerIds.add(stored.getOwnerUserId());
+            }
+        }
+        int rows = markPlatformTemplateMapper.deleteMarkPlatformTemplateByIds(ids);
+        for (Long ownerUserId : affectedOwnerIds) {
+            ensureOwnerHasDefault(ownerUserId);
+        }
+        return rows;
+    }
+
+    private Map<String, String> resolveMenuPlatformNameMap() {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        List<SysMenu> menus = QueryChain.of(SysMenu.class)
+                .eq(SysMenu::getParentId, MARK_USER_PARENT_MENU_ID)
+                .eq(SysMenu::getMenuType, "C")
+                .eq(SysMenu::getStatus, "0")
+                .eq(SysMenu::getComponent, MARK_USER_MENU_COMPONENT)
+                .orderBy(SysMenu::getOrderNum, true)
+                .list();
+        for (SysMenu menu : menus) {
+            Map<String, Object> queryMap = parseJsonMap(menu.getQuery());
+            String platformCode = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformCode")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("code")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("value"))
+            );
+            if (StringUtils.isBlank(platformCode)) {
+                continue;
+            }
+            String platformName = firstNonBlank(
+                    getStringOrNull(queryMap == null ? null : queryMap.get("platformName")),
+                    getStringOrNull(queryMap == null ? null : queryMap.get("name")),
+                    StringUtils.trimToNull(menu.getMenuName()),
+                    platformCode
+            );
+            platformNameMap.putIfAbsent(platformCode, platformName);
+        }
+        return platformNameMap;
+    }
+
+    private Map<String, String> resolveTemplatePlatformNameMap() {
+        Map<String, String> platformNameMap = new LinkedHashMap<>();
+        MarkPlatformTemplate query = new MarkPlatformTemplate();
+        List<MarkPlatformTemplate> templateList = selectMarkPlatformTemplateList(query);
+        for (MarkPlatformTemplate template : templateList) {
+            String templateInfo = template.getTemplateInfo();
+            if (StringUtils.isBlank(templateInfo)) {
+                continue;
+            }
+            try {
+                List<Object> rawList = objectMapper.readValue(templateInfo, new TypeReference<List<Object>>() {});
+                for (Object item : rawList) {
+                    addTemplatePlatformEntry(platformNameMap, item);
+                }
+            } catch (Exception ignored) {
+                // ignore malformed template info and continue collecting from others
+            }
+        }
+        return platformNameMap;
+    }
+
+    private void addTemplatePlatformEntry(Map<String, String> target, Object item) {
+        if (item == null) {
+            return;
+        }
+        String code = null;
+        String name = null;
+        if (item instanceof String) {
+            code = StringUtils.trimToNull((String) item);
+        } else if (item instanceof Map<?, ?>) {
+            Map<?, ?> map = (Map<?, ?>) item;
+            code = firstNonBlank(
+                    getStringOrNull(map.get("platformCode")),
+                    getStringOrNull(map.get("code")),
+                    getStringOrNull(map.get("value"))
+            );
+            name = firstNonBlank(
+                    getStringOrNull(map.get("platformName")),
+                    getStringOrNull(map.get("name")),
+                    getStringOrNull(map.get("label"))
+            );
+        }
+        if (StringUtils.isBlank(code)) {
+            return;
+        }
+        String normalizedName = StringUtils.defaultIfBlank(name, code);
+        if (!target.containsKey(code)) {
+            target.put(code, normalizedName);
+            return;
+        }
+        String currentName = target.get(code);
+        if (StringUtils.equals(currentName, code) && StringUtils.isNotBlank(normalizedName)) {
+            target.put(code, normalizedName);
+        }
+    }
+
+    private Map<String, Object> parseJsonMap(String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private String getStringOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        return StringUtils.trimToNull(String.valueOf(value));
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (StringUtils.isNotBlank(value)) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String normalizeTemplateName(String templateName) {
+        String normalized = StringUtils.trimToEmpty(templateName);
+        if (StringUtils.isBlank(normalized)) {
+            throw new ServiceException("模板名称不能为空");
+        }
+        return normalized;
+    }
+
+    private void checkTemplateNameUnique(Long ownerUserId, String templateName, Long currentId) {
+        if (ownerUserId == null) {
+            throw new ServiceException("模板归属用户不能为空");
+        }
+        MarkPlatformTemplate same = markPlatformTemplateMapper
+                .selectMarkPlatformTemplateByOwnerAndName(ownerUserId, templateName);
+        if (same == null) {
+            return;
+        }
+        if (currentId == null || !same.getId().equals(currentId)) {
+            throw new ServiceException("模板名称已存在");
+        }
+    }
+
+    private RuntimeException convertPersistenceException(RuntimeException exception) {
+        if (isDuplicateTemplateNameException(exception)) {
+            return new ServiceException("模板名称已存在");
+        }
+        return exception;
+    }
+
+    private boolean isDuplicateTemplateNameException(Throwable throwable) {
+        if (throwable == null) {
+            return false;
+        }
+        String message = StringUtils.defaultString(throwable.getMessage());
+        if (StringUtils.containsIgnoreCase(message, "uk_mark_platform_template_owner_name")
+                || StringUtils.containsIgnoreCase(message, "uk_mark_platform_template_name")
+                || (StringUtils.containsIgnoreCase(message, "duplicate entry")
+                    && StringUtils.containsIgnoreCase(message, "mark_platform_template"))) {
+            return true;
+        }
+        return isDuplicateTemplateNameException(throwable.getCause());
+    }
+    private String normalizeDefaultFlag(String value) {
+        return "1".equals(StringUtils.trimToEmpty(value)) ? "1" : "0";
+    }
+
+    private void ensureOwnerHasDefault(Long ownerUserId) {
+        if (ownerUserId == null) {
+            return;
+        }
+        MarkPlatformTemplate ownerDefault = markPlatformTemplateMapper.selectOwnerDefaultTemplate(ownerUserId);
+        if (ownerDefault != null) {
+            return;
+        }
+        MarkPlatformTemplate query = new MarkPlatformTemplate();
+        query.setOwnerUserId(ownerUserId);
+        query.setStatus("0");
+        List<MarkPlatformTemplate> templates = markPlatformTemplateMapper.selectMarkPlatformTemplateList(query);
+        if (templates == null || templates.isEmpty()) {
+            return;
+        }
+        MarkPlatformTemplate candidate = templates.get(0);
+        MarkPlatformTemplate update = new MarkPlatformTemplate();
+        update.setId(candidate.getId());
+        update.setIsDefault("1");
+        update.setUpdateBy(SecurityUtils.getUsername());
+        update.setUpdateTime(DateUtils.getNowDate());
+        markPlatformTemplateMapper.updateMarkPlatformTemplate(update);
+        markPlatformTemplateMapper.clearOwnerDefaultTemplate(ownerUserId, candidate.getId());
+    }
+
+    private void applyOwnerScope(MarkPlatformTemplate query) {
+        if (query == null || isAdminRole()) {
+            return;
+        }
+        query.setOwnerUserId(SecurityUtils.getUserId());
+    }
+
+    private MarkPlatformTemplate copyTemplateQuery(MarkPlatformTemplate source) {
+        MarkPlatformTemplate copy = new MarkPlatformTemplate();
+        if (source == null) {
+            return copy;
+        }
+        copy.setId(source.getId());
+        copy.setTemplateName(source.getTemplateName());
+        copy.setTemplateInfo(source.getTemplateInfo());
+        copy.setStatus(source.getStatus());
+        copy.setIsDefault(source.getIsDefault());
+        copy.setOwnerUserId(source.getOwnerUserId());
+        return copy;
+    }
+
+    private void appendRelatedBoundTemplatesIfMatched(List<MarkPlatformTemplate> templates,
+                                                      MarkPlatformTemplate filterQuery,
+                                                      Long currentUserId) {
+        if (currentUserId == null) {
+            return;
+        }
+        Set<Long> relatedTemplateIds = resolveCurrentRelatedTemplateIds(currentUserId);
+        for (Long templateId : relatedTemplateIds) {
+            appendTemplateIfMatched(templates, filterQuery, templateId);
+        }
+    }
+
+    private Set<Long> resolveCurrentRelatedTemplateIds(Long currentUserId) {
+        Set<Long> templateIds = new LinkedHashSet<>();
+        SysUser currentUser = sysUserMapper.selectOneById(currentUserId);
+        Long boundTemplateId = currentUser == null ? null : currentUser.getRelMarkTemplate();
+        if (boundTemplateId != null) {
+            templateIds.add(boundTemplateId);
+        }
+        String currentUsername = SecurityUtils.getUsername();
+        if (StringUtils.isNotBlank(currentUsername)) {
+            List<SysUser> downstreamUsers = QueryChain.of(SysUser.class)
+                    .eq(SysUser::getCreateBy, currentUsername)
+                    .list();
+            for (SysUser user : downstreamUsers) {
+                if (user != null && user.getRelMarkTemplate() != null) {
+                    templateIds.add(user.getRelMarkTemplate());
+                }
+            }
+        }
+        return templateIds;
+    }
+
+    private void appendTemplateIfMatched(List<MarkPlatformTemplate> templates,
+                                         MarkPlatformTemplate filterQuery,
+                                         Long templateId) {
+        if (templateId == null) {
+            return;
+        }
+        boolean alreadyPresent = templates.stream()
+                .anyMatch(item -> item != null && templateId.equals(item.getId()));
+        if (alreadyPresent) {
+            return;
+        }
+        MarkPlatformTemplate boundTemplate = markPlatformTemplateMapper.selectMarkPlatformTemplateById(templateId);
+        if (boundTemplate != null && matchesTemplateListFilters(boundTemplate, filterQuery)) {
+            templates.add(boundTemplate);
+        }
+    }
+
+    private boolean matchesTemplateListFilters(MarkPlatformTemplate template, MarkPlatformTemplate query) {
+        if (template == null || query == null) {
+            return true;
+        }
+        if (StringUtils.isNotBlank(query.getTemplateName())
+                && !StringUtils.contains(template.getTemplateName(), StringUtils.trim(query.getTemplateName()))) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(query.getStatus())
+                && !StringUtils.equals(query.getStatus(), template.getStatus())) {
+            return false;
+        }
+        if (StringUtils.isNotBlank(query.getIsDefault())
+                && !StringUtils.equals(query.getIsDefault(), template.getIsDefault())) {
+            return false;
+        }
+        return true;
+    }
+
+    private void assertTemplateAccessible(MarkPlatformTemplate template) {
+        if (template == null || isAdminRole()) {
+            return;
+        }
+        Long ownerUserId = template.getOwnerUserId();
+        Long currentUserId = SecurityUtils.getUserId();
+        if (currentUserId == null) {
+            throw new ServiceException("无权访问该模板");
+        }
+        if (ownerUserId != null && ownerUserId.equals(currentUserId)) {
+            return;
+        }
+        if (isCurrentUserRelatedTemplate(currentUserId, template.getId())) {
+            return;
+        }
+        throw new ServiceException("无权访问该模板");
+    }
+
+    private boolean isCurrentUserRelatedTemplate(Long currentUserId, Long templateId) {
+        if (currentUserId == null || templateId == null) {
+            return false;
+        }
+        return resolveCurrentRelatedTemplateIds(currentUserId).contains(templateId);
+    }
+
+    private boolean isAdminRole() {
+        return SecurityUtils.isAdmin()
+                || SecurityUtils.hasRole("admin")
+                || SecurityUtils.hasRole("mark_admin");
+    }
+}

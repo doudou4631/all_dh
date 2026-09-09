@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.MarkAgentManagementMapper">
+  <select id="selectAgentList" resultType="com.geek.server.domain.vo.MarkAgentManagementVO">
+    select u.user_id userId,u.user_name userName,u.nick_name nickName,u.phonenumber,u.status,
+      u.agent_level agentLevel,u.parent_user_id parentUserId,p.user_name parentUserName,
+      coalesce(sum(q.remain_count),0) totalRemainCount,u.create_time createTime
+    from sys_user u
+    left join sys_user p on p.user_id=u.parent_user_id
+    left join mark_user_platform_quota q on q.user_id=u.user_id
+    where u.del_flag=0
+    <choose>
+      <when test="agentLevel == 3">and u.agent_level is null and p.agent_level=2</when>
+      <when test="agentLevel == 2">and u.agent_level=2</when>
+      <otherwise>and u.agent_level=1</otherwise>
+    </choose>
+    <if test="parentUserId != null">and u.parent_user_id=#{parentUserId}</if>
+    <if test="keyword != null and keyword != ''">and (u.user_name like concat('%',#{keyword},'%') or u.nick_name like concat('%',#{keyword},'%') or u.phonenumber like concat('%',#{keyword},'%'))</if>
+    <if test="status != null and status != ''">and u.status=#{status}</if>
+    group by u.user_id,u.user_name,u.nick_name,u.phonenumber,u.status,u.agent_level,u.parent_user_id,p.user_name,u.create_time
+    order by u.user_id desc
+  </select>
+  <select id="selectTransactionByRequestNo" resultType="com.geek.server.domain.MarkAgentPointTransaction">
+    select id,transaction_no transactionNo,request_no requestNo,transaction_type transactionType,
+      platform_code platformCode,platform_name platformName,amount,from_user_id fromUserId,to_user_id toUserId,
+      operator_user_id operatorUserId,reason,status,create_time createTime
+    from mark_agent_point_transaction where request_no=#{requestNo} limit 1
+  </select>
+  <select id="selectRoleIdByRoleKey" resultType="java.lang.Long">
+    select role_id from sys_role where role_key=#{roleKey} and status='0' and del_flag='0' limit 1
+  </select>
+  <insert id="insertTransaction" parameterType="com.geek.server.domain.MarkAgentPointTransaction" useGeneratedKeys="true" keyProperty="id">
+    insert into mark_agent_point_transaction(transaction_no,request_no,transaction_type,platform_code,platform_name,
+      amount,from_user_id,to_user_id,operator_user_id,reason,status,create_time)
+    values(#{transactionNo},#{requestNo},#{transactionType},#{platformCode},#{platformName},#{amount},
+      #{fromUserId},#{toUserId},#{operatorUserId},#{reason},#{status},#{createTime})
+  </insert>
+</mapper>

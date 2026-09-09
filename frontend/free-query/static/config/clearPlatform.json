@@ -1,0 +1,56 @@
+{
+  "version": "1782999783960",
+  "columnsPerRow": 5,
+  "platforms": [
+    {
+      "code": "tdx",
+      "name": "泰迪熊",
+      "storePic": "/static/platform/tdx.png"
+    },
+    {
+      "code": "sll",
+      "name": "360",
+      "storePic": "/static/platform/sll.png"
+    },
+    {
+      "code": "tx",
+      "name": "腾讯",
+      "storePic": "/static/platform/tx.png"
+    },
+    {
+      "code": "bd",
+      "name": "百度",
+      "storePic": "/static/platform/bd.png"
+    },
+    {
+      "code": "lt",
+      "name": "联通",
+      "storePic": "/static/platform/lt.png"
+    },
+    {
+      "code": "ydhigh",
+      "name": "移动高频",
+      "storePic": "/static/platform/ydhigh.png"
+    },
+    {
+      "code": "dhb",
+      "name": "电话邦",
+      "storePic": "/static/platform/dhb.png"
+    },
+    {
+      "code": "sghmt",
+      "name": "搜狗",
+      "storePic": "/static/platform/sghmt.png"
+    },
+    {
+      "code": "xm",
+      "name": "小米",
+      "storePic": "/static/platform/xm.png"
+    },
+    {
+      "code": "114",
+      "name": "114",
+      "storePic": "/static/platform/114.png"
+    }
+  ]
+}

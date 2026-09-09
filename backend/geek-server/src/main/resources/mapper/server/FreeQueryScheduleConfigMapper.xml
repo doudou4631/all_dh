@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.FreeQueryScheduleConfigMapper">
+    <resultMap id="ScheduleConfigResult" type="FreeQueryScheduleConfig">
+        <id property="id" column="id" />
+        <result property="taskName" column="task_name" />
+        <result property="taskType" column="task_type" />
+        <result property="startTime" column="start_time" />
+        <result property="endTime" column="end_time" />
+        <result property="cronExpression" column="cron_expression" />
+        <result property="dataSource" column="data_source" />
+        <result property="retentionDays" column="retention_days" />
+        <result property="status" column="status" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="baseColumns">
+        id, task_name, task_type, start_time, end_time, cron_expression, data_source,
+        retention_days, status, create_by, create_time, update_by, update_time, remark
+    </sql>
+
+    <select id="selectById" resultMap="ScheduleConfigResult">
+        select <include refid="baseColumns" /> from free_query_schedule_config where id = #{id}
+    </select>
+
+    <select id="selectList" parameterType="FreeQueryScheduleConfig" resultMap="ScheduleConfigResult">
+        select <include refid="baseColumns" /> from free_query_schedule_config
+        <where>
+            <if test="taskName != null and taskName != ''">and task_name like concat('%', #{taskName}, '%')</if>
+            <if test="taskType != null and taskType != ''">and task_type = #{taskType}</if>
+            <if test="status != null and status != ''">and status = #{status}</if>
+        </where>
+        order by task_type, id desc
+    </select>
+
+    <select id="selectEnabledList" resultMap="ScheduleConfigResult">
+        select <include refid="baseColumns" /> from free_query_schedule_config
+        where status = '0' order by task_type, id
+    </select>
+
+    <select id="countByTaskName" resultType="int">
+        select count(1) from free_query_schedule_config where task_name = #{taskName}
+        <if test="excludeId != null">and id != #{excludeId}</if>
+    </select>
+
+    <insert id="insert" parameterType="FreeQueryScheduleConfig" useGeneratedKeys="true" keyProperty="id">
+        insert into free_query_schedule_config
+        (task_name, task_type, start_time, end_time, cron_expression, data_source, retention_days,
+         status, create_by, create_time, remark)
+        values
+        (#{taskName}, #{taskType}, #{startTime}, #{endTime}, #{cronExpression}, #{dataSource},
+         #{retentionDays}, #{status}, #{createBy}, #{createTime}, #{remark})
+    </insert>
+
+    <update id="update" parameterType="FreeQueryScheduleConfig">
+        update free_query_schedule_config
+        <set>
+            <if test="taskName != null">task_name = #{taskName},</if>
+            <if test="taskType != null">task_type = #{taskType},</if>
+            start_time = #{startTime},
+            end_time = #{endTime},
+            cron_expression = #{cronExpression},
+            data_source = #{dataSource},
+            retention_days = #{retentionDays},
+            <if test="status != null">status = #{status},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <update id="changeStatus" parameterType="FreeQueryScheduleConfig">
+        update free_query_schedule_config
+        set status = #{status}, update_by = #{updateBy}, update_time = #{updateTime}
+        where id = #{id}
+    </update>
+
+    <delete id="deleteByIds">
+        delete from free_query_schedule_config where id in
+        <foreach item="id" collection="array" open="(" separator="," close=")">#{id}</foreach>
+    </delete>
+</mapper>

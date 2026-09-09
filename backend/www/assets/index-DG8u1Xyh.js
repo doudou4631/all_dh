@@ -1,0 +1,1 @@
+import e from"./ProcessWorkbench-DyBM_kn-.js";import{o,c as t,a as r,i as a}from"./index-BXWz6qZt.js";import"./markProcessStatus-BeO7l7fg.js";const s={class:"app-container"},c=a({name:"MarkAgentOrder"}),f=Object.assign(c,{setup(n){return(_,p)=>(o(),t("div",s,[r(e)]))}});export{f as default};

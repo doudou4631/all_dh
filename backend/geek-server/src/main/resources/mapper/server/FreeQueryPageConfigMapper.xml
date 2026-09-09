@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.FreeQueryPageConfigMapper">
+    <resultMap id="PageConfigResult" type="FreeQueryPageConfig">
+        <id property="id" column="id" />
+        <result property="pageCode" column="page_code" />
+        <result property="phone" column="phone" />
+        <result property="qrCode" column="qr_code" />
+        <result property="showOnlineService" column="show_online_service" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <select id="selectByPageCode" resultMap="PageConfigResult">
+        select id, page_code, phone, qr_code, show_online_service, create_by, create_time, update_by, update_time
+        from free_query_page_config
+        where page_code = #{pageCode}
+    </select>
+
+    <select id="selectAll" resultMap="PageConfigResult">
+        select id, page_code, phone, qr_code, show_online_service, create_by, create_time, update_by, update_time
+        from free_query_page_config
+        order by page_code
+    </select>
+
+    <insert id="saveConfig" parameterType="FreeQueryPageConfig">
+        insert into free_query_page_config
+            (page_code, phone, qr_code, show_online_service, create_by, create_time, update_by, update_time)
+        values
+            (#{pageCode}, #{phone}, #{qrCode}, #{showOnlineService}, #{updateBy}, #{updateTime}, #{updateBy}, #{updateTime})
+        on duplicate key update
+            phone = values(phone),
+            qr_code = values(qr_code),
+            show_online_service = values(show_online_service),
+            update_by = values(update_by),
+            update_time = values(update_time)
+    </insert>
+</mapper>

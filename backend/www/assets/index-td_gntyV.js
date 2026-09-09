@@ -1,0 +1,1 @@
+import{_ as e,j as o,o as t,c,i as n}from"./index-BXWz6qZt.js";const s={class:"redirecting"},a=n({name:"PublicFreeQuery2Shell"}),_=Object.assign(a,{setup(r){return o(()=>{window.location.replace("/mobile-h5/")}),(i,l)=>(t(),c("div",s,"正在进入免费查询页面..."))}}),p=e(_,[["__scopeId","data-v-88ac2393"]]);export{p as default};

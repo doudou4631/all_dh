@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.FreeQueryStatisticsMapper">
+    <insert id="insertRecord" parameterType="FreeQueryRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into free_query_record (
+            visitor_key, ip_addr, user_agent, query_phone, result_details, query_status, has_result,
+            platform_total, platform_success, marked_count, response_time,
+            error_message, create_time
+        ) values (
+            #{visitorKey}, #{ipAddr}, #{userAgent}, #{queryPhone}, #{resultDetails}, #{queryStatus}, #{hasResult},
+            #{platformTotal}, #{platformSuccess}, #{markedCount}, #{responseTime},
+            #{errorMessage}, #{createTime}
+        )
+    </insert>
+
+    <delete id="deleteExpiredRecords">
+        delete from free_query_record
+        where create_time &lt; #{beforeTime}
+        order by create_time asc, id asc
+        limit 2000
+    </delete>
+
+    <select id="selectSummary" resultType="java.util.LinkedHashMap">
+        select
+            count(*) as totalQueryCount,
+            coalesce(sum(case when create_time &gt;= curdate() then 1 else 0 end), 0) as todayQueryCount,
+            coalesce(sum(case when create_time &gt;= date_sub(curdate(), interval weekday(curdate()) day) then 1 else 0 end), 0) as weekQueryCount,
+            count(distinct visitor_key) as uniqueVisitors,
+            count(distinct case when create_time &gt;= curdate() then visitor_key end) as todayVisitors,
+            (
+                select count(*) from (
+                    select visitor_key
+                    from free_query_record
+                    group by visitor_key
+                    having min(create_time) &gt;= curdate()
+                ) first_today
+            ) as newVisitorsToday,
+            round(case when count(distinct visitor_key) = 0 then 0
+                else count(*) / count(distinct visitor_key) end, 2) as avgQueriesPerUser,
+            round(case when count(*) = 0 then 0
+                else sum(case when query_status = '0' then 1 else 0 end) * 100.0 / count(*) end, 2) as successRate,
+            round(case when count(*) = 0 then 0
+                else sum(case when query_status = '0' and has_result = '0' then 1 else 0 end) * 100.0 / count(*) end, 2) as noResultRate
+        from free_query_record
+    </select>
+
+    <select id="selectSevenDayTrend" resultType="java.util.LinkedHashMap">
+        select
+            date_format(create_time, '%Y-%m-%d') as statDate,
+            count(*) as queryCount,
+            count(distinct visitor_key) as visitorCount,
+            round(sum(case when query_status = '0' then 1 else 0 end) * 100.0 / count(*), 2) as successRate,
+            round(sum(case when query_status = '0' and has_result = '0' then 1 else 0 end) * 100.0 / count(*), 2) as noResultRate
+        from free_query_record
+        where create_time &gt;= date_sub(curdate(), interval 6 day)
+        group by date(create_time)
+        order by date(create_time)
+    </select>
+
+    <select id="selectAuditList" parameterType="FreeQueryAuditQuery" resultType="FreeQueryAuditRecord">
+        select id, ip_addr, query_phone, query_status, has_result,
+               marked_count, response_time, create_time
+        from free_query_record
+        <where>
+            <if test="ipAddr != null and ipAddr != ''">
+                and ip_addr like concat('%', #{ipAddr}, '%')
+            </if>
+            <if test="queryPhone != null and queryPhone != ''">
+                and query_phone like concat('%', #{queryPhone}, '%')
+            </if>
+            <if test="markedOnly == '1'">
+                and has_result = '1'
+            </if>
+        </where>
+        order by create_time desc, id desc
+    </select>
+
+    <select id="selectResultDetailsById" parameterType="Long" resultType="String">
+        select result_details from free_query_record where id = #{id}
+    </select>
+</mapper>

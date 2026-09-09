@@ -1,0 +1,1 @@
+import{X as t}from"./index-BXWz6qZt.js";function s(r){return t({url:"/server/batchTask/list",method:"get",params:r})}function o(r){return t({url:"/server/batchTask/export",method:"post",data:r})}function c(r){const e=Array.isArray(r)?r.join(","):String(r);return t({url:"/server/batchTask/"+e,method:"delete"})}export{c as d,o as e,s as l};

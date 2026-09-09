@@ -1,0 +1,1 @@
+import{_ as n}from"./index.vue_vue_type_script_setup_true_lang-BundfV65.js";import{o,e as t,a4 as p,E as e,p as l}from"./index-BuPPGqEf.js";const f={__name:"index",setup(u){const r=l("/prod-api/swagger-ui/index.html");return(c,s)=>(o(),t(e(n),{src:e(r),"onUpdate:src":s[0]||(s[0]=a=>p(r)?r.value=a:null)},null,8,["src"]))}};export{f as default};

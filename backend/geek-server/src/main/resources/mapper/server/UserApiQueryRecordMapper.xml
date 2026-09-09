@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.UserApiQueryRecordMapper">
+    
+    <resultMap type="UserApiQueryRecord" id="UserApiQueryRecordResult">
+        <result property="id" column="id" />
+        <result property="queryType" column="query_type" />
+        <result property="platformId" column="platform_id" />
+        <result property="platformName" column="platform_name" />
+        <result property="requestStatus" column="request_status" />
+        <result property="requestTime" column="request_time" />
+        <result property="userId" column="user_id" />
+        <result property="phone" column="phone" />
+        <result property="requestParams" column="request_params" />
+        <result property="responseResult" column="response_result" />
+        <result property="results" column="results" />
+        <result property="taskId" column="task_id" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+        <result property="remark" column="remark" />
+    </resultMap>
+
+    <sql id="selectUserApiQueryRecordVo">
+        select 
+            uaqr.id,
+            uaqr.query_type,
+            uaqr.platform_id,
+            uaqr.platform_name,
+            uaqr.request_status,
+            uaqr.request_time,
+            uaqr.user_id,
+            uaqr.phone,
+            uaqr.request_params,
+            uaqr.response_result,
+            uaqr.results,
+            uaqr.task_id,
+            uaqr.create_by,
+            uaqr.create_time,
+            uaqr.update_by,
+            uaqr.update_time,
+            uaqr.remark
+        from user_api_query_record uaqr
+    </sql>
+
+    <!-- 聚合列表公共条件：含单条、批量等全部 query_type；传入 queryType 时再按类型筛选 -->
+    <sql id="singleBatchCommonWhere">
+        <where>
+            <if test="queryType != null and queryType != ''"> and uaqr.query_type = #{queryType}</if>
+            <if test="phone != null and phone != ''"> and uaqr.phone = #{phone}</if>
+            <if test="taskId != null and taskId != ''"> and uaqr.task_id = #{taskId}</if>
+            <if test="requestStatus != null and requestStatus != ''"> and uaqr.request_status = #{requestStatus}</if>
+            <if test="userId != null"> and uaqr.user_id = #{userId}</if>
+            <if test="createBy != null and createBy != ''"> and uaqr.create_by = #{createBy}</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and uaqr.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and uaqr.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+    </sql>
+
+    <resultMap type="UserApiQueryBatchSummary" id="UserApiQueryBatchSummaryResult">
+        <result property="displayId" column="display_id"/>
+        <result property="phone" column="phone"/>
+        <result property="taskId" column="task_id"/>
+        <result property="batchKey" column="batch_key"/>
+        <result property="queryType" column="query_type"/>
+        <result property="queryTime" column="query_time"/>
+        <result property="platformCount" column="platform_count"/>
+        <result property="markedPlatformCount" column="marked_platform_count"/>
+        <result property="memberIds" column="member_ids"/>
+    </resultMap>
+
+    <!-- 按 phone + 批次分组，分页由 PageHelper 处理 -->
+    <select id="selectSingleQueryBatchGroupList" parameterType="UserApiQueryRecord" resultMap="UserApiQueryBatchSummaryResult">
+        select
+            MIN(f.id) as display_id,
+            f.phone as phone,
+            MAX(f.task_id) as task_id,
+            COALESCE(NULLIF(TRIM(MAX(f.task_id)), ''), CONCAT('__id_', MIN(f.id))) as batch_key,
+            MAX(f.query_type) as query_type,
+            MAX(f.create_time) as query_time,
+            COUNT(*) as platform_count,
+            <!-- 有标记：results 含 yes；无标记：no、含 no、空（与业务 results 列约定一致） -->
+            SUM(
+                CASE
+                    WHEN f.results IS NOT NULL
+                        AND TRIM(f.results) != ''
+                        AND LOWER(f.results) LIKE '%yes%'
+                    THEN 1
+                    ELSE 0
+                END
+            ) as marked_platform_count,
+            GROUP_CONCAT(f.id ORDER BY f.id SEPARATOR ',') as member_ids
+        from (
+            select
+                uaqr.id,
+                uaqr.phone,
+                uaqr.task_id,
+                uaqr.query_type,
+                uaqr.create_time,
+                uaqr.results
+            from user_api_query_record uaqr
+            <include refid="singleBatchCommonWhere"/>
+        ) f
+        group by f.phone, COALESCE(NULLIF(TRIM(f.task_id), ''), CONCAT('__id_', f.id))
+        order by MAX(f.create_time) desc
+    </select>
+
+    <!-- 某批次下各平台完整记录 -->
+    <select id="selectSingleQueryBatchDetailList" resultMap="UserApiQueryRecordResult">
+        <include refid="selectUserApiQueryRecordVo"/>
+        <where>
+            and uaqr.phone = #{phone}
+            <if test="userId != null"> and uaqr.user_id = #{userId}</if>
+            <choose>
+                <when test="batchKey != null and batchKey.indexOf('__id_') == 0">
+                    and uaqr.id = CAST(SUBSTRING(#{batchKey}, 6) AS UNSIGNED)
+                </when>
+                <otherwise>
+                    and uaqr.task_id = #{batchKey}
+                </otherwise>
+            </choose>
+            <if test="createBy != null and createBy != ''"> and uaqr.create_by = #{createBy}</if>
+        </where>
+        order by uaqr.platform_id asc, uaqr.id asc
+    </select>
+
+    <select id="selectUserApiQueryRecordList" parameterType="UserApiQueryRecord" resultMap="UserApiQueryRecordResult">
+        <include refid="selectUserApiQueryRecordVo"/>
+        <where>
+            <if test="queryType != null  and queryType != ''"> and uaqr.query_type = #{queryType}</if>
+            <if test="platformId != null "> and uaqr.platform_id = #{platformId}</if>
+            <if test="platformName != null  and platformName != ''"> and uaqr.platform_name = #{platformName}</if>
+            <if test="requestStatus != null  and requestStatus != ''"> and uaqr.request_status = #{requestStatus}</if>
+            <if test="requestTime != null "> and uaqr.request_time = #{requestTime}</if>
+            <if test="userId != null "> and uaqr.user_id = #{userId}</if>
+            <if test="requestParams != null  and requestParams != ''"> and uaqr.request_params = #{requestParams}</if>
+            <if test="responseResult != null  and responseResult != ''"> and uaqr.response_result = #{responseResult}</if>
+            <if test="createBy != null and createBy != ''"> and uaqr.create_by like concat('%', #{createBy}, '%')</if>
+            <if test="taskId != null and taskId != ''"> and uaqr.task_id = #{taskId}</if>
+            <if test="phone != null and phone != ''"> and uaqr.phone = #{phone}</if>
+            <if test="params != null and params.beginTime != null and params.beginTime != ''">
+                and uaqr.create_time &gt;= #{params.beginTime}
+            </if>
+            <if test="params != null and params.endTime != null and params.endTime != ''">
+                and uaqr.create_time &lt;= concat(#{params.endTime}, ' 23:59:59')
+            </if>
+        </where>
+        order by create_time desc
+    </select>
+    
+    <select id="selectUserApiQueryRecordById" parameterType="Long" resultMap="UserApiQueryRecordResult">
+        <include refid="selectUserApiQueryRecordVo"/>
+        where uaqr.id = #{id}
+    </select>
+        
+    <insert id="insertUserApiQueryRecord" parameterType="UserApiQueryRecord" useGeneratedKeys="true" keyProperty="id">
+        insert into user_api_query_record
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="queryType != null and queryType != ''">query_type,</if>
+            <if test="platformId != null">platform_id,</if>
+            <if test="platformName != null and platformName != ''">platform_name,</if>
+            <if test="requestStatus != null and requestStatus != ''">request_status,</if>
+            <if test="requestTime != null">request_time,</if>
+            <if test="userId != null">user_id,</if>
+            <if test="phone != null and phone != ''">phone,</if>
+            <if test="requestParams != null and requestParams != ''">request_params,</if>
+            <if test="responseResult != null">response_result,</if>
+            <if test="results != null and results != ''">results,</if>
+            <if test="taskId != null and taskId != ''">task_id,</if>
+            <if test="createBy != null">create_by,</if>
+            <if test="createTime != null">create_time,</if>
+            <if test="updateBy != null">update_by,</if>
+            <if test="updateTime != null">update_time,</if>
+            <if test="remark != null">remark,</if>
+         </trim>
+        <trim prefix="values (" suffix=")" suffixOverrides=",">
+            <if test="queryType != null and queryType != ''">#{queryType},</if>
+            <if test="platformId != null">#{platformId},</if>
+            <if test="platformName != null and platformName != ''">#{platformName},</if>
+            <if test="requestStatus != null and requestStatus != ''">#{requestStatus},</if>
+            <if test="requestTime != null">#{requestTime},</if>
+            <if test="userId != null">#{userId},</if>
+            <if test="phone != null and phone != ''">#{phone},</if>
+            <if test="requestParams != null and requestParams != ''">#{requestParams},</if>
+            <if test="responseResult != null">#{responseResult},</if>
+            <if test="results != null and results != ''">#{results},</if>
+            <if test="taskId != null and taskId != ''">#{taskId},</if>
+            <if test="createBy != null">#{createBy},</if>
+            <if test="createTime != null">#{createTime},</if>
+            <if test="updateBy != null">#{updateBy},</if>
+            <if test="updateTime != null">#{updateTime},</if>
+            <if test="remark != null">#{remark},</if>
+         </trim>
+    </insert>
+
+    <insert id="insertUserApiQueryRecordBatch">
+        insert into user_api_query_record (
+            query_type, platform_id, platform_name, request_status, request_time,
+            user_id, phone, request_params, response_result, results, task_id,
+            create_by, create_time
+        ) values
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.queryType}, #{item.platformId}, #{item.platformName}, #{item.requestStatus}, #{item.requestTime},
+            #{item.userId}, #{item.phone}, #{item.requestParams}, #{item.responseResult}, #{item.results}, #{item.taskId},
+            #{item.createBy}, #{item.createTime}
+            )
+        </foreach>
+    </insert>
+
+    <update id="updateUserApiQueryRecord" parameterType="UserApiQueryRecord">
+        update user_api_query_record
+        <trim prefix="SET" suffixOverrides=",">
+            <if test="queryType != null and queryType != ''">query_type = #{queryType},</if>
+            <if test="requestStatus != null and requestStatus != ''">request_status = #{requestStatus},</if>
+            <if test="requestTime != null">request_time = #{requestTime},</if>
+            <if test="userId != null">user_id = #{userId},</if>
+            <if test="phone != null and phone != ''">phone = #{phone},</if>
+            <if test="requestParams != null and requestParams != ''">request_params = #{requestParams},</if>
+            <if test="responseResult != null">response_result = #{responseResult},</if>
+            <if test="createBy != null">create_by = #{createBy},</if>
+            <if test="createTime != null">create_time = #{createTime},</if>
+            <if test="updateBy != null">update_by = #{updateBy},</if>
+            <if test="updateTime != null">update_time = #{updateTime},</if>
+            <if test="remark != null">remark = #{remark},</if>
+        </trim>
+        where user_api_query_record.id = #{id}
+    </update>
+
+    <delete id="deleteUserApiQueryRecordById" parameterType="Long">
+        delete from user_api_query_record where id = #{id}
+    </delete>
+
+    <delete id="deleteUserApiQueryRecordByIds" parameterType="String">
+        delete from user_api_query_record where id in 
+        <foreach item="id" collection="array" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+</mapper>

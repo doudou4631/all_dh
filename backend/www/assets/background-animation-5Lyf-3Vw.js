@@ -1,0 +1,1 @@
+import{_ as s,o as e,c as a,F as t,d as c,b as o}from"./index-BXWz6qZt.js";const r={},d={class:"background-animation"};function _(i,l){return e(),a("div",d,[(e(),a(t,null,c(10,n=>o("div",{key:n,class:"floating-shape"})),64))])}const m=s(r,[["render",_],["__scopeId","data-v-e2bbb882"]]);export{m as default};

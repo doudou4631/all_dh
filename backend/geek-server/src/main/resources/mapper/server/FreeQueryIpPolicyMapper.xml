@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.geek.server.mapper.FreeQueryIpPolicyMapper">
+    <resultMap id="IpPolicyResult" type="FreeQueryIpPolicy">
+        <id property="id" column="id" />
+        <result property="dailyLimit" column="daily_limit" />
+        <result property="intervalMs" column="interval_ms" />
+        <result property="resetTime" column="reset_time" />
+        <result property="exceedMessage" column="exceed_message" />
+        <result property="whitelistIps" column="whitelist_ips" />
+        <result property="createBy" column="create_by" />
+        <result property="createTime" column="create_time" />
+        <result property="updateBy" column="update_by" />
+        <result property="updateTime" column="update_time" />
+    </resultMap>
+
+    <select id="selectConfig" resultMap="IpPolicyResult">
+        select id, daily_limit, interval_ms, reset_time, exceed_message, whitelist_ips,
+               create_by, create_time, update_by, update_time
+        from free_query_ip_policy
+        where id = 1
+    </select>
+
+    <update id="updateConfig" parameterType="FreeQueryIpPolicy">
+        update free_query_ip_policy
+        set daily_limit = #{dailyLimit},
+            interval_ms = #{intervalMs},
+            reset_time = #{resetTime},
+            exceed_message = #{exceedMessage},
+            whitelist_ips = #{whitelistIps},
+            update_by = #{updateBy},
+            update_time = #{updateTime}
+        where id = 1
+    </update>
+
+    <select id="countQueries" resultType="long">
+        select count(*)
+        from free_query_record
+        where ip_addr = #{ipAddr}
+          and create_time &gt;= #{windowStart}
+    </select>
+</mapper>

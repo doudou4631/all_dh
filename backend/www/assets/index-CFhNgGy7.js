@@ -1,0 +1,1 @@
+import e from"./wallet-YstE7aSS.js";import{o as t,e as o,i as r}from"./index-BuPPGqEf.js";import"./markUser-BeUGvpyl.js";const a=r({name:"MarkFund"}),i=Object.assign(a,{setup(n){return(s,c)=>(t(),o(e))}});export{i as default};

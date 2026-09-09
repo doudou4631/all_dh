@@ -1,0 +1,9 @@
+{
+    "mode":  "live",
+    "originalIp":  "192.168.114.250",
+    "maxOrderReuse":  3,
+    "qmfUsername":  "",
+    "qmfPassword":  "",
+    "qmfAppId":  "",
+    "qmfQrCode":  "1"
+}
