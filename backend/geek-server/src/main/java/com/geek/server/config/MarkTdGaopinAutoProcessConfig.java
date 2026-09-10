@@ -7,7 +7,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduled auto-detection for pending td_gaopin order items.
+ * Xiaomi keeps its own polling workflow. td_gaopin is dispatched exclusively
+ * through MarkInspectionScheduler so its inspection policy is the sole switch.
  */
 @Slf4j
 @Component
@@ -16,19 +17,10 @@ public class MarkTdGaopinAutoProcessConfig {
 
     private final IMarkOrderService markOrderService;
 
-    @Scheduled(fixedRate = 30000)
-    public void autoDetectTdGaopinPendingItems() {
-        try {
-            markOrderService.processTdGaopinPendingItemsAuto();
-        } catch (Exception ex) {
-            log.warn("td_gaopin auto-detect task failed", ex);
-        }
-    }
-
     @Scheduled(fixedRate = 30000, initialDelay = 15000)
     public void autoDetectXiaomiPendingItems() {
         try {
-            markOrderService.processXiaomiPendingItemsAuto();
+            markOrderService.processPendingInspection("xiaomi", 100, "SUCCESS");
         } catch (Exception ex) {
             log.warn("xiaomi auto-detect task failed", ex);
         }
