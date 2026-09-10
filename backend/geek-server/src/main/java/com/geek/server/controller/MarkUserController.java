@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -106,6 +107,13 @@ public class MarkUserController extends BaseController {
     @PostMapping("/tdxSecond/sendCode")
     public AjaxResult sendTdxSecondCode(@Valid @RequestBody MarkTdxSecondSendCodeRequest request) {
         return AjaxResult.success("短信验证码已发起发送", markOrderService.sendTdxSecondCode(request));
+    }
+
+    @Operation(summary = "Taidixiong二次线路3可复用失败订单")
+    @PreAuthorize("@ss.hasPermi('server:markUser:order:add')")
+    @GetMapping("/tdxSecond/line3-candidates")
+    public AjaxResult listTdxSecondLine3Candidates(@RequestParam String phone) {
+        return AjaxResult.success("查询完成", markOrderService.listTdxSecondLine3Candidates(phone));
     }
 
     @Operation(summary = "Taidixiong二次提交后台代理处理")

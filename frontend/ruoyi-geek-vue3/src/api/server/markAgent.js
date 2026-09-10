@@ -53,6 +53,15 @@ export function getMarkAgentAuditStats() {
   })
 }
 
+// Taidixiong二次上游任务审计（仅管理员）
+export function listMarkAgentTdxAudit(query) {
+  return request({
+    url: '/server/markAgent/tdx/audit',
+    method: 'get',
+    params: query
+  })
+}
+
 // 代理处理明细列表
 export function listMarkAgentOrderItem(query) {
   return request({

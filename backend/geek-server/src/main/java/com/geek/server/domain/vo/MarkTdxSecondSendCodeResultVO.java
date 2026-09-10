@@ -8,4 +8,9 @@ public class MarkTdxSecondSendCodeResultVO {
     private String line;
     private String message;
     private Integer phoneCheckCode;
+    // Compatibility fields retained for the legacy appeal service response.
+    private Boolean allowed;
+    private String status;
+    private Object precheckResponse;
+    private Object sendCodeResponse;
 }

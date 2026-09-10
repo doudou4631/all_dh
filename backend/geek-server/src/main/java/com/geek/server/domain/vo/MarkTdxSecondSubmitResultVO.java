@@ -15,4 +15,7 @@ public class MarkTdxSecondSubmitResultVO {
     private Long orderId;
     private String orderNo;
     private String processStatus;
+    // Compatibility fields retained for the legacy appeal service response.
+    private Boolean accepted;
+    private Object submitResponse;
 }

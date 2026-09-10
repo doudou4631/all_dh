@@ -1,10 +1,10 @@
 <script setup>
-import { computed, reactive } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import AppShell from '../components/AppShell.vue'
 import SectionHeader from '../components/SectionHeader.vue'
 import StatePanel from '../components/StatePanel.vue'
-import { getSettings, loginTdxSmsReceive, precheckTdxPhone, sendTdxSmsCode } from '../api/client'
+import { getSettings, getTdxLine3Candidates, getTdxSettings, loginTdxSmsReceive, precheckTdxPhone, retryTdxTaskLine3, sendTdxSmsCode, sendTdxTaskSmsCode } from '../api/client'
 import { useAsyncData } from '../composables/useAsyncData'
 import {
   CLEARED_RECEIPT_TEXT,
@@ -15,8 +15,11 @@ import {
 } from '../utils/receipt'
 
 const { data: systemSettings } = useAsyncData(getSettings, { base: [], switches: [] })
+const { data: tdxSettings } = useAsyncData(getTdxSettings, {})
 const route = useRoute()
 const sourceTaskId = computed(() => String(route.query.taskId || route.query.id || '').trim())
+const line3Candidates = ref([])
+const selectedLine3TaskId = ref(sourceTaskId.value)
 
 const form = reactive({
   line: String(route.query.line || 'line1'),
@@ -62,6 +65,13 @@ const receiptAlertDescription = computed(() => (
 ))
 
 const tdxMarkEnabled = computed(() => (systemSettings.value?.switches || []).find((item) => item.key === 'tdxMarkEnabled')?.enabled !== false)
+const line2UnderMaintenance = computed(() => Boolean(tdxSettings.value?.line2Maintenance))
+const isLine3 = computed(() => String(form.line || '').trim().toLowerCase() === 'line3')
+const LINE2_MAINTENANCE_MESSAGE = '线路2暂时维护，请选择线路1。'
+
+watch(line2UnderMaintenance, (underMaintenance) => {
+  if (underMaintenance && form.line === 'line2') form.line = 'line1'
+}, { immediate: true })
 
 function pad(value) {
   return String(value).padStart(2, '0')
@@ -97,7 +107,7 @@ function normalizeDateText(value, fallback = '') {
   return normalized ? normalized.slice(0, 10) : ''
 }
 
-function normalizePublicAppealMessage(value = '', fallback = '号码申诉已提交，请等待1-2个小时更新结果') {
+function normalizePublicAppealMessage(value = '', fallback = '号码申诉已提交，请等待3-5个工作日的审核时间') {
   const text = String(value || '').trim()
   if (!text) return fallback
   if (/(?:授权会话|wxCode|wxcode|openId|openid|token|session|上游|QMF|orderId|upstream|progress\s*record|final\s*progress|cleanup\s*task|submitted\s+successfully|waiting\s+for.*processing|returned\s+yet|retumed\s+yet)/i.test(text)) {
@@ -155,6 +165,38 @@ function validatePhone(phone) {
   return /^1\d{10}$/.test(String(phone || '').trim())
 }
 
+function ensureSelectedLineAvailable() {
+  if (isLine3.value) return true
+  if (!(line2UnderMaintenance.value && form.line === 'line2')) return true
+  form.line = 'line1'
+  actionState.error = LINE2_MAINTENANCE_MESSAGE
+  return false
+}
+
+async function loadLine3Candidates({ silent = false } = {}) {
+  if (!validatePhone(form.phone)) {
+    line3Candidates.value = []
+    selectedLine3TaskId.value = sourceTaskId.value || ''
+    return []
+  }
+  try {
+    const result = await getTdxLine3Candidates(form.phone)
+    const candidates = Array.isArray(result?.candidates) ? result.candidates : []
+    line3Candidates.value = candidates
+    if (candidates.length === 1) selectedLine3TaskId.value = candidates[0].taskId
+    else if (!candidates.some((item) => item.taskId === selectedLine3TaskId.value)) selectedLine3TaskId.value = ''
+    return candidates
+  } catch (err) {
+    line3Candidates.value = Array.isArray(err?.data?.candidates) ? err.data.candidates : []
+    if (!silent) actionState.error = normalizePublicInlineMessage(err instanceof Error ? err.message : '', '没有找到可复用的线路1失败订单')
+    return line3Candidates.value
+  }
+}
+
+watch(() => [form.line, form.phone], async ([line]) => {
+  if (line === 'line3' && validatePhone(form.phone)) await loadLine3Candidates({ silent: true })
+}, { flush: 'post' })
+
 function applySuccessDialog(detail = {}) {
   const submitTime = normalizeDateTimeText(detail.submitTime, formatShanghaiDateTime())
   const detailStatus = String(detail.appealStatus || '').trim()
@@ -205,8 +247,27 @@ function buildFallbackSuccessDialog(result = {}) {
 
 async function handleSendCode() {
   resetFeedback()
+  if (!ensureSelectedLineAvailable()) return
   if (!validatePhone(form.phone)) {
     actionState.error = '请输入正确的手机号后再发送验证码'
+    return
+  }
+
+  if (isLine3.value) {
+    const candidates = await loadLine3Candidates()
+    if (!selectedLine3TaskId.value) {
+      actionState.error = candidates.length > 1 ? '请选择要复用的本地订单批次' : '当前账号下没有可复用的线路1失败订单'
+      return
+    }
+    actionState.sendingCode = true
+    try {
+      await sendTdxSmsCode({ phone: form.phone, line: 'line3', sourceTaskId: selectedLine3TaskId.value })
+      actionState.message = '验证码已发送，请收到后在线路3中提交同一个新验证码。'
+    } catch (err) {
+      actionState.error = normalizePublicInlineMessage(err instanceof Error ? err.message : '', '发送验证码失败，请稍后重试')
+    } finally {
+      actionState.sendingCode = false
+    }
     return
   }
 
@@ -250,6 +311,7 @@ async function handleSendCode() {
 
 async function handleSubmitAppeal() {
   resetFeedback()
+  if (!ensureSelectedLineAvailable()) return
   if (!validatePhone(form.phone)) {
     actionState.error = '请输入正确的手机号'
     return
@@ -258,16 +320,25 @@ async function handleSubmitAppeal() {
     actionState.error = '请输入短信验证码'
     return
   }
+  if (isLine3.value) {
+    const candidates = await loadLine3Candidates()
+    if (!selectedLine3TaskId.value) {
+      actionState.error = candidates.length > 1 ? '请选择要复用的本地订单批次' : '当前账号下没有可复用的线路1失败订单'
+      return
+    }
+  }
 
   actionState.submitting = true
   try {
-    const result = await loginTdxSmsReceive({
-      phone: form.phone,
-      smsCode: form.smsCode,
-      line: form.line,
-      taskId: sourceTaskId.value,
-      rotate: false,
-    })
+    const result = isLine3.value
+      ? await retryTdxTaskLine3({ id: selectedLine3TaskId.value, smsCode: form.smsCode })
+      : await loginTdxSmsReceive({
+          phone: form.phone,
+          smsCode: form.smsCode,
+          line: form.line,
+          taskId: sourceTaskId.value,
+          rotate: false,
+        })
 
     if (result?.successDialog || result?.autoCleanupCompleted || result?.autoCleanupStarted) {
       applySuccessDialog(result?.successDialog || buildFallbackSuccessDialog(result))
@@ -275,7 +346,9 @@ async function handleSubmitAppeal() {
       return
     }
 
-    actionState.message = '申诉请求已提交，请等待处理结果。'
+    actionState.message = isLine3.value
+      ? (result?.task?.currentStep || '线路3已复用原订单和原微信提交')
+      : '申诉请求已提交，请等待处理结果。'
   } catch (err) {
     const message = err instanceof Error ? err.message : '提交失败，请稍后重试。'
     if (isRepeatAppealMessage(message)) {
@@ -291,6 +364,8 @@ async function handleSubmitAppeal() {
 function clearForm() {
   form.phone = ''
   form.smsCode = ''
+  line3Candidates.value = []
+  selectedLine3TaskId.value = ''
   resetFeedback()
 }
 </script>
@@ -328,13 +403,28 @@ function clearForm() {
                   <button
                     type="button"
                     class="tdx-line-option"
-                    :class="{ 'is-active': form.line === 'line2' }"
+                    :class="{ 'is-active': form.line === 'line2', 'is-disabled': line2UnderMaintenance }"
                     :aria-checked="form.line === 'line2'"
+                    :aria-disabled="line2UnderMaintenance"
+                    :disabled="line2UnderMaintenance"
                     role="radio"
                     @click="form.line = 'line2'"
                   >
                     <span class="tdx-line-option__radio" aria-hidden="true"></span>
                     <span class="tdx-line-option__label">线路2</span>
+                    <span v-if="line2UnderMaintenance" class="tdx-line-option__badge tdx-line-option__badge--maintenance">暂时维护</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="tdx-line-option"
+                    :class="{ 'is-active': form.line === 'line3' }"
+                    :aria-checked="form.line === 'line3'"
+                    role="radio"
+                    @click="form.line = 'line3'"
+                  >
+                    <span class="tdx-line-option__radio" aria-hidden="true"></span>
+                    <span class="tdx-line-option__label">线路3</span>
+                    <span class="tdx-line-option__badge">失败复用</span>
                   </button>
                 </div>
               </el-form-item>
@@ -362,6 +452,19 @@ function clearForm() {
             </el-col>
           </el-row>
         </el-form>
+
+        <div v-if="isLine3 && line3Candidates.length > 1" class="line3-candidate-picker">
+          <el-form-item label="可复用失败订单批次">
+            <el-select v-model="selectedLine3TaskId" size="large" placeholder="请选择本地订单批次" style="width: 100%">
+              <el-option
+                v-for="candidate in line3Candidates"
+                :key="candidate.taskId"
+                :label="`${candidate.localOrderNumber || candidate.taskId} / ${candidate.failedAt || candidate.createdAt || ''} / ${candidate.status || ''}`"
+                :value="candidate.taskId"
+              />
+            </el-select>
+          </el-form-item>
+        </div>
 
         <div class="appeal-actions">
           <el-button
@@ -548,6 +651,21 @@ function clearForm() {
   box-shadow: 0 8px 20px rgba(148, 163, 184, 0.14);
 }
 
+.tdx-line-option.is-disabled,
+.tdx-line-option:disabled {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #94a3b8;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.tdx-line-option.is-disabled:hover,
+.tdx-line-option:disabled:hover {
+  border-color: #e2e8f0;
+  box-shadow: none;
+}
+
 .tdx-line-option:focus-visible {
   outline: 3px solid rgba(59, 130, 246, 0.22);
   outline-offset: 2px;
@@ -603,10 +721,20 @@ function clearForm() {
   line-height: 1;
 }
 
+.tdx-line-option__badge--maintenance {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .appeal-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
+  margin-top: 4px;
+}
+
+.line3-candidate-picker {
+  max-width: 560px;
   margin-top: 4px;
 }
 

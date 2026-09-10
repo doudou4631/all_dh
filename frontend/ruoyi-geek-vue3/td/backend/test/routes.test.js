@@ -30,6 +30,24 @@ test('mounts public auth and protected TDX routes below /api', async (t) => {
     headers: { 'x-tdx-integration-token': 'test-integration-token' },
     payload: { phone: '13800138000', smsCode: '123456', line: 'line1' },
   })
+  const invalidLine3Phone = await app.inject({
+    method: 'POST',
+    url: '/api/tdx/sms-receive/retry-line3',
+    headers: { 'x-tdx-integration-token': 'test-integration-token' },
+    payload: { phone: 'not-a-phone', smsCode: '123456' },
+  })
+  const invalidLine3SendPhone = await app.inject({
+    method: 'POST',
+    url: '/api/tdx/sms-receive/send-code',
+    headers: { 'x-tdx-integration-token': 'test-integration-token' },
+    payload: { phone: 'not-a-phone', line: 'line3' },
+  })
+  const missingLine3Source = await app.inject({
+    method: 'POST',
+    url: '/api/tdx/sms-receive/send-code',
+    headers: { 'x-tdx-integration-token': 'test-integration-token' },
+    payload: { phone: '13800138000', line: 'line3' },
+  })
 
   assert.equal(health.statusCode, 200)
   assert.equal(captcha.statusCode, 200)
@@ -37,4 +55,8 @@ test('mounts public auth and protected TDX routes below /api', async (t) => {
   assert.equal(protectedRoute.statusCode, 401)
   assert.equal(missingChannel.statusCode, 502)
   assert.equal(missingChannel.json().message, '申诉通道未配置，请联系管理员。')
+  assert.equal(invalidLine3Phone.statusCode, 400)
+  assert.equal(invalidLine3SendPhone.statusCode, 400)
+  assert.equal(missingLine3Source.statusCode, 409)
+  assert.match(missingLine3Source.json().message, /没有可复用的线路1失败订单|多个可复用失败订单/)
 })

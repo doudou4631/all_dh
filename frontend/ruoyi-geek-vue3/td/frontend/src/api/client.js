@@ -1,5 +1,15 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:4320/api'
 
+function withQuery(path, query = {}) {
+  const params = new URLSearchParams()
+  Object.entries(query || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '' || value === 'all') return
+    params.set(key, String(value))
+  })
+  const suffix = params.toString()
+  return suffix ? `${path}?${suffix}` : path
+}
+
 function readToken() {
   if (typeof window === 'undefined') return ''
   return window.localStorage.getItem('td_ui_token') || ''
@@ -58,6 +68,10 @@ export async function getSettings() {
   return httpClient.get('/tdx/settings').catch(() => ({ switches: [{ key: 'tdxMarkEnabled', enabled: true }] }))
 }
 
+export async function getTdxSettings() {
+  return httpClient.get('/tdx/settings')
+}
+
 export async function precheckTdxPhone(body) {
   return httpClient.post('/tdx/sms-receive/precheck', body)
 }
@@ -66,12 +80,28 @@ export async function sendTdxSmsCode(body) {
   return httpClient.post('/tdx/sms-receive/send-code', body)
 }
 
+export async function getTdxLine3Candidates(phone) {
+  return httpClient.get(withQuery('/tdx/sms-receive/line3-candidates', { phone }))
+}
+
 export async function loginTdxSmsReceive(body) {
   return httpClient.post('/tdx/sms-receive/login', body)
 }
 
 export async function getTdxTaskDetail(id) {
   return httpClient.get(`/tdx/tasks/${id}`)
+}
+
+export async function listTdxTasks(query = {}) {
+  return httpClient.get(withQuery('/tdx/tasks', query))
+}
+
+export async function retryTdxTaskLine3({ id, ...body }) {
+  return httpClient.post(`/tdx/tasks/${id}/retry-line3`, body)
+}
+
+export async function retryTdxLine3ByPhone(body) {
+  return httpClient.post('/tdx/sms-receive/retry-line3', body)
 }
 
 export async function updateTdxTaskStatus({ id, ...body }) {

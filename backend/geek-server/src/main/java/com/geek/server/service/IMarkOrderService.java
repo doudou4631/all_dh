@@ -45,6 +45,7 @@ public interface IMarkOrderService {
     MarkTdxSecondPrecheckVO precheckTdxSecond(MarkTdxSecondPrecheckRequest request);
     MarkTdxSecondSendCodeResultVO sendTdxSecondCode(MarkTdxSecondSendCodeRequest request);
     MarkTdxSecondSubmitResultVO submitTdxSecond(MarkTdxSecondSubmitRequest request);
+    Object listTdxSecondLine3Candidates(String phone);
 
     void processTdxSecondPendingItemsAuto();
 

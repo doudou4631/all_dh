@@ -20,6 +20,7 @@ import com.geek.server.domain.vo.MarkAgentDailyOverviewVO;
 import com.geek.server.domain.vo.MarkAgentOrderItemVO;
 import com.geek.server.service.IMarkOrderService;
 import com.geek.server.service.IMarkUserNoticeService;
+import com.geek.server.service.agent.tdxsecond.TdxSecondAgentGateway;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,9 +32,14 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
+
+import static com.geek.common.utils.SecurityUtils.hasRole;
+import static com.geek.common.utils.SecurityUtils.isAdmin;
 
 /**
  * 代理端迁移流程控制器
@@ -46,6 +52,17 @@ public class MarkAgentController extends BaseController {
 
     private final IMarkOrderService markOrderService;
     private final IMarkUserNoticeService markUserNoticeService;
+    private final TdxSecondAgentGateway tdxSecondAgentGateway;
+
+    @Operation(summary = "Taidixiong浜屾涓婃父瀹¤")
+    @PreAuthorize("@ss.hasPermi('server:markAgent:order:query')")
+    @GetMapping("/tdx/audit")
+    public AjaxResult tdxAudit(@RequestParam Map<String, String> query) {
+        if (!isAdmin() && !hasRole("admin")) {
+            return error("浠呯鐞嗗憳鍙煡鐪嬫嘲杩唺浜屾涓婃父瀹¤");
+        }
+        return success(tdxSecondAgentGateway.listAuditTasks(query));
+    }
 
     @Operation(summary = "代理审核统计")
     @PreAuthorize("@ss.hasPermi('server:markAgent:audit:stats')")

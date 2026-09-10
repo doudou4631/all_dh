@@ -10,6 +10,9 @@ public class MarkTdxSecondSendCodeRequest {
     @Pattern(regexp = "^1\\d{10}$", message = "请输入正确的11位手机号")
     private String phone;
 
-    @Pattern(regexp = "^line[12]$", message = "通道线路仅支持line1或line2")
+    @Pattern(regexp = "^line[123]$", message = "通道线路仅支持line1、line2或line3")
     private String line;
+
+    /** Original failed task to reuse when submitting through line3. */
+    private String sourceTaskId;
 }

@@ -113,6 +113,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private static final String TDX_SECOND_AGENT_OPERATOR = "tdx-second-agent";
     private static final int TDX_SECOND_AUTO_BATCH_LIMIT = 20;
     private static final Pattern TDX_SECOND_TASK_ID_PATTERN = Pattern.compile("(?:^|｜)taskId=([^｜]+)");
+    private static final Pattern TDX_SECOND_LINE_PATTERN = Pattern.compile("(?:^|｜)line=(line[123])", Pattern.CASE_INSENSITIVE);
     private static final String TD_GAOPIN_AUTO_OPERATOR = "td-gaopin-auto";
     private static final String GENERIC_INSPECTION_OPERATOR = "inspection-auto";
     private static final String TD_GAOPIN_HF_KEY = "高频标记至少需要10个工作日或找平台方帮忙处理";
@@ -742,8 +743,28 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (request == null) {
             throw new ServiceException("请求参数不能为空");
         }
+        String line = StringUtils.defaultIfBlank(StringUtils.trimToNull(request.getLine()), "line1");
+        if ("line3".equalsIgnoreCase(line)) {
+            Long userId = SecurityUtils.getUserId();
+            assertPlatformAvailableForSubmit(userId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
+            String normalizedPhone = normalizeSinglePhone(request.getPhone());
+            String sourceTaskId = resolveTdxSecondLine3SourceTaskId(userId, normalizedPhone, request.getSourceTaskId());
+            return tdxSecondAgentGateway.sendCode(normalizedPhone, line, sourceTaskId);
+        }
         assertTdxSecondAvailableAndFunded(SecurityUtils.getUserId());
-        return tdxSecondAgentGateway.sendCode(request.getPhone(), request.getLine());
+        return tdxSecondAgentGateway.sendCode(request.getPhone(), line);
+    }
+
+    @Override
+    public Object listTdxSecondLine3Candidates(String phone) {
+        Long userId = SecurityUtils.getUserId();
+        String normalizedPhone = normalizeSinglePhone(phone);
+        if (normalizedPhone == null || !normalizedPhone.matches("1\\d{10}")) {
+            throw new ServiceException("请输入正确的11位手机号码");
+        }
+        assertPlatformAvailableForSubmit(userId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
+        Set<String> allowedTaskIds = findUserTdxSecondLine3TaskIds(userId, normalizedPhone);
+        return tdxSecondAgentGateway.listLine3Candidates(normalizedPhone, allowedTaskIds);
     }
 
     @Override
@@ -754,6 +775,13 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         }
         Long userId = SecurityUtils.getUserId();
         String operator = SecurityUtils.getUsername();
+        String line = StringUtils.defaultIfBlank(StringUtils.trimToNull(request.getLine()), "line1");
+        if ("line3".equalsIgnoreCase(line)) {
+            assertPlatformAvailableForSubmit(userId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
+            String normalizedPhone = normalizeSinglePhone(request.getPhone());
+            String sourceTaskId = resolveTdxSecondLine3SourceTaskId(userId, normalizedPhone, request.getSourceTaskId());
+            return tdxSecondAgentGateway.retryLine3(sourceTaskId, request.getSmsCode());
+        }
         assertTdxSecondAvailableAndFunded(userId);
         // Taidixiong二次允许同一号码在同一平台重复提交，便于重新发起申诉。
 
@@ -943,10 +971,13 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         String upstreamStatus = StringUtils.lowerCase(StringUtils.trimToEmpty(status.getStatus()));
         String message = StringUtils.defaultIfBlank(status.getMessage(), "申诉已提交，等待处理");
         item.setProcessResult(StringUtils.abbreviate(message, 500));
-        item.setProcessNote(StringUtils.abbreviate("taskId=" + taskId
+        String sourceLine = extractTdxSecondLine(item.getProcessNote());
+        String processNote = (StringUtils.isBlank(sourceLine) ? "" : "line=" + sourceLine + "｜")
+                + "taskId=" + taskId
                 + "｜status=" + upstreamStatus
                 + "｜rawStatus=" + StringUtils.defaultString(status.getRawStatus())
-                + "｜attempts=" + (status.getAttempts() == null ? 0 : status.getAttempts()), 500));
+                + "｜attempts=" + (status.getAttempts() == null ? 0 : status.getAttempts());
+        item.setProcessNote(StringUtils.abbreviate(processNote, 500));
         item.setUpdateBy(TDX_SECOND_AGENT_OPERATOR);
         item.setUpdateTime(now);
 
@@ -968,6 +999,53 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private String extractTdxSecondTaskId(String processNote) {
         Matcher matcher = TDX_SECOND_TASK_ID_PATTERN.matcher(StringUtils.defaultString(processNote));
         return matcher.find() ? StringUtils.trimToEmpty(matcher.group(1)) : "";
+    }
+
+    private String extractTdxSecondLine(String processNote) {
+        Matcher matcher = TDX_SECOND_LINE_PATTERN.matcher(StringUtils.defaultString(processNote));
+        return matcher.find() ? StringUtils.lowerCase(StringUtils.trimToEmpty(matcher.group(1))) : "";
+    }
+
+    private Set<String> findUserTdxSecondLine3TaskIds(Long userId, String phone) {
+        List<String> notes = markOrderItemMapper.selectUserTdxSecondProcessNotes(userId, phone);
+        Set<String> taskIds = new LinkedHashSet<>();
+        if (notes == null) {
+            return taskIds;
+        }
+        for (String note : notes) {
+            String sourceLine = extractTdxSecondLine(note);
+            if (StringUtils.isNotBlank(sourceLine) && !"line1".equals(sourceLine)) {
+                continue;
+            }
+            String taskId = extractTdxSecondTaskId(note);
+            if (StringUtils.isNotBlank(taskId)) {
+                taskIds.add(taskId);
+            }
+        }
+        return taskIds;
+    }
+
+    private String resolveTdxSecondLine3SourceTaskId(Long userId, String phone, String requestedTaskId) {
+        String normalizedPhone = normalizeSinglePhone(phone);
+        if (normalizedPhone == null || !normalizedPhone.matches("1\\d{10}")) {
+            throw new ServiceException("请输入正确的11位手机号码");
+        }
+
+        Set<String> allowedTaskIds = findUserTdxSecondLine3TaskIds(userId, normalizedPhone);
+        String taskId = StringUtils.trimToEmpty(requestedTaskId);
+        if (StringUtils.isBlank(taskId)) {
+            if (allowedTaskIds.isEmpty()) {
+                throw new ServiceException("当前手机号没有可复用的线路1失败订单");
+            }
+            taskId = tdxSecondAgentGateway.resolveLine3CandidateTaskId(normalizedPhone, allowedTaskIds);
+            if (StringUtils.isBlank(taskId)) {
+                throw new ServiceException("当前手机号没有可复用的线路1失败订单");
+            }
+        }
+        if (!allowedTaskIds.contains(taskId)) {
+            throw new ServiceException("失败订单不存在或无权复用");
+        }
+        return taskId;
     }
 
     private void failAndRefundTdxSecondItem(MarkOrder order, MarkOrderItem item, Date now, String message) {

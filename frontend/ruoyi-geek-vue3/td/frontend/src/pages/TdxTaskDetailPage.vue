@@ -11,6 +11,7 @@ import {
   executeTdxTaskCleanup,
   getTdxTaskDetail,
   prepareTdxTaskSession,
+  retryTdxTaskLine3,
   sendTdxTaskSmsCode,
   updateTdxTaskStatus,
 } from '../api/client'
@@ -20,9 +21,23 @@ const route = useRoute()
 const taskId = route.params.taskId || 'tdx-task-001'
 const { data: task, loading, error, refresh } = useAsyncData(() => getTdxTaskDetail(taskId), null)
 const hasPreparedSession = computed(() => Boolean(task.value?.orderId && task.value?.wxCode))
+const isLine3RetryTask = computed(() => Boolean(task.value?.line3Retry) || String(task.value?.line || '').trim().toLowerCase() === 'line3')
+const line3RetryAvailable = computed(() => {
+  const current = task.value || {}
+  const upstreamAudit = current.result?.upstreamAudit || {}
+  const reusableOrderId = String(current.orderId || upstreamAudit.orderId || '').trim()
+  const reusableWxCode = String(current.wxCode || upstreamAudit.wxCode || '').trim()
+  const status = String(current.status || '').trim().toLowerCase()
+  const retryState = String(current.line3RetryState || '').trim().toLowerCase()
+  return !current.line3Retry
+    && Boolean(current.phone && current.orderDealId && (current.line3ReuseAvailable === true || (reusableOrderId && reusableWxCode)))
+    && !current.line3RetryAttemptedAt
+    && !['processing', 'completed', 'failed'].includes(retryState)
+    && (status === 'failed' || current.result?.execution?.result?.refundSuggested === true || current.result?.autoCheck?.status === 'failed')
+})
 
 const actionState = reactive({
-  smsCode: '123456',
+  smsCode: '',
   rotate: false,
   submitting: false,
   message: '',
@@ -97,6 +112,29 @@ async function handlePrepareSession() {
     actionState.submitting = false
   }
 }
+
+async function handleRetryLine3() {
+  resetMessages()
+  if (!line3RetryAvailable.value) {
+    actionState.error = '当前任务不满足线路3复用条件，或已经尝试过一次。'
+    return
+  }
+  if (!actionState.smsCode || actionState.smsCode.trim().length < 4) {
+    actionState.error = '线路3重试前请输入有效的短信验证码。'
+    return
+  }
+  actionState.submitting = true
+  try {
+    const result = await retryTdxTaskLine3({ id: taskId, smsCode: actionState.smsCode })
+    actionState.message = result?.task?.currentStep || '线路3已复用原订单和原微信提交。'
+    await refresh()
+  } catch (err) {
+    actionState.error = err instanceof Error ? err.message : '线路3复用失败，本次尝试已结束。'
+    await refresh()
+  } finally {
+    actionState.submitting = false
+  }
+}
 </script>
 
 <template>
@@ -105,7 +143,7 @@ async function handlePrepareSession() {
     title="tdx二次申诉"
     subtitle="查看当前任务状态并处理短信验证码。"
   >
-    <template #actions>
+    <template v-if="!isLine3RetryTask" #actions>
       <button class="btn btn-primary" type="button" @click="setStatus('processing', '上游清理执行中')" :disabled="actionState.submitting">
         标记为执行中
       </button>
@@ -164,7 +202,7 @@ async function handlePrepareSession() {
             subtitle="来自当前系统的任务执行进度汇总。"
           />
 
-          <section class="card panel nested-panel">
+          <section v-if="!isLine3RetryTask" class="card panel nested-panel">
             <SectionHeader title="任务动作" subtitle="推动单条任务完成发短信、准备会话和执行清理。" />
             <div class="form-grid">
               <div class="field">
@@ -180,6 +218,7 @@ async function handlePrepareSession() {
                   <button class="btn btn-soft" type="button" @click="handleSendCode" :disabled="actionState.submitting">发送短信验证码</button>
                   <button class="btn btn-primary" type="button" @click="handlePrepareSession" :disabled="actionState.submitting">准备会话</button>
                   <button class="btn btn-soft" type="button" @click="handleExecuteCleanup" :disabled="actionState.submitting || !hasPreparedSession">执行清理</button>
+                  <button v-if="line3RetryAvailable" class="btn btn-danger" type="button" @click="handleRetryLine3" :disabled="actionState.submitting">线路3重试</button>
                 </div>
               </div>
             </div>

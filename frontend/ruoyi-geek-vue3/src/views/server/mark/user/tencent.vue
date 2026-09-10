@@ -35,10 +35,13 @@
                   </div>
 
                   <div class="tencent-form-panel">
-                    <div v-if="!platformEnabled" class="submit-warning-bar">
+                    <div v-if="line2UnderMaintenance" class="submit-warning-bar submit-warning-bar--maintenance">
+                      线路2暂时维护，请选择线路1。
+                    </div>
+                    <div v-else-if="!platformEnabled" class="submit-warning-bar">
                       {{ platformClosedMessage }}
                     </div>
-                    <div v-else-if="remainCount < 1" class="submit-warning-bar">
+                    <div v-else-if="!isLine3 && remainCount < 1" class="submit-warning-bar">
                       当前{{ platformName }}平台剩余次数不足，无法提交。
                     </div>
 
@@ -51,7 +54,14 @@
                       <el-form-item v-if="isTdSecondPlatform" label="通道线路">
                         <el-radio-group v-model="form.line" :disabled="smsSending || submitting">
                           <el-radio-button label="line1">线路一</el-radio-button>
-                          <el-radio-button label="line2">线路二</el-radio-button>
+                          <el-radio-button label="line2" :disabled="line2UnderMaintenance">
+                            线路二
+                            <span v-if="line2UnderMaintenance" class="tdx-line-maintenance-label">暂时维护</span>
+                          </el-radio-button>
+                          <el-radio-button label="line3">
+                            线路三
+                            <span class="tdx-line-reuse-label">失败复用</span>
+                          </el-radio-button>
                         </el-radio-group>
                       </el-form-item>
                       <el-form-item label="手机号" class="tdx-phone-item">
@@ -83,7 +93,7 @@
                         plain
                         class="tencent-action-btn"
                         :loading="smsSending"
-                        :disabled="!platformEnabled || remainCount < 1 || submitting || smsCountdown > 0"
+                        :disabled="!platformEnabled || (!isLine3 && remainCount < 1) || submitting || smsCountdown > 0"
                         @click="handleFetchSms"
                       >
                         {{ smsCountdown > 0 ? `${smsCountdown}秒后重试` : '获取短信' }}
@@ -92,7 +102,7 @@
                         type="primary"
                         class="tencent-action-btn"
                         :loading="submitting"
-                        :disabled="!platformEnabled || remainCount < 1"
+                        :disabled="!platformEnabled || (!isLine3 && remainCount < 1)"
                         v-hasPermi="['server:markUser:order:add']"
                         @click="handleSubmit"
                       >
@@ -282,6 +292,11 @@ const routePlatformName = computed(() => {
 })
 
 const isTdSecondPlatform = computed(() => activePlatformCode.value === 'td_second')
+const line2UnderMaintenance = computed(() => {
+  if (!isTdSecondPlatform.value) return false
+  const configured = String(import.meta.env.VITE_TDX_LINE2_MAINTENANCE ?? '').trim().toLowerCase()
+  return configured ? ['1', 'true', 'yes', 'on'].includes(configured) : true
+})
 const submitTitle = computed(() => `${platformName.value}平台清除`)
 
 const activeTab = ref('submit')
@@ -298,6 +313,7 @@ const form = reactive({
   smsCode: '',
   line: 'line1'
 })
+const isLine3 = computed(() => isTdSecondPlatform.value && form.line === 'line3')
 
 const loading = ref(false)
 const total = ref(0)
@@ -396,7 +412,12 @@ async function handleFetchSms() {
     proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
-  if (remainCount.value < 1) {
+  if (line2UnderMaintenance.value && form.line === 'line2') {
+    form.line = 'line1'
+    proxy.$modal.msgWarning('线路2暂时维护，请选择线路1。')
+    return
+  }
+  if (!isLine3.value && remainCount.value < 1) {
     proxy.$modal.msgError(`当前${platformName.value}平台剩余次数不足`)
     return
   }
@@ -520,7 +541,12 @@ async function handleSubmit() {
     proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
-  if (remainCount.value < 1) {
+  if (line2UnderMaintenance.value && form.line === 'line2') {
+    form.line = 'line1'
+    proxy.$modal.msgWarning('线路2暂时维护，请选择线路1。')
+    return
+  }
+  if (!isLine3.value && remainCount.value < 1) {
     proxy.$modal.msgError(`当前${platformName.value}平台剩余次数不足`)
     return
   }
@@ -540,7 +566,7 @@ async function handleSubmit() {
         rotate: false
       })
       const result = res?.data || null
-      if (result?.orderId || result?.itemId) {
+      if (result?.orderId || result?.itemId || result?.taskId) {
         submitResult.value = {
           ...result,
           phone,
@@ -886,6 +912,12 @@ watch(activeTab, () => {
   syncRecordTabData()
 })
 
+watch(line2UnderMaintenance, (underMaintenance) => {
+  if (underMaintenance && form.line === 'line2') {
+    form.line = 'line1'
+  }
+})
+
 watch([activePlatformCode, routePlatformName], async ([newCode], [oldCode]) => {
   platformName.value = routePlatformName.value
   queryParams.platformCode = newCode
@@ -1159,6 +1191,25 @@ onBeforeUnmount(() => {
   font-size: 13px;
   line-height: 1.5;
 }
+
+.submit-warning-bar--maintenance {
+  border: 1px solid #f3d19e;
+  background: #fdf6ec;
+  color: #e6a23c;
+}
+
+.tdx-line-maintenance-label {
+  margin-left: 6px;
+  color: #e6a23c;
+  font-size: 12px;
+}
+
+.tdx-line-reuse-label {
+  margin-left: 6px;
+  color: #67c23a;
+  font-size: 12px;
+}
+
 
 .tencent-submit-buttons {
   display: flex;

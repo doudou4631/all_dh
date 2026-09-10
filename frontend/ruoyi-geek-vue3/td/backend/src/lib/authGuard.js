@@ -25,7 +25,10 @@ export async function requireAuth(request, reply) {
     && expectedTokenBuffer.length === suppliedTokenBuffer.length
     && timingSafeEqual(expectedTokenBuffer, suppliedTokenBuffer)
 
-  if (integrationTokenMatches && integrationPath.startsWith('/api/tdx/sms-receive/')) {
+  const isIntegrationSmsPath = integrationPath.startsWith('/api/tdx/sms-receive/')
+  const isIntegrationAuditPath = integrationPath === '/api/tdx/tasks'
+  const isIntegrationLine3RetryPath = /^\/api\/tdx\/tasks\/[^/]+\/retry-line3$/.test(integrationPath)
+  if (integrationTokenMatches && (isIntegrationSmsPath || isIntegrationAuditPath || isIntegrationLine3RetryPath)) {
     const liveUserId = Number(process.env.TDX_INTEGRATION_USER_ID || 0)
     if (!liveUserId) {
       return reply.code(503).send({

@@ -8,6 +8,12 @@ function readEnv(key, fallback = '') {
   return typeof value === 'string' && value.length ? value : fallback
 }
 
+function readEnvBoolean(key, fallback = false) {
+  const value = process.env[key]
+  if (typeof value !== 'string' || !value.trim()) return Boolean(fallback)
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
+}
+
 export async function getTdxConfig() {
   const stored = await readTdxSettings()
   const legacyDetectApi = await getSystemSettingValue('apixiaomi', '')
@@ -15,12 +21,13 @@ export async function getTdxConfig() {
   const mode = strictLive ? 'live' : readEnv('TDX_MODE', stored.mode || 'mock')
   return {
     mode,
-    originalIp: readEnv('TDX_ORIGINAL_IP', stored.originalIp || '192.168.114.250'),
+    originalIp: readEnv('TDX_ORIGINAL_IP', stored.originalIp || ''),
     maxOrderReuse: Number(readEnv('TDX_MAX_ORDER_REUSE', String(stored.maxOrderReuse || 3))),
+    line2Maintenance: readEnvBoolean('TDX_LINE2_MAINTENANCE', stored.line2Maintenance),
     sendSmsUrl: readEnv('TDX_SEND_SMS_URL', stored.sendSmsUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/as/auth/sendSms'),
     loginSmsUrl: readEnv('TDX_LOGIN_SMS_URL', stored.loginSmsUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/auth/login-sms'),
-    qmfLoginUrl: readEnv('QMF_LOGIN_URL', stored.qmfLoginUrl || 'http://115.238.185.26:8881/public/userLogin'),
-    qmfCodeUrl: readEnv('QMF_CODE_URL', stored.qmfCodeUrl || 'http://115.238.185.26:8881/code'),
+    qmfLoginUrl: readEnv('QMF_LOGIN_URL', stored.qmfLoginUrl || 'http://api.qmfj66pp.cn/public/userLogin'),
+    qmfCodeUrl: readEnv('QMF_CODE_URL', stored.qmfCodeUrl || 'http://api.qmfj66pp.cn/code'),
     answersStartUrl: readEnv('TDX_ANSWERS_START_URL', stored.answersStartUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/answers/start'),
     checkAppletPhoneUrl: readEnv('TDX_CHECK_APPLET_PHONE_URL', stored.checkAppletPhoneUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/forward/inter/checkAppletPhone'),
     answersSubmitUrl: readEnv('TDX_ANSWERS_SUBMIT_URL', stored.answersSubmitUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/answers/submit-and-next'),
@@ -37,6 +44,8 @@ export async function getTdxConfig() {
     dfPassword: readEnv('DF_PASSWORD', stored.dfPassword || ''),
     dfProjectId: readEnv('DF_PROJECT_ID', stored.dfProjectId || '7979'),
     dfOrderType: readEnv('DF_ORDER_TYPE', stored.dfOrderType || '1'),
+    dfOrderUrl: readEnv('DF_ORDER_URL', stored.dfOrderUrl || ''),
+    dfOrderAndId: readEnv('DF_ORDER_AND_ID', stored.dfOrderAndId || ''),
     xiaomiApiUrl: readEnv('TDX_DETECT_API_URL', stored.xiaomiApiUrl || legacyDetectApi || ''),
   }
 }

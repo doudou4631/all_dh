@@ -59,5 +59,7 @@ public interface MarkOrderItemMapper {
     List<MarkOrderItem> selectPendingTdxSecondItems(@Param("checkIntervalMinutes") int checkIntervalMinutes,
                                                      @Param("limit") int limit);
 
+    List<String> selectUserTdxSecondProcessNotes(@Param("userId") Long userId, @Param("phone") String phone);
+
     List<String> selectUserPendingTdGaopinPhones(@Param("userId") Long userId, @Param("phones") List<String> phones);
 }

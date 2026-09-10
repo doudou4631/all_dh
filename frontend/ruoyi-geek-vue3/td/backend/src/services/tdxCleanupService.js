@@ -15,16 +15,18 @@ import {
   getSavedQmfSession,
   getSavedTdxLoginToken,
   getTdxRuntimeState,
+  listOrderSessionsClaimingPhone,
   listReusableOrderSessions,
   listSavedTdxLoginTokens,
   markOrderSessionCooldown,
-  markOrderUsed,
   rememberLastPayload,
-  removeOrderSession,
+  retireOrderSession,
+  releaseOrderSessionPhone,
   saveQmfSession,
   saveDengfengSession,
   saveOrderSession,
   saveTdxLoginToken,
+  reserveOrderSessionPhone,
   normalizeTdxLine,
 } from './tdxRuntimeStore.js'
 import {
@@ -34,12 +36,25 @@ import {
   sanitizeStoredWxCode,
 } from './tdxSessionValue.js'
 
+const BLOCKED_TDX_ORDER_IDS = new Set(
+  String(process.env.TDX_BLOCKED_ORDER_IDS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean),
+)
+
+function isBlockedTdxOrderId(orderId = '') {
+  return BLOCKED_TDX_ORDER_IDS.has(String(orderId || '').trim())
+}
+
 const MINI_APP_REFERER = 'https://servicewechat.com/wxf123c0cb425589de/7/page-frame.html'
 const MINI_APP_USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36 MicroMessenger/7.0.20.1781(0x6700143B) NetType/WIFI MiniProgramEnv/Windows WindowsWechat/WMPF WindowsWechat(0x63090a13) UnifiedPCWindowsWechat(0xf254173b) XWEB/19027'
 const DEFAULT_PROXY_SOURCE_URL = process.env.TDX_PROXY_SOURCE_URL || 'YOUR_TDX_PROXY_SOURCE_URL';
 const TDX_PROXY_CACHE_MS = 55 * 1000
 const TDX_HTTP_TIMEOUT_MS = 45000
+const tdxCleanupExecutionPromises = new Map()
+const TDX_WECHAT_PHONE_LIMIT_FAILURE_MESSAGE = '提交失败，请重新获取验证码重试！'
 const FALLBACK_ONE_PIXEL_JPEG = Buffer.from(
   '/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEBAQEA8QDw8QDw8PEA8QDw8QDw8QFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGxAQGy0lICUtLS8tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAAEAAQMBIgACEQEDEQH/xAAXAAADAQAAAAAAAAAAAAAAAAAAAQID/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEAMQAAAB6AD/xAAXEAEBAQEAAAAAAAAAAAAAAAABEQAh/9oACAEBAAEFAkLZr//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8BP//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8BP//EABgQAQEBAQEAAAAAAAAAAAAAAAERACEx/9oACAEBAAY/Ah2Kqf/EABoQAQADAQEBAAAAAAAAAAAAAAEAERAhMUH/2gAIAQEAAT8hQ0JKhA3lM4Kq1lJ7j//aAAwDAQACAAMAAAAQ8//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QP//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QP//EABoQAQEAAgMAAAAAAAAAAAAAAAERACExQWH/2gAIAQEAAT8QYShd3xW1uB0xkYYa9xJf/9k=',
   'base64',
@@ -120,6 +135,14 @@ const TDX_HARD_NON_RETRYABLE_HINTS = [
   '余额不足',
   'balance insufficient',
   'insufficient balance',
+  '微信账号近期已关联过多号码',
+  '微信账号已关联过多号码',
+  '微信账号关联号码过多',
+  '微信号关联号码过多',
+  '微信账号可关联的手机号数量已达上限',
+  '微信号可关联的手机号数量已达上限',
+  'wechat account has linked too many phone numbers',
+  'wechat account phone limit',
   '账号异常',
   '账户异常',
   '账号停用',
@@ -543,6 +566,22 @@ function isSameDayRepeatAppealAllowedMessage(message = '') {
   return /当天已提交过申诉|今天已提交过申诉|今日已提交过申诉|不可重复提交/.test(text)
 }
 
+function isSameDayRepeatAppealPayload(payload) {
+  const body = payload?.body && typeof payload.body === 'object' ? payload.body : null
+  const data = payload?.data && typeof payload.data === 'object' ? payload.data : null
+  const bodyData = body?.data && typeof body.data === 'object' ? body.data : null
+  return [
+    payload?.message,
+    payload?.msg,
+    body?.message,
+    body?.msg,
+    data?.message,
+    data?.msg,
+    bodyData?.message,
+    bodyData?.msg,
+  ].some((value) => isSameDayRepeatAppealAllowedMessage(value))
+}
+
 async function postForm(url, payload) {
   const response = await fetch(url, {
     method: 'POST',
@@ -790,6 +829,7 @@ function buildStepState(task, config, statuses, notes = {}) {
       active: 'Running',
       ready: 'Ready',
       blocked: 'Blocked',
+      skipped: 'Skipped',
       pending: 'Pending',
     }[statuses[step.key] || 'pending'],
   }))
@@ -853,6 +893,22 @@ export function isHardTdxSessionFailureMessage(message = '') {
   if (!text) return false
   const lowered = text.toLowerCase()
   return TDX_HARD_NON_RETRYABLE_HINTS.some((hint) => lowered.includes(String(hint).toLowerCase()))
+}
+
+export function isTdxWechatPhoneLimitMessage(message = '') {
+  const text = String(message || '').trim()
+  if (!text) return false
+  const lowered = text.toLowerCase()
+  return [
+    '微信账号近期已关联过多号码',
+    '微信账号已关联过多号码',
+    '微信账号关联号码过多',
+    '微信号关联号码过多',
+    '微信账号可关联的手机号数量已达上限',
+    '微信号可关联的手机号数量已达上限',
+    'wechat account has linked too many phone numbers',
+    'wechat account phone limit',
+  ].some((hint) => lowered.includes(hint))
 }
 
 export function isTdxSessionCooldownMessage(message = '') {
@@ -1026,10 +1082,10 @@ export function validateLiveTdxConfig(config, { requireAppealChannel = true } = 
   return problems
 }
 
-async function ensureTdxConfig(options = {}) {
+async function ensureTdxConfig() {
   const config = await getTdxConfig()
   if (config.mode === 'live') {
-    const problems = validateLiveTdxConfig(config, options)
+    const problems = validateLiveTdxConfig(config)
     if (problems.length) {
       throw new Error(`TDX live mode is not ready: ${problems.join('; ')}`)
     }
@@ -1038,14 +1094,14 @@ async function ensureTdxConfig(options = {}) {
 }
 
 export async function sendTdxSmsCode(phone, line = 'line1') {
-  const config = await ensureTdxConfig({ requireAppealChannel: false })
+  const config = await ensureTdxConfig()
   const normalizedLine = normalizeTdxLine(line)
   if (config.mode === 'mock') {
     return {
-      ok: false,
+      ok: true,
       mode: 'mock',
       line: normalizedLine,
-      payload: { code: 503, message: '当前为模拟模式，未发送真实短信，请切换到实盘模式。' },
+      payload: { code: 200, message: 'Mock SMS sent' },
     }
   }
 
@@ -1321,7 +1377,11 @@ async function fetchWxCodeInternal(config, orderId = '', { line = 'line1', allow
     if (failure.status === 'cooldown' && resolvedOrderId) {
       markOrderSessionCooldown(resolvedOrderId, { message: failure.message, cooldownMs: failure.cooldownMs })
     } else if (failure.status === 'invalid' && resolvedOrderId) {
-      removeOrderSession(resolvedOrderId)
+      retireOrderSession(resolvedOrderId, {
+        reason: 'qmf-invalid',
+        message: failure.message,
+        source: 'fetchWxCodeInternal',
+      })
     } else if (resolvedOrderId) {
       saveOrderSession({
         orderId: resolvedOrderId,
@@ -1344,7 +1404,11 @@ async function fetchWxCodeInternal(config, orderId = '', { line = 'line1', allow
     if (failure.status === 'cooldown' && resolvedOrderId) {
       markOrderSessionCooldown(resolvedOrderId, { message: failure.message, cooldownMs: failure.cooldownMs })
     } else if (failure.status === 'invalid' && resolvedOrderId) {
-      removeOrderSession(resolvedOrderId)
+      retireOrderSession(resolvedOrderId, {
+        reason: 'qmf-invalid-payload',
+        message: resolved.message || resolved.rawWxCode || failure.message,
+        source: 'fetchWxCodeInternal',
+      })
     } else if (resolvedOrderId) {
       saveOrderSession({
         orderId: resolvedOrderId,
@@ -1373,28 +1437,116 @@ async function fetchWxCodeInternal(config, orderId = '', { line = 'line1', allow
   }
 }
 
-export async function allocateTdxOrderSession({ forceRotate = false, allowNewOrder = true, line = 'line1' } = {}) {
+export async function allocateTdxOrderSession({ forceRotate = false, allowNewOrder = true, line = 'line1', phone = '', reuseOrderId = '' } = {}) {
   const config = await ensureTdxConfig()
   const normalizedLine = normalizeTdxLine(line)
   const maxOrderReuse = Math.max(1, Number(config.maxOrderReuse) || 3)
-  const reusableSessions = forceRotate ? [] : listReusableOrderSessions(maxOrderReuse, normalizedLine)
+  const normalizedReuseOrderId = String(reuseOrderId || '').trim()
+
+  // The CLI can pin a known upstream order to prove that a retry did not
+  // allocate a different WeChat session or open a new order.
+  if (normalizedReuseOrderId) {
+    if (forceRotate) {
+      throw createQmfWxCodeError('指定 orderId 时不能轮换微信会话。', 'invalid', normalizedReuseOrderId)
+    }
+    if (isBlockedTdxOrderId(normalizedReuseOrderId)) {
+      throw createQmfWxCodeError(`orderId ${normalizedReuseOrderId} 已被系统永久阻断`, 'blocked', normalizedReuseOrderId)
+    }
+    try {
+      const next = await fetchWxCodeInternal(config, normalizedReuseOrderId, { line: normalizedLine, allowTokenRefresh: true })
+      const resolvedOrderId = String(next?.orderId || '').trim()
+      if (!resolvedOrderId || resolvedOrderId !== normalizedReuseOrderId) {
+        throw createQmfWxCodeError(
+          `指定 orderId ${normalizedReuseOrderId} 未被上游复用，已拒绝使用返回的其他订单。`,
+          'invalid',
+          resolvedOrderId || normalizedReuseOrderId,
+          next?.raw || null,
+        )
+      }
+      if (isBlockedTdxOrderId(resolvedOrderId)) {
+        throw createQmfWxCodeError(`orderId ${resolvedOrderId} 已被系统永久阻断`, 'blocked', resolvedOrderId)
+      }
+      saveOrderSession({ ...next, line: normalizedLine })
+      const reservation = phone
+        ? reserveOrderSessionPhone({ orderId: resolvedOrderId, phone, maxReuse: maxOrderReuse })
+        : { ok: true, usedCount: 0 }
+      if (!reservation.ok) {
+        throw createQmfWxCodeError(`orderId ${resolvedOrderId} 已达到手机号关联上限`, 'exhausted', resolvedOrderId)
+      }
+      return {
+        reused: true,
+        orderId: resolvedOrderId,
+        wxCode: next.wxCode,
+        line: normalizedLine,
+        usedCount: reservation.usedCount,
+        claimAdded: Boolean(phone && !reservation.reused),
+        raw: next.raw,
+        qmfNewOrderOpened: false,
+      }
+    } catch (err) {
+      const actual = err instanceof Error ? err : createQmfWxCodeError(String(err || 'Unable to reuse orderId'))
+      actual.qmfNewOrderOpened = false
+      throw actual
+    }
+  }
+
+  const claimedSessions = forceRotate || !phone
+    ? []
+    : listOrderSessionsClaimingPhone(phone, normalizedLine)
+  const reusableSessions = forceRotate
+    ? []
+    : [...claimedSessions, ...listReusableOrderSessions(maxOrderReuse, normalizedLine)
+      .filter((item) => !claimedSessions.some((claimed) => claimed.orderId === item.orderId))]
   const failures = []
   let cooldownFailure = null
 
   for (const candidate of reusableSessions) {
+    const reservation = phone
+      ? reserveOrderSessionPhone({ orderId: candidate.orderId, phone, maxReuse: maxOrderReuse })
+      : { ok: true, usedCount: candidate.usedCount }
+    if (!reservation.ok) continue
+    let activeReservationOrderId = candidate.orderId
+    let activeClaimAdded = Boolean(phone && !reservation.reused)
+    const rollbackActiveClaim = () => {
+      if (activeClaimAdded && activeReservationOrderId && phone) {
+        releaseOrderSessionPhone({ orderId: activeReservationOrderId, phone })
+      }
+      activeClaimAdded = false
+    }
     try {
       const next = await fetchWxCodeInternal(config, candidate.orderId, { line: normalizedLine, allowTokenRefresh: true })
+      if (isBlockedTdxOrderId(next.orderId)) {
+        rollbackActiveClaim()
+        failures.push(`orderId ${next.orderId} 已被系统永久阻断`)
+        continue
+      }
       saveOrderSession({ ...next, line: normalizedLine })
+      let resolvedReservation = reservation
+      if (next.orderId !== candidate.orderId) {
+        rollbackActiveClaim()
+        resolvedReservation = phone
+          ? reserveOrderSessionPhone({ orderId: next.orderId, phone, maxReuse: maxOrderReuse })
+          : { ok: true, usedCount: 0 }
+        activeReservationOrderId = next.orderId
+        activeClaimAdded = Boolean(phone && resolvedReservation.ok && !resolvedReservation.reused)
+      }
+      if (!resolvedReservation.ok) {
+        rollbackActiveClaim()
+        failures.push(`orderId ${next.orderId} 已达到手机号关联上限`)
+        continue
+      }
       return {
         reused: next.orderId === candidate.orderId,
         orderId: next.orderId,
         wxCode: next.wxCode,
         line: normalizedLine,
-        usedCount: next.orderId === candidate.orderId ? candidate.usedCount : 0,
+        usedCount: resolvedReservation.usedCount,
+        claimAdded: activeClaimAdded,
         raw: next.raw,
         qmfNewOrderOpened: false,
       }
     } catch (err) {
+      rollbackActiveClaim()
       const actual = err instanceof Error ? err.message : String(err || 'unknown error')
       failures.push(`复用 orderId ${candidate.orderId} 失败：${actual}`)
       const cooldownMs = Number(err?.cooldownMs || 0)
@@ -1435,14 +1587,28 @@ export async function allocateTdxOrderSession({ forceRotate = false, allowNewOrd
 
   try {
     const next = await fetchWxCodeInternal(config, '', { line: normalizedLine, allowTokenRefresh: true })
+    if (isBlockedTdxOrderId(next.orderId)) {
+      const error = createQmfWxCodeError(`orderId ${next.orderId} 已被系统永久阻断`, 'blocked', next.orderId)
+      error.qmfNewOrderOpened = false
+      throw error
+    }
     saveOrderSession({ ...next, line: normalizedLine })
+    const reservation = phone
+      ? reserveOrderSessionPhone({ orderId: next.orderId, phone, maxReuse: maxOrderReuse })
+      : { ok: true, usedCount: 0 }
+    if (!reservation.ok) {
+      const error = createQmfWxCodeError('当前微信号可关联的手机号数量已达上限，请更换微信号后重试。', 'exhausted', next.orderId)
+      error.qmfNewOrderOpened = normalizedLine === 'line1'
+      throw error
+    }
     return {
       reused: false,
       orderId: next.orderId,
       wxCode: next.wxCode,
-      line: normalizedLine,
-      usedCount: 0,
-      raw: next.raw,
+        line: normalizedLine,
+        usedCount: reservation.usedCount,
+        claimAdded: Boolean(phone && !reservation.reused),
+        raw: next.raw,
       qmfNewOrderOpened: normalizedLine === 'line1',
     }
   } catch (err) {
@@ -1608,12 +1774,28 @@ export async function persistTdxSmsReceiveLoginToken({
   return buildFailure('短信登录成功，但 token 未成功写入 MySQL。')
 }
 
-export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = false, allowNewOrder = true, line = 'line1' }) {
+export async function createTdxSmsReceiveSession({
+  phone,
+  smsCode,
+  rotate = false,
+  allowNewOrder = true,
+  line = 'line1',
+  reuseOrderId = '',
+  reuseWxCode = '',
+} = {}) {
   const config = await ensureTdxConfig()
   const normalizedLine = normalizeTdxLine(line)
-  // Live-mode retries are delegated to the background retry queue so we do not
-  // hammer QMF and burn fresh orderIds inside a single user request.
-  const maxWxCodeAttempts = 1
+  const normalizedReuseOrderId = String(reuseOrderId || '').trim()
+  const normalizedReuseWxCode = sanitizeStoredWxCode(reuseWxCode)
+  if (normalizedReuseOrderId && rotate) {
+    throw new Error('指定 orderId 时不能轮换微信会话。')
+  }
+  if (normalizedReuseWxCode && !normalizedReuseOrderId) {
+    throw new Error('指定 wxCode 时必须同时指定 orderId。')
+  }
+  // A WeChat phone-limit response proves this wxCode is exhausted. Allow one
+  // replacement only; every other failure remains a single-attempt flow.
+  const maxWxCodeAttempts = normalizedReuseOrderId ? 1 : 2
   const authFailures = []
   let session = null
   let login = null
@@ -1621,6 +1803,17 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
   let authorizedUsedCount = 0
   let sessionCooldownMs = 0
   let saveLoginTokenRetryContext = null
+  let encounteredWechatPhoneLimit = false
+
+  const rollbackSessionClaim = () => {
+    if (!session?.claimAdded || !session?.orderId || !phone) return
+    const released = releaseOrderSessionPhone({ orderId: session.orderId, phone })
+    session = {
+      ...session,
+      claimAdded: false,
+      usedCount: Number(released.usedCount || 0),
+    }
+  }
 
   const describeLoginFailure = (loginResult) => (
     loginResult?.message
@@ -1636,6 +1829,9 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
 
   const publicLoginSmsFailureMessage = (loginResult) => {
     const msg = String(describeLoginFailure(loginResult) || '').trim()
+    if (isTdxWechatPhoneLimitMessage(msg)) {
+      return '当前微信会话关联号码已满，已自动切换一次仍无法使用，请稍后重试。'
+    }
     if (isDirectLoginSmsFailure(loginResult) && msg) {
       return '解除时间不够30天哦 ，解除失败'
     }
@@ -1649,19 +1845,32 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
     return msg.includes('微信授权') || msg.includes('授权') || msg.includes('openid') || msg.includes('wxcode') || msg.includes('auth')
   }
 
-  const shouldStopRetrying = (message = '') => (
-    isHardTdxSessionFailureMessage(message)
-    || isTdxSessionCooldownMessage(message)
-  )
-
   for (let attempt = 0; attempt < maxWxCodeAttempts; attempt += 1) {
     try {
-      const forceRotateCurrentAttempt = Boolean(rotate) && attempt === 0
-      session = await allocateTdxOrderSession({
-        forceRotate: forceRotateCurrentAttempt,
-        allowNewOrder,
-        line: normalizedLine,
-      })
+      if (normalizedReuseWxCode) {
+        // A line3 retry must reuse the audited WeChat session directly. Re-fetching
+        // the QMF code for the same order can return a rotated code or trigger the
+        // provider's rescan limit before the TDX login-sms request is made.
+        session = {
+          reused: true,
+          orderId: normalizedReuseOrderId,
+          wxCode: normalizedReuseWxCode,
+          line: normalizedLine,
+          usedCount: 0,
+          claimAdded: false,
+          qmfNewOrderOpened: false,
+          raw: null,
+        }
+      } else {
+        const forceRotateCurrentAttempt = Boolean(rotate) && attempt === 0
+        session = await allocateTdxOrderSession({
+          forceRotate: forceRotateCurrentAttempt,
+          allowNewOrder,
+          line: normalizedLine,
+          phone,
+          reuseOrderId: normalizedReuseOrderId,
+        })
+      }
       qmfNewOrderOpened = qmfNewOrderOpened || Boolean(session?.qmfNewOrderOpened)
     } catch (err) {
       const actual = err instanceof Error ? err.message : String(err || 'wxCode 分配失败')
@@ -1678,13 +1887,11 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
         payload: null,
         cooldownMs: Number.isFinite(cooldownMs) && cooldownMs > 0 ? cooldownMs : 0,
       }
-      if (shouldStopRetrying(actual)) {
-        break
-      }
-      continue
+      break
     }
 
     if (config.mode !== 'mock' && !isUsableWxCode(session.wxCode)) {
+      rollbackSessionClaim()
       authFailures.push(`第 ${attempt + 1} 次获取到的 wxCode 不可用`)
       login = {
         ok: false,
@@ -1692,7 +1899,7 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
         message: '上游授权会话不可用',
         payload: session.raw || null,
       }
-      continue
+      break
     }
 
     try {
@@ -1707,9 +1914,22 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
     }
     if (!login.ok) {
       const failureMessage = describeLoginFailure(login)
-      if (isWechatAuthFailure(login) && !shouldStopRetrying(failureMessage) && attempt < maxWxCodeAttempts - 1) {
-        authFailures.push(`第 ${attempt + 1} 次 wxCode 授权失败：${failureMessage}`)
-        continue
+      rollbackSessionClaim()
+      if (isTdxWechatPhoneLimitMessage(failureMessage)) {
+        encounteredWechatPhoneLimit = true
+        // Keep historical successful claims for audit, but never select this
+        // known-exhausted WeChat session again.
+        saveOrderSession({
+          orderId: session.orderId,
+          wxCode: session.wxCode,
+          line: normalizedLine,
+          status: 'invalid',
+          lastFailure: failureMessage,
+        })
+        if (attempt < maxWxCodeAttempts - 1) {
+          authFailures.push(`第 ${attempt + 1} 次微信会话已达手机号关联上限，已切换会话重试。`)
+          continue
+        }
       }
       break
     }
@@ -1717,13 +1937,10 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
     if (!isUsableTdxLoginToken(login.token, { mode: config.mode })) {
       authFailures.push(`第 ${attempt + 1} 次短信登录返回了不可用 token`)
       login = { ...login, invalidToken: true, token: '' }
-      if (!shouldStopRetrying(login.message) && attempt < maxWxCodeAttempts - 1) {
-        continue
-      }
       break
     }
 
-    const usedCount = markOrderUsed(session.orderId)
+    const usedCount = Number(session.usedCount || 0)
     authorizedUsedCount = usedCount
     session = { ...session, usedCount }
     const persistedLogin = await persistTdxSmsReceiveLoginToken({
@@ -1778,10 +1995,14 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
       wxCode: session.wxCode,
       line: normalizedLine,
       usedCount: session.usedCount || authorizedUsedCount,
-      message: message || '上游短信登录失败',
-      publicMessage: authRelated
-        ? '网络波动，请刷新重试'
-        : publicLoginSmsFailureMessage(login),
+      message: encounteredWechatPhoneLimit
+        ? TDX_WECHAT_PHONE_LIMIT_FAILURE_MESSAGE
+        : (message || '上游短信登录失败'),
+      publicMessage: encounteredWechatPhoneLimit
+        ? TDX_WECHAT_PHONE_LIMIT_FAILURE_MESSAGE
+        : (authRelated
+          ? '网络波动，请刷新重试'
+          : publicLoginSmsFailureMessage(login)),
       failureStep: 'login-sms',
       login,
       tokenSaved: false,
@@ -1810,7 +2031,7 @@ export async function createTdxSmsReceiveSession({ phone, smsCode, rotate = fals
 }
 
 export async function precheckTdxPhone(phone) {
-  const config = await ensureTdxConfig({ requireAppealChannel: false })
+  const config = await ensureTdxConfig()
   if (config.mode === 'mock') {
     const payload = { code: 200, message: 'mock 高频标记，可处理' }
     rememberLastPayload({ type: 'checkAppletPhonePrecheck', targetPhone: phone, payload })
@@ -1947,7 +2168,7 @@ export async function getTdxRuntimeSnapshot() {
 }
 
 export async function rotateTdxOrderSession(line = 'line1') {
-  clearCurrentOrderSession(line)
+  clearCurrentOrderSession(line, { reason: 'manual-rotate', source: 'runtime-rotate' })
   return getTdxRuntimeState()
 }
 
@@ -2083,7 +2304,7 @@ function resolveProgressResult(progressPayload, matcher = {}) {
   if (!first) {
     return {
       finalStatus: 'processing',
-      message: '号码申诉已提交，请等待1-2个小时更新结果',
+      message: '号码申诉已提交，请等待3-5个工作日的审核时间',
       progress: null,
     }
   }
@@ -2115,7 +2336,7 @@ function resolveProgressResult(progressPayload, matcher = {}) {
 
   return {
     finalStatus: 'processing',
-    message: statusDesc || '号码申诉已提交，请等待1-2个小时更新结果',
+    message: statusDesc || '号码申诉已提交，请等待3-5个工作日的审核时间',
     progress: first,
   }
 }
@@ -2174,7 +2395,7 @@ export async function queryTdxCleanupProgress({ phone = '', orderId = '', loginT
   }
 }
 
-export async function executeTdxCleanupTask(task) {
+async function executeTdxCleanupTaskInternal(task) {
   const config = await ensureTdxConfig()
   const skipCheckAppletPhone = Boolean(task?.skipCheckAppletPhone)
   const wxCode = config.mode === 'mock'
@@ -2233,6 +2454,11 @@ export async function executeTdxCleanupTask(task) {
       loginToken,
     )
     rememberLastPayload({ type: 'checkAppletPhone', payload: checkPayload })
+    if (isSameDayRepeatAppealPayload(checkPayload)) {
+      const completed = completeAlreadySubmittedExecution(task, config, state, checkPayload)
+      rememberLastPayload({ type: 'executeCleanup', payload: completed })
+      return completed
+    }
     if (!isStepSuccess(checkPayload)) {
       return failExecution(task, config, state, 'check-applet-phone', checkPayload?.message || 'Phone binding validation failed.', { raw: checkPayload })
     }
@@ -2309,6 +2535,52 @@ export async function executeTdxCleanupTask(task) {
   }
   rememberLastPayload({ type: 'executeCleanup', payload })
   return payload
+}
+
+export async function executeTdxCleanupTask(task) {
+  const executionKey = String(task?.id || task?.orderDealId || '').trim()
+  if (!executionKey) return executeTdxCleanupTaskInternal(task)
+
+  const inFlight = tdxCleanupExecutionPromises.get(executionKey)
+  if (inFlight) return inFlight
+
+  const execution = executeTdxCleanupTaskInternal(task)
+  tdxCleanupExecutionPromises.set(executionKey, execution)
+  try {
+    return await execution
+  } finally {
+    if (tdxCleanupExecutionPromises.get(executionKey) === execution) {
+      tdxCleanupExecutionPromises.delete(executionKey)
+    }
+  }
+}
+
+function completeAlreadySubmittedExecution(task, config, state, checkPayload) {
+  const body = checkPayload?.body && typeof checkPayload.body === 'object' ? checkPayload.body : checkPayload
+  const upstreamMessage = String(body?.message || checkPayload?.message || checkPayload?.msg || '').trim()
+  const message = '该号码当天已有申诉记录，未重复提交，本次服务按已完成处理。'
+  state.statuses['check-applet-phone'] = 'completed'
+  state.notes['check-applet-phone'] = upstreamMessage
+    ? `${upstreamMessage} 已确认已有申诉记录，本次不再重复提交。`
+    : '上游确认该号码当天已有申诉记录，本次不再重复提交。'
+  for (const key of ['submit-answers', 'upload-evidence', 'query-progress']) {
+    state.statuses[key] = 'skipped'
+    state.notes[key] = '号码已有当天申诉记录，未重复提交此步骤。'
+  }
+  return {
+    ok: true,
+    mode: config.mode,
+    result: {
+      status: 'completed',
+      message,
+      orderId: task.orderId,
+      wxCode: task.wxCode,
+      alreadySubmitted: true,
+      businessOutcome: 'already-submitted',
+      refundSuggested: false,
+      steps: buildStepState(task, config, state.statuses, state.notes),
+    },
+  }
 }
 
 

@@ -73,6 +73,16 @@ export function sendMarkUserTdxSecondCode(data) {
   })
 }
 
+// Taidixiong二次线路3可复用失败订单
+export function listMarkUserTdxSecondLine3Candidates(phone) {
+  return request({
+    url: '/server/markUser/tdxSecond/line3-candidates',
+    method: 'get',
+    params: { phone },
+    silent: true
+  })
+}
+
 // Taidixiong二次提交申诉
 export function submitMarkUserTdxSecond(data) {
   return request({

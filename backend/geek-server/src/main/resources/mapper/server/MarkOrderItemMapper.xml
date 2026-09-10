@@ -503,6 +503,19 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit #{limit}
     </select>
 
+    <select id="selectUserTdxSecondProcessNotes" resultType="String">
+        select moi.process_note
+        from mark_order_item moi
+        inner join mark_order mo on mo.id = moi.order_id
+        where mo.user_id = #{userId}
+          and lower(mo.platform_code) = 'td_second'
+          and moi.phone = #{phone}
+          and moi.process_status = '2'
+          and moi.process_note is not null
+          and moi.process_note like '%taskId=%'
+        order by moi.id desc
+    </select>
+
     <select id="selectUserPendingTdGaopinPhones" resultType="String">
         select distinct moi.phone
         from mark_order_item moi

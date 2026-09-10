@@ -1,5 +1,79 @@
 [
   {
+    "id": "tdx-task-1788949692085",
+    "taskType": "sms-receive-session-retry",
+    "flow": "sms-receive",
+    "liveUserId": 1,
+    "phone": "13800138000",
+    "line": "line1",
+    "username": "tdx-integration",
+    "companyname": "tdx二次申诉",
+    "businessType": "tdx",
+    "orderstatenote": "123456",
+    "batchLabel": "tdx二次申诉",
+    "orderDealId": 0,
+    "orderpicinumber": "",
+    "status": "processing",
+    "currentStep": "上游会话异常，系统正在后台自动重试...",
+    "createdAt": "2026-09-09 18:28:12",
+    "updatedAt": "2026-09-09 18:32:49",
+    "failreason": "",
+    "result": {
+      "status": "processing",
+      "message": "系统正在后台处理，请稍后到订单详情查看结果。",
+      "sessionRetry": true,
+      "upstreamAudit": {
+        "provider": "QMF",
+        "line": "line1",
+        "orderId": "",
+        "wxCode": "",
+        "wxid": "",
+        "failureStep": "",
+        "qmfStage": "",
+        "upstreamCode": null,
+        "upstreamMessage": "TDX live mode is not ready: 线路1(QMF) username is required in live mode; 线路1(QMF) password is required in live mode; 线路2(登峰) username is required in live mode; 线路2(登峰) password is required in live mode",
+        "upstreamPayload": null,
+        "usedCount": null,
+        "reused": null,
+        "capturedAt": "2026-09-09 18:28:12"
+      }
+    },
+    "retryContext": null,
+    "sessionRetry": {
+      "status": "queued",
+      "attempts": 0,
+      "maxAttempts": 6,
+      "nextRetryAtMs": 1788949972738,
+      "nextRetryAt": "2026-09-09 18:32:52",
+      "lastAttemptAtMs": 0,
+      "lastAttemptAt": "",
+      "lastError": "TDX live mode is not ready: 线路1(QMF) username is required in live mode; 线路1(QMF) password is required in live mode; 线路2(登峰) username is required in live mode; 线路2(登峰) password is required in live mode",
+      "lastFailureStep": "",
+      "qmfNewOrderOpened": false
+    },
+    "debug": {
+      "lastSessionFailure": {},
+      "lastQueuedAt": "2026-09-09 18:32:49"
+    },
+    "notes": [
+      {
+        "title": "上游异常自动重试排队",
+        "description": "检测到上游授权/会话异常，系统已转为后台静默重试。",
+        "meta": "2026-09-09 18:32:49"
+      },
+      {
+        "title": "任务已创建",
+        "description": "已为 13800138000 创建 tdx二次申诉 后台重试任务。",
+        "meta": "2026-09-09 18:28:12"
+      },
+      {
+        "title": "上游异常自动重试排队",
+        "description": "检测到上游授权/会话异常，系统将自动在后台重试。",
+        "meta": "2026-09-09 18:28:12"
+      }
+    ]
+  },
+  {
     "id": "tdx-task-1785861892784",
     "phone": "13035788697",
     "line": "line1",

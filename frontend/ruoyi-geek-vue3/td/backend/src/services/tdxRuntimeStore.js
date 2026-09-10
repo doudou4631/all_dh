@@ -11,7 +11,10 @@ const fallbackState = {
   currentWxCode: '',
   currentLine: 'line1',
   orderSessions: {},
+  retiredSessions: {},
   usage: {},
+  phoneClaims: {},
+  legacyUsage: {},
   qmfSession: null,
   dengfengSession: null,
   loginTokens: {},
@@ -47,7 +50,49 @@ function normalizeOrderSessionStatus(value = '') {
 }
 
 export function normalizeTdxLine(value = '') {
-  return String(value || '').trim().toLowerCase() === 'line2' ? 'line2' : 'line1'
+  const line = String(value || '').trim().toLowerCase()
+  if (line === 'line2') return 'line2'
+  if (line === 'line3') return 'line3'
+  return 'line1'
+}
+
+function normalizeClaimedPhone(value = '') {
+  return String(value || '').trim().replace(/\s+/g, '')
+}
+
+function normalizePhoneClaims(input = {}) {
+  const claims = {}
+  for (const [key, values] of Object.entries(input || {})) {
+    const orderId = String(key || '').trim()
+    if (!orderId) continue
+    const uniquePhones = [...new Set((Array.isArray(values) ? values : [])
+      .map((value) => normalizeClaimedPhone(value))
+      .filter(Boolean))]
+    if (uniquePhones.length) claims[orderId] = uniquePhones
+  }
+  return claims
+}
+
+function normalizeUsageCount(value) {
+  const count = Number(value || 0)
+  return Number.isFinite(count) && count > 0 ? Math.floor(count) : 0
+}
+
+function normalizeLegacyUsage(input = {}, usage = {}) {
+  const legacyUsage = {}
+  const orderIds = new Set([
+    ...Object.keys(usage || {}),
+    ...Object.keys(input || {}),
+  ])
+  for (const orderId of orderIds) {
+    const normalizedOrderId = String(orderId || '').trim()
+    if (!normalizedOrderId) continue
+    const count = Object.prototype.hasOwnProperty.call(input || {}, normalizedOrderId)
+      ? normalizeUsageCount(input[normalizedOrderId])
+      : normalizeUsageCount(usage?.[normalizedOrderId])
+    if (count) legacyUsage[normalizedOrderId] = count
+  }
+  return legacyUsage
 }
 
 function normalizeOrderSessions(input = {}) {
@@ -74,6 +119,42 @@ function normalizeOrderSessions(input = {}) {
   return sessions
 }
 
+function sanitizeAuditMessage(value = '') {
+  return String(value || '')
+    .replace(/(token|authorization|wxcode|openid|access[_-]?token|password|secret)\s*[:=]\s*[^\s,;]+/gi, '$1=[redacted]')
+    .replace(/\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, '[redacted-jwt]')
+    .replace(/\b(?=[A-Za-z0-9_-]{12,128}\b)(?=[A-Za-z0-9_-]*[A-Za-z])(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]+\b/g, '[redacted-wxcode]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 1000)
+}
+
+function normalizeRetiredSessions(input = {}) {
+  const sessions = {}
+  const entries = Array.isArray(input)
+    ? input.map((item) => [item?.orderId, item])
+    : Object.entries(input || {})
+  for (const [key, item] of entries) {
+    const orderId = String(item?.orderId || key || '').trim()
+    if (!orderId) continue
+    const phoneCount = Number(item?.phoneCount || 0)
+    sessions[orderId] = {
+      orderId,
+      line: normalizeTdxLine(item?.line),
+      usedCount: normalizeUsageCount(item?.usedCount),
+      phoneCount: Number.isFinite(phoneCount) && phoneCount > 0 ? Math.floor(phoneCount) : 0,
+      savedAt: String(item?.savedAt || '').trim(),
+      retiredAt: String(item?.retiredAt || '').trim(),
+      retiredReason: String(item?.retiredReason || 'removed').trim().slice(0, 120),
+      retiredMessage: sanitizeAuditMessage(item?.retiredMessage),
+      source: String(item?.source || '').trim().slice(0, 120),
+      status: normalizeOrderSessionStatus(item?.status),
+      lastFailure: sanitizeAuditMessage(item?.lastFailure),
+    }
+  }
+  return sessions
+}
+
 function normalizeAuthSession(input = null) {
   const token = String(input?.token || '').trim()
   if (!token) return null
@@ -91,6 +172,9 @@ function normalizeAuthSession(input = null) {
 function normalizeRuntimeState(next = {}) {
   const usage = next.usage || {}
   const orderSessions = normalizeOrderSessions(next.orderSessions)
+  const retiredSessions = normalizeRetiredSessions(next.retiredSessions)
+  const phoneClaims = normalizePhoneClaims(next.phoneClaims)
+  const legacyUsage = normalizeLegacyUsage(next.legacyUsage, usage)
   const currentOrderId = String(next.currentOrderId || '').trim()
   const currentWxCode = String(next.currentWxCode || '').trim()
   const currentLine = normalizeTdxLine(next.currentLine || next.orderSessions?.[currentOrderId]?.line)
@@ -121,7 +205,10 @@ function normalizeRuntimeState(next = {}) {
     currentWxCode,
     currentLine,
     orderSessions,
+    retiredSessions,
     usage,
+    phoneClaims,
+    legacyUsage,
     qmfSession,
     dengfengSession,
     loginTokens: next.loginTokens || {},
@@ -134,6 +221,51 @@ function orderSessionSortValue(item = {}) {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
+function getOrderSessionUsedCount(state = {}, orderId = '') {
+  const normalizedOrderId = String(orderId || '').trim()
+  if (!normalizedOrderId) return 0
+  const claimedPhones = state.phoneClaims?.[normalizedOrderId] || []
+  // Phone claims are the authoritative count for the current model. Legacy
+  // usage is only a fallback for sessions created before phoneClaims existed;
+  // adding both values double-counts a session after migration.
+  if (claimedPhones.length) return claimedPhones.length
+  const legacyCount = normalizeUsageCount(
+    Object.prototype.hasOwnProperty.call(state.legacyUsage || {}, normalizedOrderId)
+      ? state.legacyUsage[normalizedOrderId]
+      : state.usage?.[normalizedOrderId],
+  )
+  return legacyCount
+}
+
+// Audit responses may be generated after a task has been persisted. Read the
+// current or retired session count directly so older tasks can still expose
+// the usage that is already tracked by the runtime store.
+export function getTdxOrderSessionUsedCount(orderId = '') {
+  const state = readState()
+  const normalizedOrderId = String(orderId || '').trim()
+  if (!normalizedOrderId) return null
+
+  if (state.orderSessions?.[normalizedOrderId]) {
+    return getOrderSessionUsedCount(state, normalizedOrderId)
+  }
+  if (state.retiredSessions?.[normalizedOrderId]) {
+    return normalizeUsageCount(state.retiredSessions[normalizedOrderId].usedCount)
+  }
+
+  const hasUsage = Object.prototype.hasOwnProperty.call(state.usage || {}, normalizedOrderId)
+    || Object.prototype.hasOwnProperty.call(state.legacyUsage || {}, normalizedOrderId)
+    || Object.prototype.hasOwnProperty.call(state.phoneClaims || {}, normalizedOrderId)
+  return hasUsage ? getOrderSessionUsedCount(state, normalizedOrderId) : null
+}
+
+function getOrderSessionPhoneUseCount(state = {}, orderId = '', phone = '') {
+  const normalizedOrderId = String(orderId || '').trim()
+  const normalizedPhone = normalizeClaimedPhone(phone)
+  if (!normalizedOrderId || !normalizedPhone) return 0
+  const index = (state.phoneClaims?.[normalizedOrderId] || []).indexOf(normalizedPhone)
+  return index >= 0 ? index + 1 : 0
+}
+
 function isOrderSessionCooling(item = {}, nowMs = Date.now()) {
   if (!item) return false
   const cooldownUntilMs = Date.parse(item.cooldownUntil || '')
@@ -141,7 +273,7 @@ function isOrderSessionCooling(item = {}, nowMs = Date.now()) {
 }
 
 function publicOrderSessionView(state = {}, item = {}) {
-  const usedCount = Number(state.usage?.[item.orderId] || 0)
+  const usedCount = getOrderSessionUsedCount(state, item.orderId)
   return {
     orderId: item.orderId,
     wxCode: item.wxCode,
@@ -232,6 +364,7 @@ function readState() {
       ...fallbackState,
       ...parsed,
       usage: parsed?.usage || {},
+      retiredSessions: parsed?.retiredSessions || {},
       qmfSession: parsed?.qmfSession || null,
       loginTokens: parsed?.loginTokens || {},
       orderSessions: parsed?.orderSessions || {},
@@ -262,13 +395,24 @@ export async function getTdxRuntimeState() {
   const orderSessions = Object.values(state.orderSessions || {})
     .map((item) => publicOrderSessionView(state, item))
     .sort((a, b) => orderSessionSortValue(b) - orderSessionSortValue(a))
+  const retiredSessions = Object.values(state.retiredSessions || {})
+    .sort((a, b) => Date.parse(b.retiredAt || '') - Date.parse(a.retiredAt || ''))
+  const usage = Object.fromEntries(
+    [...new Set([
+      ...Object.keys(state.usage || {}),
+      ...Object.keys(state.phoneClaims || {}),
+      ...Object.keys(state.legacyUsage || {}),
+    ])].map((orderId) => [orderId, getOrderSessionUsedCount(state, orderId)]),
+  )
   return {
     currentOrderId: state.currentOrderId,
     currentWxCode: state.currentWxCode,
     currentLine: normalizeTdxLine(state.currentLine),
     orderSessionCount: orderSessions.length,
     orderSessions,
-    usage: state.usage,
+    retiredSessionCount: retiredSessions.length,
+    retiredSessions,
+    usage,
     qmfSession: state.qmfSession?.token
       ? {
         hasToken: true,
@@ -349,6 +493,87 @@ export function listReusableOrderSessions(maxReuse = 3, line = '') {
     .filter((item) => item.usedCount < limit && !isOrderSessionCooling(item, nowMs))
 }
 
+export function listOrderSessionsClaimingPhone(phone = '', line = '') {
+  const state = readState()
+  const normalizedPhone = normalizeClaimedPhone(phone)
+  if (!normalizedPhone) return []
+  const normalizedLine = line ? normalizeTdxLine(line) : ''
+  const nowMs = Date.now()
+  return Object.values(state.orderSessions || {})
+    .filter((item) => item?.orderId && normalizeOrderSessionStatus(item?.status) !== 'invalid')
+    .filter((item) => !normalizedLine || normalizeTdxLine(item.line) === normalizedLine)
+    .filter((item) => !isOrderSessionCooling(item, nowMs))
+    .filter((item) => (state.phoneClaims?.[item.orderId] || []).includes(normalizedPhone))
+    .sort((a, b) => orderSessionSortValue(b) - orderSessionSortValue(a))
+    .map((item) => publicOrderSessionView(state, item))
+}
+
+export function reserveOrderSessionPhone({ orderId = '', phone = '', maxReuse = 3 } = {}) {
+  const state = readState()
+  const normalizedOrderId = String(orderId || '').trim()
+  const normalizedPhone = normalizeClaimedPhone(phone)
+  const limit = Math.max(1, Number(maxReuse) || 3)
+  if (!normalizedOrderId || !normalizedPhone || !state.orderSessions?.[normalizedOrderId]) {
+    return { ok: false, usedCount: 0, reason: 'invalid-session-or-phone' }
+  }
+
+  const claimedPhones = state.phoneClaims?.[normalizedOrderId] || []
+  const usedCount = getOrderSessionUsedCount(state, normalizedOrderId)
+  if (claimedPhones.includes(normalizedPhone)) {
+    return {
+      ok: true,
+      reused: true,
+      usedCount: getOrderSessionPhoneUseCount(state, normalizedOrderId, normalizedPhone),
+    }
+  }
+  if (usedCount >= limit) {
+    return { ok: false, usedCount, reason: 'phone-limit-reached' }
+  }
+
+  const phoneClaims = {
+    ...(state.phoneClaims || {}),
+    [normalizedOrderId]: [...claimedPhones, normalizedPhone],
+  }
+  const nextState = writeState({ ...state, phoneClaims })
+  return {
+    ok: true,
+    reused: false,
+    usedCount: getOrderSessionPhoneUseCount(nextState, normalizedOrderId, normalizedPhone),
+  }
+}
+
+export function releaseOrderSessionPhone({ orderId = '', phone = '' } = {}) {
+  const state = readState()
+  const normalizedOrderId = String(orderId || '').trim()
+  const normalizedPhone = normalizeClaimedPhone(phone)
+  if (!normalizedOrderId || !normalizedPhone) {
+    return { ok: false, removed: false, usedCount: 0, reason: 'invalid-session-or-phone' }
+  }
+
+  const claimedPhones = state.phoneClaims?.[normalizedOrderId] || []
+  if (!claimedPhones.includes(normalizedPhone)) {
+    return {
+      ok: true,
+      removed: false,
+      usedCount: getOrderSessionUsedCount(state, normalizedOrderId),
+    }
+  }
+
+  const remainingPhones = claimedPhones.filter((item) => item !== normalizedPhone)
+  const phoneClaims = { ...(state.phoneClaims || {}) }
+  if (remainingPhones.length) {
+    phoneClaims[normalizedOrderId] = remainingPhones
+  } else {
+    delete phoneClaims[normalizedOrderId]
+  }
+  const nextState = writeState({ ...state, phoneClaims })
+  return {
+    ok: true,
+    removed: true,
+    usedCount: getOrderSessionUsedCount(nextState, normalizedOrderId),
+  }
+}
+
 export function getNextCoolingOrderSession(maxReuse = 3, line = '') {
   const state = readState()
   const limit = Math.max(1, Number(maxReuse) || 3)
@@ -412,21 +637,54 @@ export function saveOrderSession(session) {
   })
 }
 
-export function removeOrderSession(orderId) {
+export function removeOrderSession(orderId, options = {}) {
   const state = readState()
   const normalizedOrderId = String(orderId || '').trim()
   if (!normalizedOrderId) return state
   const orderSessions = { ...(state.orderSessions || {}) }
   const usage = { ...state.usage }
+  const phoneClaims = { ...(state.phoneClaims || {}) }
+  const legacyUsage = { ...(state.legacyUsage || {}) }
+  const item = orderSessions[normalizedOrderId] || null
+  const claimedPhones = phoneClaims[normalizedOrderId] || []
+  const usedCount = getOrderSessionUsedCount(state, normalizedOrderId)
+  const nowText = new Date().toISOString()
+  const retiredSessions = { ...(state.retiredSessions || {}) }
+  if (item || claimedPhones.length || Object.prototype.hasOwnProperty.call(usage, normalizedOrderId)) {
+    const retiredReason = String(options?.reason || 'removed').trim().slice(0, 120)
+    const retiredMessage = sanitizeAuditMessage(options?.message || item?.lastFailure)
+    const source = String(options?.source || '').trim().slice(0, 120)
+    retiredSessions[normalizedOrderId] = {
+      orderId: normalizedOrderId,
+      line: normalizeTdxLine(item?.line || state.currentLine),
+      usedCount,
+      phoneCount: claimedPhones.length,
+      savedAt: String(item?.savedAt || '').trim(),
+      retiredAt: nowText,
+      retiredReason,
+      retiredMessage,
+      source,
+      status: normalizeOrderSessionStatus(item?.status),
+      lastFailure: sanitizeAuditMessage(item?.lastFailure),
+    }
+    console.warn(
+      `[tdx-session-retired] orderId=${normalizedOrderId} line=${normalizeTdxLine(item?.line || state.currentLine)} used=${usedCount} phoneCount=${claimedPhones.length} reason=${retiredReason} source=${source || 'unknown'} message=${retiredMessage || '-'}`,
+    )
+  }
   delete orderSessions[normalizedOrderId]
   delete usage[normalizedOrderId]
+  delete phoneClaims[normalizedOrderId]
+  delete legacyUsage[normalizedOrderId]
   return writeState({
     ...state,
     currentOrderId: state.currentOrderId === normalizedOrderId ? '' : state.currentOrderId,
     currentLine: state.currentOrderId === normalizedOrderId ? 'line1' : state.currentLine,
     currentWxCode: state.currentOrderId === normalizedOrderId ? '' : state.currentWxCode,
     orderSessions,
+    retiredSessions,
     usage,
+    phoneClaims,
+    legacyUsage,
   })
 }
 
@@ -471,6 +729,10 @@ export function markOrderSessionCooldown(orderId, { message = '', cooldownMs = 7
     orderSessions,
     usage,
   })
+}
+
+export function retireOrderSession(orderId, options = {}) {
+  return removeOrderSession(orderId, options)
 }
 
 export function getSavedQmfSession() {
@@ -659,23 +921,35 @@ export function markOrderUsed(orderId) {
   const normalizedOrderId = String(orderId || '').trim()
   if (!normalizedOrderId) return 0
   const usage = { ...state.usage, [normalizedOrderId]: (state.usage[normalizedOrderId] || 0) + 1 }
-  writeState({ ...state, usage })
-  return usage[normalizedOrderId]
+  const existingLegacyUsage = Object.prototype.hasOwnProperty.call(state.legacyUsage || {}, normalizedOrderId)
+    ? state.legacyUsage[normalizedOrderId]
+    : state.usage?.[normalizedOrderId]
+  const legacyUsage = {
+    ...(state.legacyUsage || {}),
+    [normalizedOrderId]: normalizeUsageCount(existingLegacyUsage) + 1,
+  }
+  const nextState = writeState({ ...state, usage, legacyUsage })
+  return getOrderSessionUsedCount(nextState, normalizedOrderId)
 }
 
-export function clearCurrentOrderSession(line = '') {
+export function clearCurrentOrderSession(line = '', options = {}) {
   const state = readState()
+  const retirementOptions = {
+    reason: 'manual-rotate',
+    source: 'runtime-rotate',
+    ...options,
+  }
   const normalizedLine = line ? normalizeTdxLine(line) : ''
   if (normalizedLine && state.currentOrderId) {
     const current = state.orderSessions?.[state.currentOrderId] || null
     if (current && normalizeTdxLine(current.line) === normalizedLine) {
-      return removeOrderSession(state.currentOrderId)
+      return removeOrderSession(state.currentOrderId, retirementOptions)
     }
     const latest = Object.values(state.orderSessions || {})
       .filter((item) => item?.orderId && normalizeTdxLine(item.line) === normalizedLine)
       .sort((a, b) => orderSessionSortValue(b) - orderSessionSortValue(a))[0] || null
     if (latest?.orderId) {
-      return removeOrderSession(latest.orderId)
+      return removeOrderSession(latest.orderId, retirementOptions)
     }
   }
   if (!state.currentOrderId) {
@@ -685,7 +959,7 @@ export function clearCurrentOrderSession(line = '') {
       currentWxCode: '',
     })
   }
-  return removeOrderSession(state.currentOrderId)
+  return removeOrderSession(state.currentOrderId, retirementOptions)
 }
 
 export function rememberLastPayload(payload) {

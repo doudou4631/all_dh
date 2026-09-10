@@ -12,6 +12,8 @@ function toStatusLabel(status) {
       return "Ready"
     case "blocked":
       return "Blocked"
+    case "skipped":
+      return "Skipped"
     default:
       return "Pending"
   }
@@ -138,6 +140,7 @@ export function summarizeTdxExecutionPlan(plan = []) {
   const activeSteps = plan.filter((step) => step.status === "active").length
   const blockedSteps = plan.filter((step) => step.status === "blocked").length
   const readySteps = plan.filter((step) => step.status === "ready").length
+  const skippedSteps = plan.filter((step) => step.status === "skipped").length
   const pendingSteps = plan.filter((step) => step.status === "pending").length
   const nextStep =
     plan.find((step) => ["active", "ready", "blocked", "pending"].includes(step.status)) ||
@@ -147,7 +150,7 @@ export function summarizeTdxExecutionPlan(plan = []) {
   let overallStatus = "pending"
   if (blockedSteps) {
     overallStatus = "blocked"
-  } else if (completedSteps === totalSteps && totalSteps > 0) {
+  } else if (completedSteps + skippedSteps === totalSteps && totalSteps > 0) {
     overallStatus = "completed"
   } else if (activeSteps || readySteps) {
     overallStatus = "in-progress"
@@ -159,6 +162,7 @@ export function summarizeTdxExecutionPlan(plan = []) {
     activeSteps,
     blockedSteps,
     readySteps,
+    skippedSteps,
     pendingSteps,
     nextStepTitle: nextStep?.title || "",
     overallStatus,

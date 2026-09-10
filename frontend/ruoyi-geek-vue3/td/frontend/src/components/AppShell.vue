@@ -25,6 +25,7 @@ async function handleLogout() {
         <p v-if="subtitle" class="subtitle">{{ subtitle }}</p>
       </div>
       <div class="header-actions">
+        <button v-if="route.path !== '/login'" class="btn btn-soft" type="button" @click="router.push('/audit')">瀹¤</button>
         <span v-if="authState.user" class="user-chip">{{ authState.user.username || authState.user.name }}</span>
         <button v-if="route.path !== '/login'" class="btn btn-soft" type="button" @click="router.push('/appeal')">申诉页</button>
         <button v-if="authState.token" class="btn btn-soft" type="button" @click="handleLogout">退出</button>
