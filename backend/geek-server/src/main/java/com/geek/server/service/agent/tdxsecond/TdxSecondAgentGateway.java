@@ -20,6 +20,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -52,8 +53,21 @@ public class TdxSecondAgentGateway {
     @Value("${tdx.second.timeout-ms:120000}")
     private long timeoutMs;
 
+    @Value("${tdx.second.external-api-base-url:https://haoma.aleo1314.vip/backend/api/open-api/v1}")
+    private String externalApiBaseUrl;
+
+    @Value("${tdx.second.line1-maintenance:true}")
+    private boolean line1Maintenance;
+
+    @Value("${tdx.second.line2-maintenance:false}")
+    private boolean line2Maintenance;
+
+    @Value("${tdx.second.line3-maintenance:true}")
+    private boolean line3Maintenance;
+
     public MarkTdxSecondPrecheckVO precheck(String phone) {
         ensureReady();
+        ensureLineAvailable("line1");
         Map<String, Object> appealResponse = postTdx("/api/tdx/sms-receive/precheck", Map.of("phone", phone));
         Map<String, Object> appealData = asMap(appealResponse.get("data"));
         if (!asBoolean(appealResponse.get("success")) || !asBoolean(appealData.get("allowed"))) {
@@ -78,11 +92,20 @@ public class TdxSecondAgentGateway {
     }
 
     public MarkTdxSecondSendCodeResultVO sendCode(String phone, String line) {
-        return sendCode(phone, line, "");
+        return sendCode(phone, line, "", "");
     }
 
     public MarkTdxSecondSendCodeResultVO sendCode(String phone, String line, String sourceTaskId) {
+        return sendCode(phone, line, sourceTaskId, "");
+    }
+
+    public MarkTdxSecondSendCodeResultVO sendCode(String phone, String line, String sourceTaskId,
+                                                   String requestedExternalRequestId) {
         String targetLine = normalizeLine(line);
+        ensureLineAvailable(targetLine);
+        if ("line2".equals(targetLine)) {
+            return createExternalLine2Appeal(phone, requestedExternalRequestId);
+        }
         MarkTdxSecondPrecheckVO precheck = "line3".equals(targetLine) ? null : precheck(phone);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("phone", phone);
@@ -100,12 +123,38 @@ public class TdxSecondAgentGateway {
         return result;
     }
 
+    private MarkTdxSecondSendCodeResultVO createExternalLine2Appeal(String phone, String requestedExternalRequestId) {
+        String externalRequestId = StringUtils.defaultIfBlank(StringUtils.trimToNull(requestedExternalRequestId),
+                "java-tdx-" + UUID.randomUUID());
+        Map<String, Object> response = postExternal("/tdx-line2/appeals", Map.of(
+                "phone", phone,
+                "externalRequestId", externalRequestId
+        ));
+        if (!asBoolean(response.get("success"))) {
+            throw new ServiceException(messageOf(response, "线路2验证码发送失败，请稍后重试"));
+        }
+        Map<String, Object> data = asMap(response.get("data"));
+        MarkTdxSecondSendCodeResultVO result = new MarkTdxSecondSendCodeResultVO();
+        result.setPhone(StringUtils.defaultIfBlank(stringValue(data.get("phone")), phone));
+        result.setLine("line2");
+        result.setTaskId(stringValue(data.get("taskId")));
+        result.setExternalRequestId(StringUtils.defaultIfBlank(stringValue(data.get("externalRequestId")), externalRequestId));
+        result.setUpstreamStatus(StringUtils.defaultIfBlank(stringValue(data.get("status")), "awaiting_sms"));
+        result.setMessage(StringUtils.defaultIfBlank(stringValue(data.get("message")),
+                messageOf(response, "验证码已发送，请输入短信验证码")));
+        if (StringUtils.isBlank(result.getTaskId())) {
+            throw new ServiceException("线路2外部接口未返回任务号，请稍后重试");
+        }
+        return result;
+    }
+
     public Object listLine3Candidates(String phone) {
         return listLine3Candidates(phone, null);
     }
 
     public Object listLine3Candidates(String phone, Set<String> allowedTaskIds) {
         ensureReady();
+        ensureLineAvailable("line3");
         String encodedPhone = URLEncoder.encode(StringUtils.trimToEmpty(phone), StandardCharsets.UTF_8);
         Map<String, Object> response = getTdx("/api/tdx/sms-receive/line3-candidates?phone=" + encodedPhone);
         if (!asBoolean(response.get("success"))) {
@@ -138,6 +187,7 @@ public class TdxSecondAgentGateway {
 
     public MarkTdxSecondSubmitResultVO retryLine3(String sourceTaskId, String smsCode) {
         ensureReady();
+        ensureLineAvailable("line3");
         String taskId = StringUtils.trimToEmpty(sourceTaskId);
         if (StringUtils.isBlank(taskId)) throw new ServiceException("线路3缺少原失败任务");
         if (!StringUtils.trimToEmpty(smsCode).matches("\\d{4,6}")) {
@@ -170,11 +220,21 @@ public class TdxSecondAgentGateway {
     }
 
     public MarkTdxSecondSubmitResultVO submit(String phone, String smsCode, String line, Boolean rotate) {
+        return submit(phone, smsCode, line, rotate, "");
+    }
+
+    public MarkTdxSecondSubmitResultVO submit(String phone, String smsCode, String line, Boolean rotate,
+                                               String externalTaskId) {
         ensureReady();
+        String targetLine = normalizeLine(line);
+        ensureLineAvailable(targetLine);
+        if ("line2".equals(targetLine)) {
+            return submitExternalLine2(externalTaskId, smsCode, phone);
+        }
         Map<String, Object> response = postTdx("/api/tdx/sms-receive/login", Map.of(
                 "phone", phone,
                 "smsCode", smsCode,
-                "line", normalizeLine(line),
+                "line", targetLine,
                 "rotate", Boolean.TRUE.equals(rotate)
         ));
         if (!asBoolean(response.get("success"))) {
@@ -195,9 +255,34 @@ public class TdxSecondAgentGateway {
         return result;
     }
 
+    private MarkTdxSecondSubmitResultVO submitExternalLine2(String externalTaskId, String smsCode, String phone) {
+        String taskId = StringUtils.trimToEmpty(externalTaskId);
+        if (StringUtils.isBlank(taskId) || !taskId.matches("[A-Za-z0-9_-]{1,160}")) {
+            throw new ServiceException("线路2外部任务号缺失，请重新获取验证码");
+        }
+        Map<String, Object> response = postExternal("/tdx-line2/appeals/"
+                + URLEncoder.encode(taskId, StandardCharsets.UTF_8) + "/submit", Map.of("smsCode", smsCode));
+        Map<String, Object> data = asMap(response.get("data"));
+        String status = StringUtils.defaultIfBlank(stringValue(data.get("status")), "processing");
+        MarkTdxSecondSubmitResultVO result = new MarkTdxSecondSubmitResultVO();
+        result.setPhone(StringUtils.defaultIfBlank(stringValue(data.get("phone")), phone));
+        result.setTaskId(StringUtils.defaultIfBlank(stringValue(data.get("taskId")), taskId));
+        result.setUpstreamStatus(status);
+        result.setMessage(StringUtils.defaultIfBlank(stringValue(data.get("message")),
+                messageOf(response, "线路2申诉已提交，正在处理")));
+        result.setProcessStatus(toProcessStatus(status));
+        if (!asBoolean(response.get("success"))) {
+            throw new ServiceException(result.getMessage());
+        }
+        return result;
+    }
+
     public MarkTdxSecondTaskStatusVO syncTask(String taskId) {
         ensureReady();
         if (StringUtils.isBlank(taskId)) throw new ServiceException("Taidixiong二次任务号缺失");
+        if (taskId.startsWith("tdx-ext-")) {
+            return syncExternalLine2(taskId);
+        }
         Map<String, Object> response = postTdx("/api/tdx/sms-receive/tasks/" + taskId.trim() + "/sync", Map.of());
         if (!asBoolean(response.get("success"))) {
             throw new ServiceException(messageOf(response, "Taidixiong二次任务状态同步失败"));
@@ -210,6 +295,21 @@ public class TdxSecondAgentGateway {
         result.setMessage(StringUtils.defaultIfBlank(stringValue(data.get("message")), "申诉已提交，等待处理"));
         result.setRefundSuggested(asBoolean(data.get("refundSuggested")));
         result.setAttempts(asInt(data.get("attempts"), 0));
+        return result;
+    }
+
+    private MarkTdxSecondTaskStatusVO syncExternalLine2(String taskId) {
+        Map<String, Object> response = getExternal("/tdx-line2/appeals/"
+                + URLEncoder.encode(taskId.trim(), StandardCharsets.UTF_8));
+        Map<String, Object> data = asMap(response.get("data"));
+        MarkTdxSecondTaskStatusVO result = new MarkTdxSecondTaskStatusVO();
+        result.setTaskId(StringUtils.defaultIfBlank(stringValue(data.get("taskId")), taskId));
+        result.setStatus(StringUtils.defaultIfBlank(stringValue(data.get("status")), "processing"));
+        result.setRawStatus(result.getStatus());
+        result.setMessage(StringUtils.defaultIfBlank(stringValue(data.get("message")), "线路2申诉正在处理"));
+        result.setRefundSuggested("failed".equalsIgnoreCase(result.getStatus())
+                || "retryable".equalsIgnoreCase(result.getStatus()));
+        result.setAttempts(0);
         return result;
     }
 
@@ -249,11 +349,23 @@ public class TdxSecondAgentGateway {
         return postJson(StringUtils.removeEnd(baseUrl.trim(), "/") + path, payload, true);
     }
 
+    private Map<String, Object> postExternal(String path, Map<String, Object> payload) {
+        return postJson(StringUtils.removeEnd(externalApiBaseUrl.trim(), "/") + path, payload, true);
+    }
+
+    private Map<String, Object> getExternal(String path) {
+        return getJson(StringUtils.removeEnd(externalApiBaseUrl.trim(), "/") + path);
+    }
+
     private Map<String, Object> getTdx(String path) {
+        return getJson(StringUtils.removeEnd(baseUrl.trim(), "/") + path);
+    }
+
+    private Map<String, Object> getJson(String url) {
         ensureReady();
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(StringUtils.removeEnd(baseUrl.trim(), "/") + path))
+                    .uri(URI.create(url))
                     .timeout(Duration.ofMillis(Math.max(1000L, timeoutMs)))
                     .header("Accept", "application/json")
                     .header("X-TDX-Integration-Token", integrationToken.trim())
@@ -268,7 +380,7 @@ public class TdxSecondAgentGateway {
         } catch (ServiceException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("TDX audit request failed path={}", path, e);
+            log.warn("TDX GET request failed url={}", url, e);
             throw new ServiceException("TDX service is temporarily unavailable");
         }
     }
@@ -303,6 +415,33 @@ public class TdxSecondAgentGateway {
         if (StringUtils.isBlank(integrationToken)) {
             throw new ServiceException("Taidixiong二次后台代理集成Token未配置");
         }
+        if (StringUtils.isBlank(externalApiBaseUrl)) {
+            throw new ServiceException("线路2外部接口地址未配置");
+        }
+    }
+
+    private void ensureLineAvailable(String line) {
+        String targetLine = normalizeLine(line);
+        boolean maintenance = switch (targetLine) {
+            case "line1" -> line1Maintenance;
+            case "line2" -> line2Maintenance;
+            case "line3" -> line3Maintenance;
+            default -> false;
+        };
+        if (maintenance) {
+            String label = switch (targetLine) {
+                case "line1" -> "线路1";
+                case "line2" -> "线路2";
+                default -> "线路3";
+            };
+            throw new ServiceException(label + "暂时维护，请选择线路2");
+        }
+    }
+
+    private String toProcessStatus(String status) {
+        if ("completed".equalsIgnoreCase(status)) return "1";
+        if ("failed".equalsIgnoreCase(status) || "retryable".equalsIgnoreCase(status)) return "2";
+        return "3";
     }
 
     private String normalizeLine(String line) {

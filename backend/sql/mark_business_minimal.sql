@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS mark_order_item (
   process_status char(1) NOT NULL DEFAULT '0',
   process_result varchar(255) DEFAULT NULL,
   process_note varchar(500) DEFAULT NULL,
+  external_task_id varchar(160) DEFAULT NULL COMMENT '外部线路2任务号（幂等）',
   processed_by varchar(64) DEFAULT NULL,
   processed_time datetime DEFAULT NULL,
   refunded char(1) NOT NULL DEFAULT '0',
@@ -60,11 +61,15 @@ CREATE TABLE IF NOT EXISTS mark_order_item (
   update_time datetime DEFAULT NULL,
   remark varchar(500) DEFAULT NULL,
   user_remark varchar(500) DEFAULT NULL COMMENT '用户自定义备注',
+  agent_remark varchar(500) DEFAULT NULL COMMENT '代理手动备注',
   PRIMARY KEY (id),
   KEY idx_mark_order_item_order_id (order_id),
   KEY idx_mark_order_item_phone (phone),
   KEY idx_mark_order_item_process_status (process_status),
-  KEY idx_mark_order_item_order_status (order_id, process_status)
+  KEY idx_mark_order_item_order_status (order_id, process_status),
+  KEY idx_mark_order_item_created_id_order (create_time, id, order_id),
+  KEY idx_mark_order_item_status_created_id (process_status, create_time, id, order_id),
+  UNIQUE KEY uk_mark_order_item_external_task_id (external_task_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='标记订单明细';
 
 CREATE TABLE IF NOT EXISTS mark_wallet_log (

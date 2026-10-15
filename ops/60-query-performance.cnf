@@ -1,0 +1,8 @@
+[mysqld]
+
+# 2GB 正式机的保守内存配置；与 Java 1GB 最大堆和系统余量匹配。
+innodb_buffer_pool_size = 256M
+tmp_table_size = 32M
+max_heap_table_size = 32M
+thread_cache_size = 32
+table_open_cache = 1024

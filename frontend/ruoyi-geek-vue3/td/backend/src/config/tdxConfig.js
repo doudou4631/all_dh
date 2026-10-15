@@ -23,7 +23,10 @@ export async function getTdxConfig() {
     mode,
     originalIp: readEnv('TDX_ORIGINAL_IP', stored.originalIp || ''),
     maxOrderReuse: Number(readEnv('TDX_MAX_ORDER_REUSE', String(stored.maxOrderReuse || 3))),
-    line2Maintenance: readEnvBoolean('TDX_LINE2_MAINTENANCE', stored.line2Maintenance),
+    // The Java gateway owns external line2. This standalone service only runs line1/3 locally.
+    line1Maintenance: readEnvBoolean('TDX_LINE1_MAINTENANCE', stored.line1Maintenance),
+    line2Maintenance: true,
+    line3Maintenance: readEnvBoolean('TDX_LINE3_MAINTENANCE', stored.line3Maintenance),
     sendSmsUrl: readEnv('TDX_SEND_SMS_URL', stored.sendSmsUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/as/auth/sendSms'),
     loginSmsUrl: readEnv('TDX_LOGIN_SMS_URL', stored.loginSmsUrl || 'https://customer-apply-diversion.teddymobile.cn/api/v1/auth/login-sms'),
     qmfLoginUrl: readEnv('QMF_LOGIN_URL', stored.qmfLoginUrl || 'http://api.qmfj66pp.cn/public/userLogin'),
@@ -36,16 +39,6 @@ export async function getTdxConfig() {
     qmfPassword: readEnv('QMF_PASSWORD', stored.qmfPassword || ''),
     qmfAppId: readEnv('QMF_APP_ID', stored.qmfAppId || DEFAULT_QMF_APP_ID),
     qmfQrCode: readEnv('QMF_QR_CODE', stored.qmfQrCode || '1'),
-    dfLoginUrl: readEnv('DF_LOGIN_URL', stored.dfLoginUrl || 'http://api.dengfeng.app/api/Member/login'),
-    dfCreateOrderUrl: readEnv('DF_CREATE_ORDER_URL', stored.dfCreateOrderUrl || 'http://api.dengfeng.app/api/Order/CreateOrder'),
-    dfTwoAuthUrl: readEnv('DF_TWO_AUTH_URL', stored.dfTwoAuthUrl || 'http://api.dengfeng.app/api/Order/twoauth'),
-    dfOrderViewUrl: readEnv('DF_ORDER_VIEW_URL', stored.dfOrderViewUrl || 'http://api.dengfeng.app/api/Order/view'),
-    dfUsername: readEnv('DF_USERNAME', stored.dfUsername || ''),
-    dfPassword: readEnv('DF_PASSWORD', stored.dfPassword || ''),
-    dfProjectId: readEnv('DF_PROJECT_ID', stored.dfProjectId || '7979'),
-    dfOrderType: readEnv('DF_ORDER_TYPE', stored.dfOrderType || '1'),
-    dfOrderUrl: readEnv('DF_ORDER_URL', stored.dfOrderUrl || ''),
-    dfOrderAndId: readEnv('DF_ORDER_AND_ID', stored.dfOrderAndId || ''),
     xiaomiApiUrl: readEnv('TDX_DETECT_API_URL', stored.xiaomiApiUrl || legacyDetectApi || ''),
   }
 }

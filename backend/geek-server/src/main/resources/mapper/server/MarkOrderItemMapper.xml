@@ -13,6 +13,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="processStatus" column="process_status"/>
         <result property="processResult" column="process_result"/>
         <result property="processNote" column="process_note"/>
+        <result property="externalTaskId" column="external_task_id"/>
         <result property="processedBy" column="processed_by"/>
         <result property="processedTime" column="processed_time"/>
         <result property="refunded" column="refunded"/>
@@ -34,6 +35,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             moi.process_status,
             moi.process_result,
             moi.process_note,
+            moi.external_task_id,
             moi.processed_by,
             moi.processed_time,
             moi.refunded,
@@ -49,6 +51,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
     <select id="selectMarkOrderItemById" parameterType="Long" resultMap="MarkOrderItemResult">
         <include refid="selectMarkOrderItemVo"/>
         where moi.id = #{id}
+    </select>
+
+    <select id="selectTdxSecondItemByExternalTaskId" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where mo.user_id = #{userId}
+          and mo.platform_code = 'td_second'
+          and moi.external_task_id = #{externalTaskId}
+        order by moi.id asc
+        limit 1
+        for update
     </select>
 
     <select id="selectMarkOrderItemList" parameterType="MarkOrderItem" resultMap="MarkOrderItemResult">
@@ -83,6 +96,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="processStatus != null and processStatus != ''">process_status,</if>
             <if test="processResult != null and processResult != ''">process_result,</if>
             <if test="processNote != null and processNote != ''">process_note,</if>
+            <if test="externalTaskId != null and externalTaskId != ''">external_task_id,</if>
             <if test="processedBy != null and processedBy != ''">processed_by,</if>
             <if test="processedTime != null">processed_time,</if>
             <if test="refunded != null and refunded != ''">refunded,</if>
@@ -101,6 +115,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="processStatus != null and processStatus != ''">#{processStatus},</if>
             <if test="processResult != null and processResult != ''">#{processResult},</if>
             <if test="processNote != null and processNote != ''">#{processNote},</if>
+            <if test="externalTaskId != null and externalTaskId != ''">#{externalTaskId},</if>
             <if test="processedBy != null and processedBy != ''">#{processedBy},</if>
             <if test="processedTime != null">#{processedTime},</if>
             <if test="refunded != null and refunded != ''">#{refunded},</if>
@@ -123,6 +138,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="processStatus != null and processStatus != ''">process_status = #{processStatus},</if>
             <if test="processResult != null">process_result = #{processResult},</if>
             <if test="processNote != null">process_note = #{processNote},</if>
+            <if test="externalTaskId != null">external_task_id = #{externalTaskId},</if>
             <if test="processedBy != null">processed_by = #{processedBy},</if>
             <if test="processedTime != null">processed_time = #{processedTime},</if>
             <if test="refunded != null and refunded != ''">refunded = #{refunded},</if>
@@ -132,6 +148,14 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             <if test="userRemark != null">user_remark = #{userRemark},</if>
         </trim>
         where id = #{id}
+    </update>
+
+    <update id="updateAgentOrderItemRemark">
+        update mark_order_item
+        set agent_remark = #{agentRemark},
+            update_by = #{updateBy},
+            update_time = now()
+        where id = #{itemId}
     </update>
 
     <update id="updateMyOrderItemRemarks">
@@ -197,6 +221,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         <result property="userName" column="user_name"/>
         <result property="nickName" column="nick_name"/>
         <result property="orderRemark" column="order_remark"/>
+        <result property="agentRemark" column="agent_remark"/>
     </resultMap>
 
     <select id="selectAgentOrderItemList" resultMap="MarkAgentOrderItemResult">
@@ -219,8 +244,12 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             moi.remark,
             su.user_name as user_name,
             su.nick_name as nick_name,
+            moi.agent_remark,
             mo.remark as order_remark
         from mark_order_item moi
+        <if test="query == null or ((query.processStatus == null or query.processStatus == '') and (query.pendingOnly == null or query.pendingOnly.toString() != '1') and (query.processingOnly == null or query.processingOnly.toString() != '1') and (query.params == null or (query.params.pendingOnly == null or query.params.pendingOnly.toString() != '1') and (query.params.processingOnly == null or query.params.processingOnly.toString() != '1'))) ">
+            FORCE INDEX (idx_mark_order_item_created_id_order)
+        </if>
         inner join mark_order mo on mo.id = moi.order_id
         left join sys_user su on su.user_id = mo.user_id
         <where>

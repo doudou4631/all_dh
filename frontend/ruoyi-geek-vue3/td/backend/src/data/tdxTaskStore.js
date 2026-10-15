@@ -3,6 +3,7 @@ import { readFile, rename, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const storePath = resolve(process.cwd(), 'data', 'tdx-tasks.json')
+const MAX_TASK_NOTES = 100
 
 const fallbackTasks = []
 let taskStoreQueue = Promise.resolve()
@@ -38,8 +39,9 @@ async function readTasks() {
 
 async function writeTasks(tasks) {
   const tempPath = `${storePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
+  const compactTasks = tasks.map((task) => compactTdxTaskForStorage(task))
   try {
-    await writeFile(tempPath, JSON.stringify(tasks, null, 2), 'utf-8')
+    await writeFile(tempPath, JSON.stringify(compactTasks, null, 2), 'utf-8')
     await rename(tempPath, storePath)
   } catch (error) {
     try {
@@ -49,7 +51,17 @@ async function writeTasks(tasks) {
     }
     throw new Error(`Failed to write tdx task store: ${error instanceof Error ? error.message : String(error)}`)
   }
-  return tasks
+  return compactTasks
+}
+
+export function compactTdxTaskForStorage(task = {}) {
+  if (!task || typeof task !== 'object' || !Array.isArray(task.notes) || task.notes.length <= MAX_TASK_NOTES) {
+    return task
+  }
+  return {
+    ...task,
+    notes: task.notes.slice(0, MAX_TASK_NOTES),
+  }
 }
 
 export async function listTdxTasks() {

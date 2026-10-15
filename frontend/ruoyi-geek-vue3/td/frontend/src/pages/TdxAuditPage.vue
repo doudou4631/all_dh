@@ -84,7 +84,7 @@ function normalizeAudit(task = {}) {
     username: firstText(task.username, task.userName, task.operatorName, '未知用户'),
     phone: firstText(task.phone),
     localOrderId: firstText(task.orderpicinumber, task.batchLabel),
-  provider: firstText(audit.provider, line === 'line2' ? 'Dengfeng' : line === 'line3' ? '原订单复用' : 'QMF'),
+  provider: firstText(audit.provider, line === 'line2' ? '外部 API' : line === 'line3' ? '原订单复用' : 'QMF'),
     line,
     lineLabel: lineLabel(line),
     upstreamOrderId: firstText(audit.orderId, task.orderId),
@@ -184,7 +184,7 @@ function exportCsv() {
       <section class="audit-stat-grid">
         <article class="audit-stat"><span>当前记录</span><strong>{{ stats.total }}</strong></article>
         <article class="audit-stat"><span>线路1 / QMF</span><strong>{{ stats.line1 }}</strong></article>
-        <article class="audit-stat"><span>线路2 / 登峰</span><strong>{{ stats.line2 }}</strong></article>
+        <article class="audit-stat"><span>线路2 / 外部 API</span><strong>{{ stats.line2 }}</strong></article>
         <article class="audit-stat"><span>线路3 / 失败复用</span><strong>{{ stats.line3 }}</strong></article>
         <article class="audit-stat audit-stat--danger"><span>失败记录</span><strong>{{ stats.failed }}</strong></article>
       </section>
@@ -194,7 +194,7 @@ function exportCsv() {
         <select v-model="filters.line" class="toolbar-select" aria-label="筛选线路">
           <option value="all">全部线路</option>
           <option value="line1">线路1 / QMF</option>
-          <option value="line2">线路2 / 登峰</option>
+          <option value="line2">线路2 / 外部 API</option>
           <option value="line3">线路3 / 失败订单复用</option>
         </select>
         <select v-model="filters.status" class="toolbar-select" aria-label="筛选状态">

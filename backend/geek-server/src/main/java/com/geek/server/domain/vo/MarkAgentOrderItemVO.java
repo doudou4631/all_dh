@@ -64,6 +64,9 @@ public class MarkAgentOrderItemVO extends BaseEntity {
     @Schema(title = "Order remark")
     private String orderRemark;
 
+    @Schema(title = "代理手动备注")
+    private String agentRemark;
+
     @Schema(title = "Platform codes filter, comma separated")
     private String platformCodes;
 

@@ -20,9 +20,9 @@ test('allows live precheck and SMS sending before an appeal channel is configure
   )
 })
 
-test('still requires QMF or DF for the complete appeal flow', () => {
+test('requires the local QMF channel while line2 is external', () => {
   const problems = validateLiveTdxConfig(smsReadyConfig)
 
   assert.ok(problems.some((problem) => problem.includes('QMF')))
-  assert.ok(problems.some((problem) => problem.includes('登峰')))
+  assert.equal(problems.some((problem) => problem.includes('登峰')), false)
 })

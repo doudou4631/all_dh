@@ -15,6 +15,9 @@ public interface MarkOrderItemMapper {
 
     MarkOrderItem selectMarkOrderItemById(Long id);
 
+    MarkOrderItem selectTdxSecondItemByExternalTaskId(@Param("userId") Long userId,
+                                                       @Param("externalTaskId") String externalTaskId);
+
     List<MarkOrderItem> selectMarkOrderItemList(MarkOrderItem markOrderItem);
 
     List<MarkOrderItem> selectMarkOrderItemsByOrderId(Long orderId);
@@ -22,6 +25,10 @@ public interface MarkOrderItemMapper {
     int insertMarkOrderItem(MarkOrderItem markOrderItem);
 
     int updateMarkOrderItem(MarkOrderItem markOrderItem);
+
+    int updateAgentOrderItemRemark(@Param("itemId") Long itemId,
+                                  @Param("agentRemark") String agentRemark,
+                                  @Param("updateBy") String updateBy);
 
     int updateMyOrderItemRemarks(@Param("itemIds") List<Long> itemIds,
                                  @Param("userId") Long userId,

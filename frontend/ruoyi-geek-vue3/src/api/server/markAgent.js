@@ -137,6 +137,16 @@ export function listMarkAgentPlatformOptions() {
   })
 }
 
+// 代理修改号码手动备注
+export function updateMarkAgentOrderItemRemark(itemId, remark) {
+  return request({
+    url: `/server/markAgent/item/${itemId}/remark`,
+    method: 'post',
+    data: { remark },
+    headers: { repeatSubmit: false }
+  })
+}
+
 // 代理回填处理结果
 export function feedbackMarkOrderItem(itemId, data) {
   return request({

@@ -16,7 +16,6 @@ const fallbackState = {
   phoneClaims: {},
   legacyUsage: {},
   qmfSession: null,
-  dengfengSession: null,
   loginTokens: {},
   lastPayload: null,
 }
@@ -179,7 +178,6 @@ function normalizeRuntimeState(next = {}) {
   const currentWxCode = String(next.currentWxCode || '').trim()
   const currentLine = normalizeTdxLine(next.currentLine || next.orderSessions?.[currentOrderId]?.line)
   const qmfSession = normalizeAuthSession(next.qmfSession)
-  const dengfengSession = normalizeAuthSession(next.dengfengSession)
   if (currentOrderId && !orderSessions[currentOrderId]) {
     const now = new Date().toISOString()
     orderSessions[currentOrderId] = {
@@ -210,7 +208,6 @@ function normalizeRuntimeState(next = {}) {
     phoneClaims,
     legacyUsage,
     qmfSession,
-    dengfengSession,
     loginTokens: next.loginTokens || {},
     lastPayload: next.lastPayload ?? null,
   }
@@ -419,19 +416,6 @@ export async function getTdxRuntimeState() {
         savedAt: state.qmfSession.savedAt || '',
         updatedAt: state.qmfSession.updatedAt || '',
         source: state.qmfSession.source || '',
-      }
-      : {
-        hasToken: false,
-        savedAt: '',
-        updatedAt: '',
-        source: '',
-      },
-    dengfengSession: state.dengfengSession?.token
-      ? {
-        hasToken: true,
-        savedAt: state.dengfengSession.savedAt || '',
-        updatedAt: state.dengfengSession.updatedAt || '',
-        source: state.dengfengSession.source || '',
       }
       : {
         hasToken: false,
@@ -764,38 +748,6 @@ export function clearSavedQmfSession() {
   return writeState({
     ...state,
     qmfSession: null,
-  })
-}
-
-export function getSavedDengfengSession() {
-  const state = readState()
-  return state.dengfengSession?.token ? state.dengfengSession : null
-}
-
-export function saveDengfengSession(session = {}) {
-  const state = readState()
-  const token = String(session?.token || '').trim()
-  if (!token) return state.dengfengSession || null
-  const now = new Date().toISOString()
-  const current = state.dengfengSession || null
-  const nextSession = {
-    token,
-    savedAt: String(session?.savedAt || current?.savedAt || now).trim(),
-    updatedAt: now,
-    source: String(session?.source || current?.source || '').trim(),
-  }
-  writeState({
-    ...state,
-    dengfengSession: nextSession,
-  })
-  return nextSession
-}
-
-export function clearSavedDengfengSession() {
-  const state = readState()
-  return writeState({
-    ...state,
-    dengfengSession: null,
   })
 }
 

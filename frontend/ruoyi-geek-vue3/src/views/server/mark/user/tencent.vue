@@ -35,8 +35,8 @@
                   </div>
 
                   <div class="tencent-form-panel">
-                    <div v-if="line2UnderMaintenance" class="submit-warning-bar submit-warning-bar--maintenance">
-                      线路2暂时维护，请选择线路1。
+                    <div v-if="isTdSecondPlatform && selectedLineUnderMaintenance" class="submit-warning-bar submit-warning-bar--maintenance">
+                      {{ selectedLineMaintenanceMessage }}
                     </div>
                     <div v-else-if="!platformEnabled" class="submit-warning-bar">
                       {{ platformClosedMessage }}
@@ -52,14 +52,18 @@
                       :class="['tencent-submit-form', { 'tencent-submit-form--stacked': !isTdSecondPlatform }]"
                     >
                       <el-form-item v-if="isTdSecondPlatform" label="通道线路">
-                        <el-radio-group v-model="form.line" :disabled="smsSending || submitting">
-                          <el-radio-button label="line1">线路一</el-radio-button>
+                        <el-radio-group v-model="form.line" :disabled="smsSending || submitting" @change="handleLineChange">
+                          <el-radio-button label="line1" :disabled="line1UnderMaintenance">
+                            线路一
+                            <span v-if="line1UnderMaintenance" class="tdx-line-maintenance-label">暂时维护</span>
+                          </el-radio-button>
                           <el-radio-button label="line2" :disabled="line2UnderMaintenance">
-                            线路二
+                            线路二备用
                             <span v-if="line2UnderMaintenance" class="tdx-line-maintenance-label">暂时维护</span>
                           </el-radio-button>
-                          <el-radio-button label="line3">
+                          <el-radio-button label="line3" :disabled="line3UnderMaintenance">
                             线路三
+                            <span v-if="line3UnderMaintenance" class="tdx-line-maintenance-label">暂时维护</span>
                             <span class="tdx-line-reuse-label">失败复用</span>
                           </el-radio-button>
                         </el-radio-group>
@@ -69,6 +73,7 @@
                           v-model="form.phone"
                           maxlength="11"
                           clearable
+                          :disabled="smsSending || submitting"
                           placeholder="请输入11位手机号"
                           :style="!isTdSecondPlatform ? { width: 'min(100%, 380px)' } : undefined"
                           @input="handlePhoneInput"
@@ -93,7 +98,7 @@
                         plain
                         class="tencent-action-btn"
                         :loading="smsSending"
-                        :disabled="!platformEnabled || (!isLine3 && remainCount < 1) || submitting || smsCountdown > 0"
+                        :disabled="!platformEnabled || selectedLineUnderMaintenance || (!isLine3 && remainCount < 1) || submitting || smsCountdown > 0"
                         @click="handleFetchSms"
                       >
                         {{ smsCountdown > 0 ? `${smsCountdown}秒后重试` : '获取短信' }}
@@ -102,7 +107,7 @@
                         type="primary"
                         class="tencent-action-btn"
                         :loading="submitting"
-                        :disabled="!platformEnabled || (!isLine3 && remainCount < 1)"
+                        :disabled="!platformEnabled || selectedLineUnderMaintenance || (!isLine3 && remainCount < 1)"
                         v-hasPermi="['server:markUser:order:add']"
                         @click="handleSubmit"
                       >
@@ -292,11 +297,26 @@ const routePlatformName = computed(() => {
 })
 
 const isTdSecondPlatform = computed(() => activePlatformCode.value === 'td_second')
+function readMaintenanceFlag(key, fallback) {
+  const configured = String(import.meta.env[key] ?? '').trim().toLowerCase()
+  return configured ? ['1', 'true', 'yes', 'on'].includes(configured) : fallback
+}
+const line1UnderMaintenance = computed(() => isTdSecondPlatform.value && readMaintenanceFlag('VITE_TDX_LINE1_MAINTENANCE', true))
 const line2UnderMaintenance = computed(() => {
   if (!isTdSecondPlatform.value) return false
-  const configured = String(import.meta.env.VITE_TDX_LINE2_MAINTENANCE ?? '').trim().toLowerCase()
-  return configured ? ['1', 'true', 'yes', 'on'].includes(configured) : true
+  return readMaintenanceFlag('VITE_TDX_LINE2_MAINTENANCE', false)
 })
+const line3UnderMaintenance = computed(() => isTdSecondPlatform.value && readMaintenanceFlag('VITE_TDX_LINE3_MAINTENANCE', true))
+const selectedLineUnderMaintenance = computed(() => ({
+  line1: line1UnderMaintenance.value,
+  line2: line2UnderMaintenance.value,
+  line3: line3UnderMaintenance.value,
+}[form.line] === true))
+const selectedLineMaintenanceMessage = computed(() => ({
+  line1: '线路1暂时维护，请选择线路2。',
+  line2: '线路2暂时维护，请稍后重试。',
+  line3: '线路3暂时维护，请选择线路2。',
+}[form.line] || '当前线路暂时维护，请选择线路2。'))
 const submitTitle = computed(() => `${platformName.value}平台清除`)
 
 const activeTab = ref('submit')
@@ -311,7 +331,10 @@ const submitResult = ref(null)
 const form = reactive({
   phone: '',
   smsCode: '',
-  line: 'line1'
+  line: 'line2',
+  externalTaskId: '',
+  externalRequestId: '',
+  externalRequestPhone: ''
 })
 const isLine3 = computed(() => isTdSecondPlatform.value && form.line === 'line3')
 
@@ -358,12 +381,46 @@ function normalizePhone(value) {
   return String(value || '').replace(/[^\d]/g, '')
 }
 
+function createExternalRequestId() {
+  const suffix = typeof globalThis.crypto?.randomUUID === 'function'
+    ? globalThis.crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `web-tdx-${suffix}`
+}
+
+function clearExternalLine2Request() {
+  form.externalTaskId = ''
+  form.externalRequestId = ''
+  form.externalRequestPhone = ''
+}
+
 function handlePhoneInput(value) {
-  form.phone = normalizePhone(value).slice(0, 11)
+  const nextPhone = normalizePhone(value).slice(0, 11)
+  if (isTdSecondPlatform.value && form.externalRequestPhone && nextPhone !== form.externalRequestPhone) {
+    clearExternalLine2Request()
+    form.smsCode = ''
+  }
+  form.phone = nextPhone
 }
 
 function handleSmsInput(value) {
   form.smsCode = normalizePhone(value).slice(0, 6)
+}
+
+function handleLineChange(value) {
+  if (value !== 'line2') {
+    clearExternalLine2Request()
+  }
+}
+
+function isTransportRetryableError(error) {
+  const code = String(error?.code || '').toUpperCase()
+  const message = String(error?.message || '').toLowerCase()
+  return code === 'ERR_NETWORK'
+    || code === 'ECONNABORTED'
+    || message === 'network error'
+    || message.includes('后端接口连接异常')
+    || message.includes('系统接口请求超时')
 }
 
 function resetSubmitState() {
@@ -373,8 +430,15 @@ function resetSubmitState() {
 function handleResetForm() {
   form.phone = ''
   form.smsCode = ''
-  form.line = 'line1'
+  form.line = 'line2'
+  clearExternalLine2Request()
   resetSubmitState()
+}
+
+function ensureSelectedLineAvailable() {
+  if (!isTdSecondPlatform.value || !selectedLineUnderMaintenance.value) return true
+  proxy.$modal.msgWarning(selectedLineMaintenanceMessage.value)
+  return false
 }
 
 let smsCountdownTimer = null
@@ -403,6 +467,7 @@ async function handleFetchSms() {
     window.open(SMS_APPLY_URL, '_blank', 'noopener,noreferrer')
     return
   }
+  if (!ensureSelectedLineAvailable()) return
   const phone = normalizePhone(form.phone)
   if (!/^\d{11}$/.test(phone)) {
     proxy.$modal.msgWarning('请输入11位手机号')
@@ -412,25 +477,43 @@ async function handleFetchSms() {
     proxy.$modal.msgError(platformClosedMessage.value)
     return
   }
-  if (line2UnderMaintenance.value && form.line === 'line2') {
-    form.line = 'line1'
-    proxy.$modal.msgWarning('线路2暂时维护，请选择线路1。')
-    return
-  }
   if (!isLine3.value && remainCount.value < 1) {
     proxy.$modal.msgError(`当前${platformName.value}平台剩余次数不足`)
     return
   }
+  if (form.line === 'line2') {
+    if (form.externalTaskId) {
+      clearExternalLine2Request()
+    }
+    if (!form.externalRequestId) {
+      form.externalRequestId = createExternalRequestId()
+      form.externalRequestPhone = phone
+    }
+  }
+  const requestPhone = phone
+  const requestId = form.externalRequestId
   smsSending.value = true
   try {
     const res = await sendMarkUserTdxSecondCode({
       phone,
-      line: form.line
+      line: form.line,
+      externalRequestId: form.externalRequestId || undefined
     })
     const data = res?.data || {}
+    if (form.phone !== requestPhone || form.externalRequestId !== requestId) {
+      return
+    }
+    if (form.line === 'line2') {
+      form.externalTaskId = String(data.taskId || '').trim()
+      form.externalRequestId = String(data.externalRequestId || form.externalRequestId).trim()
+      form.externalRequestPhone = phone
+    }
     startSmsCountdown()
     proxy.$modal.alertSuccess(data.message || res?.msg || '短信验证码已发送，请查收')
   } catch (error) {
+    if (!isTransportRetryableError(error)) {
+      clearExternalLine2Request()
+    }
     proxy.$modal.msgError(resolveTdxSecondError(error))
   } finally {
     smsSending.value = false
@@ -532,6 +615,7 @@ async function loadPlatformInfo() {
 }
 
 async function handleSubmit() {
+  if (!ensureSelectedLineAvailable()) return
   const phone = normalizePhone(form.phone)
   if (!/^\d{11}$/.test(phone)) {
     proxy.$modal.msgWarning('请输入11位手机号')
@@ -539,11 +623,6 @@ async function handleSubmit() {
   }
   if (!platformEnabled.value) {
     proxy.$modal.msgError(platformClosedMessage.value)
-    return
-  }
-  if (line2UnderMaintenance.value && form.line === 'line2') {
-    form.line = 'line1'
-    proxy.$modal.msgWarning('线路2暂时维护，请选择线路1。')
     return
   }
   if (!isLine3.value && remainCount.value < 1) {
@@ -563,6 +642,7 @@ async function handleSubmit() {
         phone,
         smsCode: form.smsCode,
         line: form.line,
+        externalTaskId: form.externalTaskId || undefined,
         rotate: false
       })
       const result = res?.data || null
@@ -578,6 +658,7 @@ async function handleSubmit() {
         }
         form.phone = ''
         form.smsCode = ''
+        clearExternalLine2Request()
         await loadPlatformInfo()
         if (activeTab.value === 'record') {
           await getList()
@@ -912,11 +993,9 @@ watch(activeTab, () => {
   syncRecordTabData()
 })
 
-watch(line2UnderMaintenance, (underMaintenance) => {
-  if (underMaintenance && form.line === 'line2') {
-    form.line = 'line1'
-  }
-})
+watch([line1UnderMaintenance, line2UnderMaintenance, line3UnderMaintenance], () => {
+  if (isTdSecondPlatform.value && selectedLineUnderMaintenance.value) form.line = 'line2'
+}, { immediate: true })
 
 watch([activePlatformCode, routePlatformName], async ([newCode], [oldCode]) => {
   platformName.value = routePlatformName.value

@@ -20,5 +20,8 @@ public class MarkTdxSecondSubmitRequest {
     /** Original failed task to reuse when submitting through line3. */
     private String sourceTaskId;
 
+    /** Task id returned by the external line2 API when the code was sent. */
+    private String externalTaskId;
+
     private Boolean rotate;
 }

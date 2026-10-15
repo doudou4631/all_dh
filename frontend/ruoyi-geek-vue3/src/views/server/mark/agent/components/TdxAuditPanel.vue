@@ -8,7 +8,7 @@
         <el-form-item label="线路">
           <el-select v-model="filters.line" clearable placeholder="全部线路" class="audit-line-select">
             <el-option label="线路1 / QMF" value="line1" />
-            <el-option label="线路2 / 登峰" value="line2" />
+            <el-option label="线路2 / 外部 API" value="line2" />
             <el-option label="线路3 / 失败复用" value="line3" />
           </el-select>
         </el-form-item>
@@ -136,8 +136,8 @@ function normalize(task = {}) {
     username: text(task.username, task.userName, task.operatorName, '未知用户'),
     phone: text(task.phone),
     line,
-    lineLabel: line === 'line3' ? '线路3 / 失败复用' : line === 'line2' ? '线路2 / 登峰' : '线路1 / QMF',
-    provider: text(audit.provider, line === 'line2' ? 'Dengfeng' : line === 'line3' ? '原订单复用' : 'QMF'),
+    lineLabel: line === 'line3' ? '线路3 / 失败复用' : line === 'line2' ? '线路2 / 外部 API' : '线路1 / QMF',
+    provider: text(audit.provider, line === 'line2' ? '外部 API' : line === 'line3' ? '原订单复用' : 'QMF'),
     upstreamOrderId: text(audit.orderId, task.orderId),
     wxid: text(audit.wxid),
     usedCount: audit.usedCount ?? '',

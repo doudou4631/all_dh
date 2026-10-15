@@ -28,7 +28,7 @@ function normalizeLine(line = 'line1') {
 }
 
 function providerForLine(line = 'line1') {
-  return normalizeLine(line) === 'line2' ? 'Dengfeng' : 'QMF'
+  return normalizeLine(line) === 'line2' ? 'External API' : 'QMF'
 }
 
 function pickPayload({ payload = null, sessionResult = null, execution = null, failure = null } = {}) {

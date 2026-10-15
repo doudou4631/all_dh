@@ -27,8 +27,8 @@ public class HttpConf {
     /** EPTWebServes地址 */
     public static String EPTWEBSERVES_URL;
 
-    /** tomcat默认keepAliveTimeout为20s */
-    public static int KEEP_ALIVE_TIMEOUT;
+    /** HTTP 连接空闲回收周期；必须为正数，否则 HttpClient 清理线程会忙循环占满 CPU。 */
+    public static int KEEP_ALIVE_TIMEOUT = 30000;
 
     private HttpConf() {
     }

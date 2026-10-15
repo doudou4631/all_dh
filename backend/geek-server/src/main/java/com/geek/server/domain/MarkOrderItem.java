@@ -51,6 +51,9 @@ public class MarkOrderItem extends BaseEntity {
     @Excel(name = "处理备注")
     private String processNote;
 
+    /** External TDX line2 task id used for billing idempotency. */
+    private String externalTaskId;
+
     @Schema(title = "处理人")
     @Excel(name = "处理人")
     private String processedBy;

@@ -15,6 +15,7 @@ import com.geek.server.domain.dto.MarkAgentHiddenUserRequest;
 import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderItemBatchIdsRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.dto.MarkOrderRemarkUpdateRequest;
 import com.geek.server.domain.vo.MarkAgentDownstreamSummaryVO;
 import com.geek.server.domain.vo.MarkAgentDailyOverviewVO;
 import com.geek.server.domain.vo.MarkAgentOrderItemVO;
@@ -200,6 +201,14 @@ public class MarkAgentController extends BaseController {
     @GetMapping("/platform/list")
     public AjaxResult platformList() {
         return success(markOrderService.selectMyPlatformPriceList());
+    }
+
+    @Operation(summary = "代理修改号码手动备注")
+    @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
+    @Log(title = "代理手动备注", businessType = BusinessType.UPDATE)
+    @PostMapping("/item/{itemId}/remark")
+    public AjaxResult updateOrderItemRemark(@PathVariable Long itemId, @Valid @RequestBody MarkOrderRemarkUpdateRequest request) {
+        return AjaxResult.success("备注已保存", markOrderService.updateAgentOrderItemRemark(itemId, request));
     }
 
     @Operation(summary = "代理回填处理结果")

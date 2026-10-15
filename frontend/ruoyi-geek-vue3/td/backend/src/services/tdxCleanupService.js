@@ -8,10 +8,8 @@ import { listConfigEntries } from '../data/businessEntityStore.js'
 import { buildTdxExecutionPlan } from './tdxExecutionPlan.js'
 import {
   clearSavedQmfSession,
-  clearSavedDengfengSession,
   clearCurrentOrderSession,
   getNextCoolingOrderSession,
-  getSavedDengfengSession,
   getSavedQmfSession,
   getSavedTdxLoginToken,
   getTdxRuntimeState,
@@ -23,7 +21,6 @@ import {
   retireOrderSession,
   releaseOrderSessionPhone,
   saveQmfSession,
-  saveDengfengSession,
   saveOrderSession,
   saveTdxLoginToken,
   reserveOrderSessionPhone,
@@ -209,7 +206,6 @@ const QMF_ORDER_INVALID_HINTS = [
 const QMF_ORDER_COOLDOWN_MS = 75 * 1000
 
 let qmfTokenRefreshPromise = null
-let dengfengTokenRefreshPromise = null
 
 function loadEvidenceImage() {
   try {
@@ -605,23 +601,6 @@ async function postUrlEncoded(url, payload) {
   return parseResponse(response)
 }
 
-async function postFormWithHeaders(url, payload, headers = {}) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: asFormData(payload),
-  })
-  return parseResponse(response)
-}
-
-async function getJsonWithHeaders(url, headers = {}) {
-  const response = await fetch(url, {
-    method: 'GET',
-    headers,
-  })
-  return parseResponse(response)
-}
-
 async function postMiniAppJson(url, payload, token) {
   const headers = buildMiniAppHeaders(token, 'application/json')
   const body = JSON.stringify(payload)
@@ -770,8 +749,7 @@ async function uploadMiniAppEvidence(url, sessionId, token) {
 function createMockOrderSession(existingOrderId = '', line = 'line1') {
   const suffix = randomUUID().replace(/-/g, '').slice(0, 18)
   const normalizedLine = normalizeTdxLine(line)
-  const prefix = normalizedLine === 'line2' ? 'DF' : 'QMF'
-  const orderId = existingOrderId || `${prefix}-${suffix}`
+  const orderId = existingOrderId || `QMF-${suffix}`
   const wxCode = `wx_${normalizedLine}_${suffix}`
   return {
     line: normalizedLine,
@@ -1067,18 +1045,7 @@ export function validateLiveTdxConfig(config, { requireAppealChannel = true } = 
   if (!config.qmfLoginUrl) line1Problems.push('线路1(QMF) login url is required in live mode')
   if (!config.qmfCodeUrl) line1Problems.push('线路1(QMF) code url is required in live mode')
 
-  const line2Problems = []
-  if (!config.dfUsername) line2Problems.push('线路2(登峰) username is required in live mode')
-  if (!config.dfPassword) line2Problems.push('线路2(登峰) password is required in live mode')
-  if (!config.dfLoginUrl) line2Problems.push('线路2(登峰) login url is required in live mode')
-  if (!config.dfCreateOrderUrl) line2Problems.push('线路2(登峰) create-order url is required in live mode')
-  if (!config.dfTwoAuthUrl) line2Problems.push('线路2(登峰) twoauth url is required in live mode')
-  if (!config.dfOrderViewUrl) line2Problems.push('线路2(登峰) order-view url is required in live mode')
-  if (!config.dfProjectId) line2Problems.push('线路2(登峰) projectId is required in live mode')
-
-  if (line1Problems.length && line2Problems.length) {
-    problems.push(...line1Problems, ...line2Problems)
-  }
+  problems.push(...line1Problems)
   return problems
 }
 
@@ -1096,6 +1063,9 @@ async function ensureTdxConfig() {
 export async function sendTdxSmsCode(phone, line = 'line1') {
   const config = await ensureTdxConfig()
   const normalizedLine = normalizeTdxLine(line)
+  if (normalizedLine === 'line2') {
+    throw new Error('线路2已迁移到外部 API，本地旧线路2已停用。')
+  }
   if (config.mode === 'mock') {
     return {
       ok: true,
@@ -1159,114 +1129,6 @@ async function fetchQmfTokenWithCache(config, { forceRefresh = false } = {}) {
   return qmfTokenRefreshPromise
 }
 
-function extractDengfengToken(response = null) {
-  return [
-    response?.data?.token,
-    response?.data?.access_token,
-    response?.data?.authorization,
-    response?.token,
-    response?.access_token,
-    response?.authorization,
-  ]
-    .map((item) => String(item || '').trim())
-    .find(Boolean) || ''
-}
-
-function collectDengfengPayloadText(payload = null) {
-  return [
-    payload?.message,
-    payload?.msg,
-    payload?.error,
-    payload?.description,
-    payload?.data?.message,
-    payload?.data?.msg,
-    payload?.data?.error,
-    payload?.data?.remark,
-    payload?.remark,
-  ]
-    .map((item) => String(item || '').trim())
-    .filter(Boolean)
-    .join(' ')
-}
-
-function shouldRefreshDengfengToken(payload = null) {
-  const text = collectDengfengPayloadText(payload)
-  if (!text) return false
-  return /token|授权|auth|登录|登陆|失效|过期|未登录|请先登录|重新登录|unauthorized|forbidden|expired|invalid/i.test(text)
-}
-
-async function fetchDengfengToken(config) {
-  return fetchDengfengTokenWithCache(config)
-}
-
-async function fetchDengfengTokenWithCache(config, { forceRefresh = false } = {}) {
-  if (config.mode === 'mock') return 'mock-dengfeng-token'
-
-  if (!forceRefresh) {
-    const saved = getSavedDengfengSession()
-    const savedToken = String(saved?.token || '').trim()
-    if (savedToken) {
-      return savedToken
-    }
-    if (dengfengTokenRefreshPromise) {
-      return dengfengTokenRefreshPromise
-    }
-  }
-
-  if (dengfengTokenRefreshPromise) {
-    return dengfengTokenRefreshPromise
-  }
-
-  dengfengTokenRefreshPromise = (async () => {
-    const response = await postUrlEncoded(config.dfLoginUrl, {
-      member_user: config.dfUsername,
-      member_pwd: config.dfPassword,
-    })
-    rememberLastPayload({ type: 'dfLogin', payload: response })
-    const token = extractDengfengToken(response)
-    if (token) {
-      saveDengfengSession({ token, source: 'dfLogin' })
-      return token
-    }
-    if (forceRefresh) {
-      clearSavedDengfengSession()
-    }
-    return ''
-  })().finally(() => {
-    dengfengTokenRefreshPromise = null
-  })
-
-  return dengfengTokenRefreshPromise
-}
-
-function extractDengfengOrderId(response = null) {
-  return [
-    response?.data?.o_id,
-    response?.data?.order_id,
-    response?.data?.orderId,
-    response?.o_id,
-    response?.order_id,
-    response?.orderId,
-  ]
-    .map((item) => String(item || '').trim())
-    .find(Boolean) || ''
-}
-
-function extractDengfengWxCode(response = null) {
-  return [
-    response?.data?.wxid,
-    response?.data?.wxCode,
-    response?.data?.code,
-    response?.data?.openid,
-    response?.wxid,
-    response?.wxCode,
-    response?.code,
-    response?.openid,
-  ]
-    .map((item) => sanitizeStoredWxCode(item))
-    .find(Boolean) || ''
-}
-
 async function requestQmfWxCode(config, token, orderId = '') {
   const response = await postForm(config.qmfCodeUrl, {
     token,
@@ -1280,79 +1142,11 @@ async function requestQmfWxCode(config, token, orderId = '') {
 
 async function fetchWxCodeInternal(config, orderId = '', { line = 'line1', allowTokenRefresh = true } = {}) {
   const normalizedLine = normalizeTdxLine(line)
+  if (normalizedLine === 'line2') {
+    throw new Error('线路2已迁移到外部 API，本地旧线路2已停用。')
+  }
   if (config.mode === 'mock') {
     return createMockOrderSession(orderId, normalizedLine)
-  }
-
-  if (normalizedLine === 'line2') {
-    const token = await fetchDengfengToken(config)
-    if (!token) {
-      throw new Error('Unable to acquire Dengfeng token')
-    }
-
-    const normalizedOrderId = String(orderId || '').trim()
-    let createOrderResponse = null
-    if (!normalizedOrderId) {
-      createOrderResponse = await postForm(config.dfCreateOrderUrl, {
-        projectid: config.dfProjectId,
-        type: config.dfOrderType || '1',
-      })
-      rememberLastPayload({ type: 'dfCreateOrder', payload: createOrderResponse })
-    }
-    const resolvedOrderId = String(normalizedOrderId || extractDengfengOrderId(createOrderResponse)).trim()
-    if (!resolvedOrderId) {
-      throw new Error(collectDengfengPayloadText(createOrderResponse) || 'Unable to create Dengfeng order')
-    }
-
-    let authToken = token
-    let twoAuthResponse = await postFormWithHeaders(
-      config.dfTwoAuthUrl,
-      { o_id: resolvedOrderId },
-      { Authorization: authToken },
-    )
-    rememberLastPayload({ type: 'dfTwoAuth', payload: twoAuthResponse })
-    if (shouldRefreshDengfengToken(twoAuthResponse) && allowTokenRefresh) {
-      clearSavedDengfengSession()
-      authToken = await fetchDengfengTokenWithCache(config, { forceRefresh: true })
-      if (!authToken) {
-        throw new Error('Unable to refresh Dengfeng token')
-      }
-      twoAuthResponse = await postFormWithHeaders(
-        config.dfTwoAuthUrl,
-        { o_id: resolvedOrderId },
-        { Authorization: authToken },
-      )
-      rememberLastPayload({ type: 'dfTwoAuth', payload: twoAuthResponse })
-    }
-
-    const viewUrl = `${config.dfOrderViewUrl}?o_id=${encodeURIComponent(resolvedOrderId)}`
-    let orderViewResponse = await getJsonWithHeaders(viewUrl, { Authorization: authToken })
-    rememberLastPayload({ type: 'dfOrderView', payload: orderViewResponse })
-    if (shouldRefreshDengfengToken(orderViewResponse) && allowTokenRefresh) {
-      clearSavedDengfengSession()
-      authToken = await fetchDengfengTokenWithCache(config, { forceRefresh: true })
-      if (!authToken) {
-        throw new Error('Unable to refresh Dengfeng token')
-      }
-      orderViewResponse = await getJsonWithHeaders(viewUrl, { Authorization: authToken })
-      rememberLastPayload({ type: 'dfOrderView', payload: orderViewResponse })
-    }
-
-    const wxCode = extractDengfengWxCode(orderViewResponse)
-    if (!wxCode) {
-      throw new Error(collectDengfengPayloadText(orderViewResponse) || 'Unable to extract Dengfeng wxCode')
-    }
-
-    return {
-      line: normalizedLine,
-      orderId: resolvedOrderId,
-      wxCode,
-      raw: {
-        createOrder: createOrderResponse,
-        twoAuth: twoAuthResponse,
-        orderView: orderViewResponse,
-      },
-    }
   }
 
   const normalizedOrderId = String(orderId || '').trim()
@@ -1785,6 +1579,9 @@ export async function createTdxSmsReceiveSession({
 } = {}) {
   const config = await ensureTdxConfig()
   const normalizedLine = normalizeTdxLine(line)
+  if (normalizedLine === 'line2') {
+    throw new Error('线路2已迁移到外部 API，本地旧线路2已停用。')
+  }
   const normalizedReuseOrderId = String(reuseOrderId || '').trim()
   const normalizedReuseWxCode = sanitizeStoredWxCode(reuseWxCode)
   if (normalizedReuseOrderId && rotate) {
@@ -2184,7 +1981,6 @@ export async function runTdxHealthCheck() {
       checks: [
         { key: 'shared-config', ok: true, message: 'Mock mode does not require upstream credentials.' },
         { key: 'line1-config', ok: true, message: '线路1 mock 配置已就绪。' },
-        { key: 'line2-config', ok: true, message: '线路2 mock 配置已就绪。' },
         { key: 'runtime', ok: true, message: runtime.currentOrderId ? 'Runtime has an active order session.' : 'Runtime is empty and ready.' },
       ],
       runtime,
@@ -2205,26 +2001,19 @@ export async function runTdxHealthCheck() {
   }
 
   const line1Ready = Boolean(config.qmfUsername && config.qmfPassword && config.qmfAppId && config.qmfLoginUrl && config.qmfCodeUrl)
-  const line2Ready = Boolean(config.dfUsername && config.dfPassword && config.dfLoginUrl && config.dfCreateOrderUrl && config.dfTwoAuthUrl && config.dfOrderViewUrl && config.dfProjectId)
   let qmfToken = ''
-  let dengfengToken = ''
   if (line1Ready) {
     try {
       qmfToken = await fetchQmfToken(config)
     } catch {}
   }
-  if (line2Ready) {
-    try {
-      dengfengToken = await fetchDengfengToken(config)
-    } catch {}
-  }
   const payload = {
-    ok: (line1Ready && Boolean(qmfToken)) || (line2Ready && Boolean(dengfengToken)),
+    ok: line1Ready && Boolean(qmfToken),
     mode: 'live',
     checks: [
       { key: 'shared-config', ok: true, message: '共享上游配置已就绪。' },
       { key: 'line1-config', ok: line1Ready, message: line1Ready ? (qmfToken ? '线路1(QMF) 凭据校验成功。' : '线路1(QMF) 无法获取 token。') : '线路1(QMF) 配置未完成。' },
-      { key: 'line2-config', ok: line2Ready, message: line2Ready ? (dengfengToken ? '线路2(登峰) 凭据校验成功。' : '线路2(登峰) 无法获取 token。') : '线路2(登峰) 配置未完成。' },
+      { key: 'line2-config', ok: false, message: '线路2已迁移到外部 API，本地旧线路2已停用。' },
       { key: 'runtime', ok: true, message: runtime.currentOrderId ? 'Runtime has an active order session.' : 'Runtime is empty and ready.' },
     ],
     runtime,

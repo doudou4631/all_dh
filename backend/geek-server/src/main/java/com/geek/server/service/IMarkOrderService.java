@@ -84,6 +84,8 @@ public interface IMarkOrderService {
 
     MarkOrderDetailVO feedbackOrderItem(Long itemId, MarkOrderItemProcessRequest request);
 
+    String updateAgentOrderItemRemark(Long itemId, MarkOrderRemarkUpdateRequest request);
+
     MarkOrderDetailVO completeOrder(Long orderId);
     MarkOrderDetailVO completeOrder(Long orderId, MarkOrderItemProcessRequest request);
 

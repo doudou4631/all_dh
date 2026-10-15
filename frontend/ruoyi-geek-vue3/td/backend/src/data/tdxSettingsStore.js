@@ -8,6 +8,10 @@ const defaults = {
   mode: 'mock',
   originalIp: '192.168.114.250',
   maxOrderReuse: 3,
+  line1Maintenance: true,
+  // Local Node does not proxy the external line2 API; Java owns that channel.
+  line2Maintenance: true,
+  line3Maintenance: true,
   sendSmsUrl: 'https://customer-apply-diversion.teddymobile.cn/api/v1/as/auth/sendSms',
   loginSmsUrl: 'https://customer-apply-diversion.teddymobile.cn/api/v1/auth/login-sms',
   qmfLoginUrl: 'http://115.238.185.26:8881/public/userLogin',
@@ -20,22 +24,20 @@ const defaults = {
   qmfPassword: '',
   qmfAppId: DEFAULT_QMF_APP_ID,
   qmfQrCode: '1',
-  dfLoginUrl: 'http://api.dengfeng.app/api/Member/login',
-  dfCreateOrderUrl: 'http://api.dengfeng.app/api/Order/CreateOrder',
-  dfTwoAuthUrl: 'http://api.dengfeng.app/api/Order/twoauth',
-  dfOrderViewUrl: 'http://api.dengfeng.app/api/Order/view',
-  dfUsername: '',
-  dfPassword: '',
-  dfProjectId: '7979',
-  dfOrderType: '1',
 }
 
 function normalizeSettings(settings = {}) {
   const next = { ...defaults, ...(settings || {}) }
+  for (const key of [
+    'dfLoginUrl', 'dfCreateOrderUrl', 'dfTwoAuthUrl', 'dfOrderViewUrl',
+    'dfUsername', 'dfPassword', 'dfProjectId', 'dfOrderType', 'dfOrderUrl', 'dfOrderAndId',
+  ]) delete next[key]
   next.qmfAppId = String(next.qmfAppId || '').trim() || DEFAULT_QMF_APP_ID
   next.qmfQrCode = String(next.qmfQrCode || '').trim() || '1'
-  next.dfProjectId = String(next.dfProjectId || '').trim() || '7979'
-  next.dfOrderType = String(next.dfOrderType || '').trim() || '1'
+  for (const key of ['line1Maintenance', 'line2Maintenance', 'line3Maintenance']) {
+    if (typeof next[key] === 'string') next[key] = ['1', 'true', 'yes', 'on'].includes(next[key].trim().toLowerCase())
+    else next[key] = Boolean(next[key])
+  }
   return next
 }
 
@@ -76,21 +78,13 @@ export function summarizeTdxSettings(settings) {
     settings.qmfLoginUrl &&
     settings.qmfCodeUrl,
   )
-  const dengfengReady = Boolean(
-    sharedReady &&
-    settings.dfUsername &&
-    settings.dfPassword &&
-    settings.dfLoginUrl &&
-    settings.dfCreateOrderUrl &&
-    settings.dfTwoAuthUrl &&
-    settings.dfOrderViewUrl &&
-    settings.dfProjectId &&
-    settings.dfOrderType,
-  )
   return {
     mode: settings.mode,
     originalIp: settings.originalIp,
     maxOrderReuse: settings.maxOrderReuse,
+    line1Maintenance: Boolean(settings.line1Maintenance),
+    line2Maintenance: Boolean(settings.line2Maintenance),
+    line3Maintenance: Boolean(settings.line3Maintenance),
     sendSmsUrl: settings.sendSmsUrl,
     loginSmsUrl: settings.loginSmsUrl,
     qmfLoginUrl: settings.qmfLoginUrl,
@@ -103,17 +97,9 @@ export function summarizeTdxSettings(settings) {
     qmfPasswordConfigured: Boolean(settings.qmfPassword),
     qmfAppId: settings.qmfAppId,
     qmfQrCode: settings.qmfQrCode,
-    dfLoginUrl: settings.dfLoginUrl,
-    dfCreateOrderUrl: settings.dfCreateOrderUrl,
-    dfTwoAuthUrl: settings.dfTwoAuthUrl,
-    dfOrderViewUrl: settings.dfOrderViewUrl,
-    dfUsername: settings.dfUsername,
-    dengfengPasswordConfigured: Boolean(settings.dfPassword),
-    dfProjectId: settings.dfProjectId,
-    dfOrderType: settings.dfOrderType,
     qmfReady,
-    dengfengReady,
-    readyForLive: Boolean(sharedReady && (qmfReady || dengfengReady)),
+    line2ExternalApi: true,
+    readyForLive: Boolean(sharedReady && qmfReady),
   }
 }
 

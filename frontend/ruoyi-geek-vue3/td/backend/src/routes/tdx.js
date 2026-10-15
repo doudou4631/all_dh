@@ -32,7 +32,7 @@ import { getTdxConfig } from '../config/tdxConfig.js'
 import { normalizeFailReasonDesc } from '../lib/orderFailReason.js'
 import { formatChinaDateTime } from '../lib/time.js'
 import { query } from '../data/liveDb.js'
-import { getTdxOrderSessionUsedCount } from '../services/tdxRuntimeStore.js'
+import { getTdxOrderSessionUsedCount, normalizeTdxLine } from '../services/tdxRuntimeStore.js'
 
 function nowText() {
   return formatChinaDateTime()
@@ -55,7 +55,12 @@ const TDX_SESSION_RETRY_COOLDOWN_DEFAULT_INTERVAL_MS = 75000
 const TDX_SESSION_RETRY_DEFAULT_INITIAL_DELAY_MS = 3000
 const TDX_SESSION_RETRY_DEFAULT_MAX_ATTEMPTS = 6
 const TDX_LINE3_RETRY_MAX_ATTEMPTS = 2
-const TDX_LINE2_MAINTENANCE_MESSAGE = '线路2暂时维护，请选择线路1。'
+const TDX_LINE2_EXTERNAL_MESSAGE = '线路2已迁移到外部 API，本地旧线路2已停用。'
+const TDX_LINE_MAINTENANCE_MESSAGES = {
+  line1: '线路1暂时维护，请选择线路2。',
+  line2: TDX_LINE2_EXTERNAL_MESSAGE,
+  line3: '线路3暂时维护，请选择线路2。',
+}
 
 let tdxSessionRetryTimer = null
 let tdxSessionRetryRunning = false
@@ -1191,7 +1196,7 @@ function buildRecoveredTdxAuditTask(order = {}) {
     ],
     result: {
       upstreamAudit: {
-        provider: line === 'line2' ? 'Dengfeng' : 'QMF',
+        provider: line === 'line2' ? 'External API' : 'QMF',
         line,
         orderId: String(order.submitres || '').trim(),
         wxid: '',
@@ -1769,7 +1774,7 @@ function sanitizeSessionResult(result = {}, request) {
   const admin = isAdminRequest(request)
   const base = {
     ok: Boolean(result.ok),
-    provider: result?.line === 'line2' ? 'Dengfeng' : 'QMF',
+    provider: result?.line === 'line2' ? 'External API' : 'QMF',
     line: result?.line || '',
     orderId: admin ? result.orderId || '' : '',
     upstreamOrderId: admin ? result.orderId || '' : '',
@@ -2275,20 +2280,21 @@ async function processTdxSessionRetryTask(task = {}) {
   const maxAttempts = Number(task.sessionRetry?.maxAttempts || resolveTdxSessionRetryMaxAttempts())
   let qmfNewOrderOpenedInFlow = Boolean(task.sessionRetry?.qmfNewOrderOpened)
   const storedLine = resolveStoredTdxTaskLine(task)
-  if (isTdxLine2(storedLine) && !(await isTdxLineAvailable(storedLine))) {
+  if (!(await isTdxLineAvailable(storedLine))) {
+    const lineMaintenanceMessage = tdxLineAvailabilityMessage(storedLine)
     await updateTdxTask(task.id, {
       status: 'paused',
-      currentStep: '线路2暂时维护，后台自动重试已暂停。',
+      currentStep: `${lineMaintenanceMessage}后台自动重试已暂停。`,
       updatedAt,
       sessionRetry: {
         ...(task.sessionRetry || {}),
         status: 'paused',
         nextRetryAtMs: 0,
-        lastError: TDX_LINE2_MAINTENANCE_MESSAGE,
+        lastError: lineMaintenanceMessage,
         lastFailureStep: 'line-maintenance',
       },
       notes: [
-        { title: '线路2维护暂停', description: '线路2暂时维护，后台自动重试已暂停。', meta: updatedAt },
+        { title: '线路维护暂停', description: `${lineMaintenanceMessage}后台自动重试已暂停。`, meta: updatedAt },
         ...(task.notes || []),
       ],
     })
@@ -2612,6 +2618,39 @@ async function processTdxSessionRetryTask(task = {}) {
   }
 }
 
+function isTdxSessionRetryInfrastructureError(error = null) {
+  const code = String(error?.code || error?.errno || '').trim().toUpperCase()
+  return ['ER_NO_SUCH_TABLE', 'ER_BAD_FIELD_ERROR', 'ER_NO_SUCH_DB', 'ER_TABLEACCESS_DENIED_ERROR'].includes(code)
+}
+
+export function buildTdxSessionRetrySchedulerErrorPatch(task = {}, error = null, nowMs = Date.now()) {
+  const sessionRetry = task?.sessionRetry && typeof task.sessionRetry === 'object' ? task.sessionRetry : {}
+  const maxAttempts = Number(sessionRetry.maxAttempts || resolveTdxSessionRetryMaxAttempts())
+  const attempts = Math.max(0, Number(sessionRetry.attempts || 0)) + 1
+  const shouldPause = isTdxSessionRetryInfrastructureError(error) || attempts >= maxAttempts
+  const retryDelayMs = resolveTdxSessionRetryDelayMs(error, resolveTdxSessionRetryIntervalMs())
+  const detail = resolveTdxSessionFailureDetail(error) || '后台自动重试调度异常'
+  return {
+    status: shouldPause ? 'paused' : 'processing',
+    currentStep: shouldPause ? '后台自动重试已暂停，请修复数据库配置后再恢复。' : TDX_SMS_RECEIVE_PENDING_STEP,
+    updatedAt: nowText(),
+    sessionRetry: buildTdxSessionRetryState({
+      attempts,
+      maxAttempts,
+      nextRetryAtMs: shouldPause ? 0 : Number(nowMs || Date.now()) + retryDelayMs,
+      status: shouldPause ? 'paused' : 'queued',
+      lastError: detail,
+      lastFailureStep: 'scheduler-error',
+      lastAttemptAtMs: Number(sessionRetry.lastAttemptAtMs || 0),
+      qmfNewOrderOpened: Boolean(sessionRetry.qmfNewOrderOpened),
+    }),
+    debug: {
+      ...(task.debug && typeof task.debug === 'object' ? task.debug : {}),
+      lastSessionFailure: { detail, failureStep: 'scheduler-error', updatedAt: nowText() },
+    },
+  }
+}
+
 async function runTdxSessionRetryTick() {
   if (tdxSessionRetryStopped || tdxSessionRetryRunning) return
   tdxSessionRetryRunning = true
@@ -2624,6 +2663,12 @@ async function runTdxSessionRetryTick() {
         await processTdxSessionRetryTask(task)
       } catch (err) {
         console.error('Failed to process TDX session retry task:', err)
+        try {
+          await updateTdxTask(task.id, buildTdxSessionRetrySchedulerErrorPatch(task, err))
+        } catch (updateError) {
+          // Keep the scheduler alive when persistence itself is temporarily unavailable.
+          console.error('Failed to defer TDX session retry task after scheduler error:', updateError)
+        }
       }
     }
   } catch (err) {
@@ -2659,14 +2704,33 @@ function rejectDirectTdxLine3(reply) {
 }
 
 async function isTdxLineAvailable(line = 'line1') {
-  if (!isTdxLine2(line)) return true
+  const normalizedLine = normalizeTdxLine(line)
+  // The standalone service deliberately does not proxy the external line2 API.
+  if (isTdxLine2(normalizedLine)) return false
   const config = await getTdxConfig()
-  return !config.line2Maintenance
+  return !Boolean(config[`${normalizedLine}Maintenance`])
+}
+
+function tdxLineAvailabilityMessage(line = 'line1') {
+  const normalizedLine = normalizeTdxLine(line)
+  return TDX_LINE_MAINTENANCE_MESSAGES[normalizedLine] || '当前线路暂时维护，请选择线路2。'
 }
 
 async function ensureTdxLineAvailable(reply, line = 'line1') {
   if (await isTdxLineAvailable(line)) return null
-  return reply.code(503).send({ success: false, message: TDX_LINE2_MAINTENANCE_MESSAGE, data: null })
+  const normalizedLine = normalizeTdxLine(line)
+  if (isTdxLine2(normalizedLine)) {
+    return reply.code(410).send({
+      success: false,
+      message: TDX_LINE2_EXTERNAL_MESSAGE,
+      data: { replacement: 'tdx-line2-external-api' },
+    })
+  }
+  return reply.code(503).send({
+    success: false,
+    message: tdxLineAvailabilityMessage(normalizedLine),
+    data: { line: normalizedLine, maintenance: true },
+  })
 }
 
 async function ensureBulkActionEnabled(reply) {
@@ -2692,7 +2756,13 @@ export default async function tdxRoutes(app) {
     const settings = await readTdxSettings()
     const merged = await getTdxConfig()
     const summary = summarizeTdxSettings(settings)
-    return ok({ ...summary, line2Maintenance: Boolean(merged.line2Maintenance), liveValidationErrors: validateLiveTdxConfig(merged) })
+    return ok({
+      ...summary,
+      line1Maintenance: Boolean(merged.line1Maintenance),
+      line2Maintenance: Boolean(merged.line2Maintenance),
+      line3Maintenance: Boolean(merged.line3Maintenance),
+      liveValidationErrors: validateLiveTdxConfig(merged),
+    })
   })
 
   app.patch('/settings', { preHandler: requireModuleAccess('泰迪熊标记', 'edit') }, async (request, reply) => {
@@ -2704,7 +2774,13 @@ export default async function tdxRoutes(app) {
     const next = await writeTdxSettings(body)
     const merged = await getTdxConfig()
     const summary = summarizeTdxSettings(next)
-    return ok({ ...summary, line2Maintenance: Boolean(merged.line2Maintenance), liveValidationErrors: validateLiveTdxConfig(merged) }, '泰迪熊设置已更新')
+    return ok({
+      ...summary,
+      line1Maintenance: Boolean(merged.line1Maintenance),
+      line2Maintenance: Boolean(merged.line2Maintenance),
+      line3Maintenance: Boolean(merged.line3Maintenance),
+      liveValidationErrors: validateLiveTdxConfig(merged),
+    }, '泰迪熊设置已更新')
   })
 
   app.get('/runtime', { preHandler: requireModuleAccess('泰迪熊标记', 'read') }, async () => ok(await getTdxRuntimeSnapshot()))
@@ -2733,6 +2809,8 @@ export default async function tdxRoutes(app) {
     if (businessType.includes('tengx')) {
       return ok({ ok: true, message: '请在您手机的腾讯申诉页面获取验证码，并在下方输入提交' }, '请手动在手机上获取腾讯验证码')
     }
+    const lineGuard = await ensureTdxLineAvailable(reply, line)
+    if (lineGuard) return lineGuard
     if (isTdxLine3(line)) {
       const normalizedPhone = String(phone || '').trim()
       if (!/^1\d{10}$/.test(normalizedPhone)) {
@@ -2781,8 +2859,6 @@ export default async function tdxRoutes(app) {
         return sendTdxFailure(reply, request, err, '发送验证码失败，请稍后重试。', 502)
       }
     }
-    const lineGuard = await ensureTdxLineAvailable(reply, line)
-    if (lineGuard) return lineGuard
     try {
       const precheckBlock = await resolveTdxSmsSendPrecheckBlock(phone, request)
       if (precheckBlock) {
@@ -2801,6 +2877,8 @@ export default async function tdxRoutes(app) {
   app.get('/sms-receive/line3-candidates', { preHandler: requireModuleAccess('泰迪熊标记', 'read') }, async (request, reply) => {
     const guard = await ensureTdxMarkEnabled(reply)
     if (guard) return guard
+    const lineGuard = await ensureTdxLineAvailable(reply, 'line3')
+    if (lineGuard) return lineGuard
     const phone = String(request.query?.phone || '').trim()
     if (!/^1\d{10}$/.test(phone)) {
       return reply.code(400).send({ success: false, message: '请输入正确的手机号码', data: null })
@@ -2812,6 +2890,8 @@ export default async function tdxRoutes(app) {
   app.post('/sms-receive/retry-line3', { preHandler: requireModuleAccess('泰迪熊标记', 'edit') }, async (request, reply) => {
     const guard = await ensureTdxMarkEnabled(reply)
     if (guard) return guard
+    const lineGuard = await ensureTdxLineAvailable(reply, 'line3')
+    if (lineGuard) return lineGuard
 
     const phone = String(request.body?.phone || '').trim()
     if (!/^1\d{10}$/.test(phone)) {
@@ -3140,7 +3220,7 @@ export default async function tdxRoutes(app) {
         continue
       }
       if (!(await isTdxLineAvailable(task.line || 'line1'))) {
-        skipped.push({ id, reason: TDX_LINE2_MAINTENANCE_MESSAGE })
+        skipped.push({ id, reason: tdxLineAvailabilityMessage(task.line || 'line1') })
         continue
       }
 
@@ -3199,7 +3279,7 @@ export default async function tdxRoutes(app) {
         continue
       }
       if (!(await isTdxLineAvailable(task.line || 'line1'))) {
-        skipped.push({ id, reason: TDX_LINE2_MAINTENANCE_MESSAGE })
+        skipped.push({ id, reason: tdxLineAvailabilityMessage(task.line || 'line1') })
         continue
       }
       if (!hasPreparedSession(task)) {

@@ -119,6 +119,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private static final String TD_GAOPIN_HF_KEY = "高频标记至少需要10个工作日或找平台方帮忙处理";
     private static final String TD_GAOPIN_FRAUD_KEY = "疑似诈骗";
     private static final String TD_GAOPIN_DUPLICATE_APPEAL_KEY = "号码当天已提交过申诉，不可重复提交";
+    private static final int TD_GAOPIN_QUERY_MAX_ATTEMPTS = 3;
+    private static final long TD_GAOPIN_QUERY_RETRY_DELAY_MS = 300L;
     private static final Set<String> MOBILE_ONLY_PLATFORM_CODES = Set.of("td_gaopin", "td_second", "tengxun", "360fugai");
     private static final Pattern JSONP_WRAPPER_PATTERN = Pattern.compile("^[\\w$]+\\((.*)\\)\\s*;?$", Pattern.DOTALL);
     private static final Map<String, String> LEGACY_PLATFORM_NAME_MAP = new LinkedHashMap<>();
@@ -430,10 +432,19 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         OptimizedBatchSession session = new OptimizedBatchSession(currentUserId, currentUserName, aggregateConfig);
         OptimizedBatchItemOutcome outcome = optimizedBatchApiExecutor.execute(apiRequest, session, taskId);
 
-        List<Object> results = new ArrayList<>();
-        if (outcome != null && outcome.getApiResult() != null) {
-            results.add(outcome.getApiResult());
+        BatchTask.ApiResult apiResult = outcome == null ? null : outcome.getApiResult();
+        if (apiResult == null) {
+            return buildMarkPrecheckFail("平台查询无响应");
         }
+        if (!Boolean.TRUE.equals(apiResult.getSuccess())) {
+            return buildMarkPrecheckFail(StringUtils.defaultIfBlank(apiResult.getError(), "平台查询失败"));
+        }
+        if (apiResult.getData() == null) {
+            return buildMarkPrecheckFail("平台查询未返回有效结果");
+        }
+
+        List<Object> results = new ArrayList<>();
+        results.add(apiResult);
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", taskId);
@@ -752,7 +763,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             return tdxSecondAgentGateway.sendCode(normalizedPhone, line, sourceTaskId);
         }
         assertTdxSecondAvailableAndFunded(SecurityUtils.getUserId());
-        return tdxSecondAgentGateway.sendCode(request.getPhone(), line);
+        return tdxSecondAgentGateway.sendCode(request.getPhone(), line, "", request.getExternalRequestId());
     }
 
     @Override
@@ -789,7 +800,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 request.getPhone(),
                 request.getSmsCode(),
                 request.getLine(),
-                request.getRotate()
+                request.getRotate(),
+                request.getExternalTaskId()
         );
         syncTdxSecondSubmitStatus(upstream);
         return createTdxSecondAgentOrder(userId, operator, request, upstream);
@@ -811,9 +823,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             if ("completed".equals(normalizedStatus)) {
                 upstream.setProcessStatus("1");
                 upstream.setMessage(StringUtils.defaultIfBlank(status.getMessage(), "申诉已处理完成"));
-            } else if ("failed".equals(normalizedStatus)) {
+            } else if ("failed".equals(normalizedStatus) || "retryable".equals(normalizedStatus)) {
                 upstream.setProcessStatus("2");
-                upstream.setMessage(StringUtils.defaultIfBlank(status.getMessage(), "申诉处理失败"));
+                upstream.setMessage(StringUtils.defaultIfBlank(status.getMessage(),
+                        "retryable".equals(normalizedStatus) ? "线路2暂时不可用，请重新获取验证码后重试" : "申诉处理失败"));
             } else {
                 upstream.setProcessStatus("3");
                 upstream.setMessage("申诉处理中，请稍等");
@@ -835,6 +848,20 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                                                                   String operator,
                                                                   MarkTdxSecondSubmitRequest request,
                                                                   MarkTdxSecondSubmitResultVO upstream) {
+        if (StringUtils.isNotBlank(upstream.getTaskId())) {
+            MarkOrderItem existingItem = markOrderItemMapper.selectTdxSecondItemByExternalTaskId(
+                    userId, upstream.getTaskId());
+            if (existingItem != null) {
+                MarkOrder existingOrder = markOrderMapper.selectMarkOrderById(existingItem.getOrderId());
+                if (existingOrder != null) {
+                    upstream.setOrderId(existingOrder.getId());
+                    upstream.setItemId(existingItem.getId());
+                    upstream.setOrderNo(existingOrder.getOrderNo());
+                    upstream.setProcessStatus(StringUtils.defaultIfBlank(existingItem.getProcessStatus(), "3"));
+                }
+                return upstream;
+            }
+        }
         Date now = DateUtils.getNowDate();
         String platformName = resolvePlatformNameByUser(userId, TDX_SECOND_PLATFORM_CODE, "Taidixiong二次");
         long unitPrice = getEffectiveUnitPrice(userId, TDX_SECOND_PLATFORM_CODE);
@@ -894,6 +921,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                     : "申诉处理中，请稍等";
         item.setProcessResult(initialProcessResult);
         item.setProcessNote(StringUtils.abbreviate(processNote, 500));
+        item.setExternalTaskId(StringUtils.trimToNull(upstream.getTaskId()));
         item.setProcessedBy(TDX_SECOND_AGENT_OPERATOR);
         item.setProcessedTime(now);
         item.setRefunded("0");
@@ -989,7 +1017,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             refreshOrderStats(order.getId(), TDX_SECOND_AGENT_OPERATOR);
             return;
         }
-        if ("failed".equals(upstreamStatus)) {
+        if ("failed".equals(upstreamStatus) || "retryable".equals(upstreamStatus)) {
             failAndRefundTdxSecondItem(order, item, now, message);
             return;
         }
@@ -1351,6 +1379,25 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             throw new ServiceException("仅代理或管理员可操作");
         }
         return markUserPlatformQuotaMapper.selectDownstreamSummaryByAgent(SecurityUtils.getUsername(), SecurityUtils.getUserId());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public String updateAgentOrderItemRemark(Long itemId, MarkOrderRemarkUpdateRequest request) {
+        MarkOrderItem item = markOrderItemMapper.selectMarkOrderItemById(itemId);
+        if (item == null) {
+            throw new ServiceException("号码记录不存在");
+        }
+        MarkOrder order = requireOrder(item.getOrderId());
+        assertAgentReadable(order, false);
+        assertAuditPassed(order);
+
+        String remark = StringUtils.trimToEmpty(request == null ? null : request.getRemark());
+        if (remark.length() > 500) {
+            throw new ServiceException("备注不能超过500个字符");
+        }
+        markOrderItemMapper.updateAgentOrderItemRemark(itemId, remark, SecurityUtils.getUsername());
+        return remark;
     }
 
     @Override
@@ -2126,9 +2173,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     private String resolveInspectionDetectionResult(String processResult, String processNote) {
         String value = StringUtils.defaultIfBlank(processResult, "");
+        if (StringUtils.defaultIfBlank(processNote, "").contains("查询失败")
+                || value.startsWith("查询失败：")) return "查询失败";
         if (value.contains("无标记") || value.equals("无")) return "无标记";
         if (value.contains("有标记") || value.equals("有")) return "有标记";
-        if (StringUtils.defaultIfBlank(processNote, "").contains("查询失败")) return "查询失败";
         return StringUtils.isBlank(value) ? "未返回结果" : value;
     }
 
@@ -2157,11 +2205,14 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         MarkPhoneCheckItemVO checkItem = queryXiaomiPhoneStatus(item.getPhone(), orderUser.getUserId(), orderUser.getUserName(), order);
         Date now = DateUtils.getNowDate();
         if (!Boolean.TRUE.equals(checkItem.getQuerySuccess()) || !isXiaomiNoMark(checkItem)) {
-            item.setProcessResult(Boolean.TRUE.equals(checkItem.getQuerySuccess()) ? checkItem.getDetail() : null);
-            item.setProcessNote(Boolean.TRUE.equals(checkItem.getQuerySuccess()) ? "自动巡检：暂不符合完成条件" : "自动巡检：平台查询失败，等待下次巡检");
+            boolean queryFailed = !Boolean.TRUE.equals(checkItem.getQuerySuccess());
+            item.setProcessResult(queryFailed ? null : checkItem.getDetail());
+            item.setProcessNote(queryFailed ? "自动巡检：平台查询失败，保持待处理并等待下次巡检" : "自动巡检：暂不符合完成条件");
             item.setUpdateBy(GENERIC_INSPECTION_OPERATOR); item.setUpdateTime(now);
             markOrderItemMapper.updateMarkOrderItem(item);
-            return "SKIPPED";
+            // A failed platform query is an inspection failure, not a business skip.
+            // Keep the item pending, but surface the failure in run statistics/logs.
+            return queryFailed ? "FAILED" : "SKIPPED";
         }
 
         boolean markFailed = "FAILED".equals(autoAction);
@@ -2209,16 +2260,36 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 order
         );
         if (!Boolean.TRUE.equals(checkItem.getQuerySuccess())) {
-            touchTdGaopinPendingItem(itemId, now);
+            String detail = StringUtils.defaultIfBlank(checkItem.getDetail(), "平台查询失败");
+            touchTdGaopinPendingItem(
+                    itemId,
+                    now,
+                    StringUtils.abbreviate("查询失败：" + detail, 255),
+                    StringUtils.abbreviate("自动检测：查询失败，" + detail + "，保持待处理并等待下次巡检", 500)
+            );
             return "SKIPPED";
         }
+        boolean markFailed = "FAILED".equals(autoAction);
+        // 泰迪高频：只要查询成功且没有返回“高频标记至少需要10个工作日或找平台方帮忙处理”提示，
+        // 就视为本次检测已得到可处理结果；该提示（可带广告推销(10)等后缀）才需要继续等待。
+        // 泰迪高频结果出现“高频标记”（含具体类型/数量）即视为处理完成。
         if (!isTdGaopinAutoCompleteDetail(checkItem.getDetail())) {
-            touchTdGaopinPendingItem(itemId, now);
+            String detail = StringUtils.defaultIfBlank(checkItem.getDetail(), "未返回明确平台结果");
+            touchTdGaopinPendingItem(
+                    itemId,
+                    now,
+                    detail,
+                    StringUtils.abbreviate(
+                            markFailed
+                                    ? "自动检测：结果为「" + detail + "」，未满足完成条件，保持待处理并等待下次巡检"
+                                    : "自动检测：未取得明确「无/无标记」结果，当前结果为「" + detail + "」，保持待处理并等待下次巡检",
+                            500
+                    )
+            );
             return "SKIPPED";
         }
 
         String detail = StringUtils.defaultIfBlank(StringUtils.trimToNull(checkItem.getDetail()), "有标记");
-        boolean markFailed = "FAILED".equals(autoAction);
         item.setProcessStatus(markFailed ? "2" : "1");
         item.setProcessResult(detail);
         item.setProcessNote("自动检测：号码状态为「" + detail + "」，" + (markFailed ? "处理失败" : "处理成功"));
@@ -2467,11 +2538,17 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     }
 
     private void touchTdGaopinPendingItem(Long itemId, Date now) {
+        touchTdGaopinPendingItem(itemId, now, null, null);
+    }
+
+    private void touchTdGaopinPendingItem(Long itemId, Date now, String processResult, String processNote) {
         if (itemId == null) {
             return;
         }
         MarkOrderItem touch = new MarkOrderItem();
         touch.setId(itemId);
+        touch.setProcessResult(processResult);
+        touch.setProcessNote(processNote);
         touch.setUpdateBy(TD_GAOPIN_AUTO_OPERATOR);
         touch.setUpdateTime(now);
         markOrderItemMapper.updateMarkOrderItem(touch);
@@ -2551,6 +2628,30 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                                                           Long userId,
                                                           String userName,
                                                           MarkOrder order) {
+        MarkPhoneCheckItemVO last = null;
+        for (int attempt = 1; attempt <= TD_GAOPIN_QUERY_MAX_ATTEMPTS; attempt++) {
+            last = queryTdGaopinPhoneStatusOnce(phone, userId, userName, order);
+            if (Boolean.TRUE.equals(last.getQuerySuccess())) {
+                return last;
+            }
+            if (attempt < TD_GAOPIN_QUERY_MAX_ATTEMPTS) {
+                log.warn("泰迪高频查询失败，将重试 {}/{} phone={} detail={}",
+                        attempt, TD_GAOPIN_QUERY_MAX_ATTEMPTS - 1, maskPhoneForLog(phone), last.getDetail());
+                try {
+                    Thread.sleep(TD_GAOPIN_QUERY_RETRY_DELAY_MS * attempt);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        }
+        return last;
+    }
+
+    private MarkPhoneCheckItemVO queryTdGaopinPhoneStatusOnce(String phone,
+                                                              Long userId,
+                                                              String userName,
+                                                              MarkOrder order) {
         MarkPhoneCheckItemVO item = new MarkPhoneCheckItemVO();
         item.setPhone(phone);
         item.setQuerySuccess(false);
@@ -2570,6 +2671,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             }
             item.setQuerySuccess(true);
             fillPrecheckItemFromData(item, queryResult.get("data"));
+            if (isTdGaopinMissingPlatformResult(item)) {
+                item.setQuerySuccess(false);
+                return item;
+            }
             applyTdGaopinPrecheckRules(item);
             if (StringUtils.isBlank(item.getDetail())) {
                 item.setDetail(normalizeTeddyMarkDetailLabel(StringUtils.defaultIfBlank(item.getStatus(), "未知")));
@@ -2580,14 +2685,41 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return item;
     }
 
+    private String maskPhoneForLog(String phone) {
+        String value = StringUtils.trimToEmpty(phone);
+        if (value.length() <= 7) {
+            return value;
+        }
+        return value.substring(0, 3) + "****" + value.substring(value.length() - 4);
+    }
+
     private boolean isTdGaopinAutoCompleteDetail(String detail) {
         String normalized = StringUtils.trimToNull(detail);
-        return "有标记".equals(normalized)
+        return normalized != null
+                && (StringUtils.contains(normalized, "高频标记")
+                || "有标记".equals(normalized)
                 || "无".equals(normalized)
                 || StringUtils.contains(normalized, "无标记")
                 || StringUtils.contains(normalized, "未标记")
                 || StringUtils.contains(normalized, "暂无标记")
-                || StringUtils.contains(normalized, TD_GAOPIN_DUPLICATE_APPEAL_KEY);
+                || StringUtils.contains(normalized, TD_GAOPIN_DUPLICATE_APPEAL_KEY));
+    }
+
+    private boolean isTdGaopinExplicitNoMarkDetail(String detail) {
+        String normalized = StringUtils.trimToNull(detail);
+        return "无".equals(normalized)
+                || "无标记".equals(normalized);
+    }
+
+    private boolean isTdGaopinMissingPlatformResult(MarkPhoneCheckItemVO item) {
+        if (item == null) {
+            return true;
+        }
+        String status = StringUtils.trimToNull(item.getStatus());
+        String detail = StringUtils.trimToNull(item.getDetail());
+        return "EMPTY".equalsIgnoreCase(status)
+                || ("UNKNOWN".equalsIgnoreCase(status)
+                && ("未返回平台结果".equals(detail) || "平台未返回有效标记结果".equals(detail)));
     }
 
     private void notifyTencentProcessResult(MarkOrder order, MarkOrderItem item, boolean accepted) {
@@ -3492,6 +3624,13 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                     item.setDetail(statusInfo.detail);
                 }
             }
+        }
+
+        if (fallbackStatus == null) {
+            item.setMarked(false);
+            item.setStatus("UNKNOWN");
+            item.setDetail("平台未返回有效标记结果");
+            return;
         }
 
         item.setMarked(marked);

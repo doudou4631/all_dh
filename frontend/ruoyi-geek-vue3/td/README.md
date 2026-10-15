@@ -74,7 +74,7 @@ npm run dev
 
 ## 环境变量（最少）
 
-见 `backend/.env.example`。真实短信必须使用 `TDX_MODE=live`；模拟模式会明确返回未发送。完成后续申诉还需至少配置 QMF 或 DF 中的一条有效通道。
+见 `backend/.env.example`。真实短信必须使用 `TDX_MODE=live`；模拟模式会明确返回未发送。当前项目本地只保留 QMF 线路 1，线路 2由外部 API负责。
 
 ## 与完整 TDX（方案 B）的区别
 

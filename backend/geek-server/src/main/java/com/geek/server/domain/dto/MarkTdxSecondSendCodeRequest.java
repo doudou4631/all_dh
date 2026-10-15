@@ -15,4 +15,7 @@ public class MarkTdxSecondSendCodeRequest {
 
     /** Original failed task to reuse when submitting through line3. */
     private String sourceTaskId;
+
+    /** Optional caller id used to make the external line2 create request idempotent. */
+    private String externalRequestId;
 }

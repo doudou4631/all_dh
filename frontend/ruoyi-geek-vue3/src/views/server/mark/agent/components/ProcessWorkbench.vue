@@ -79,6 +79,7 @@
               placeholder="搜索并选择账户"
               class="field-hidden-user"
               :loading="userOptionsLoading"
+              @visible-change="handleUserOptionsVisibleChange"
             >
               <el-option
                 v-for="item in processUserOptions"
@@ -214,6 +215,24 @@
             <span>{{ submitRemarkText(scope.row) }}</span>
           </template>
         </el-table-column>
+        <el-table-column label="手动备注" prop="agentRemark" min-width="180" align="center">
+          <template #default="scope">
+            <div class="agent-remark-cell">
+              <el-tooltip :content="scope.row.agentRemark" :disabled="!scope.row.agentRemark" placement="top">
+                <span class="agent-remark-text">{{ scope.row.agentRemark || '-' }}</span>
+              </el-tooltip>
+              <el-button
+                link
+                type="primary"
+                icon="Edit"
+                aria-label="编辑手动备注"
+                title="编辑手动备注"
+                v-hasPermi="['server:markAgent:item:feedback']"
+                @click="openAgentRemarkEditor(scope.row)"
+              />
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="处理状态" width="96" align="center">
           <template #default="scope">
             <el-tag :type="processStatusTagType(scope.row.processStatus, scope.row)" size="small" effect="light">
@@ -266,6 +285,37 @@
         @pagination="getList"
       />
     </el-card>
+
+    <el-dialog
+      v-model="agentRemarkEditor.visible"
+      title="编辑手动备注"
+      width="min(520px, 92vw)"
+      append-to-body
+      :close-on-click-modal="false"
+      :close-on-press-escape="!agentRemarkSaving"
+      :show-close="!agentRemarkSaving"
+    >
+      <el-form label-width="60px">
+        <el-form-item label="号码">
+          <span>{{ agentRemarkEditor.phone }}</span>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="agentRemarkEditor.remark"
+            type="textarea"
+            :rows="4"
+            :maxlength="500"
+            show-word-limit
+            :disabled="agentRemarkSaving"
+            placeholder="请输入手动备注，留空保存可清除备注"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="agentRemarkSaving" @click="agentRemarkEditor.visible = false">取消</el-button>
+        <el-button type="primary" :loading="agentRemarkSaving" @click="saveAgentRemark">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -276,6 +326,7 @@ import {
   listMarkAgentProcessUserOptions,
   updateMarkAgentProcessUserHidden,
   feedbackMarkOrderItem,
+  updateMarkAgentOrderItemRemark,
   batchProcessXiaomi,
   batchMarkSuccess
 } from '@/api/server/markAgent'
@@ -323,16 +374,20 @@ const batchFeedbackSubmitting = ref(false)
 const selectedRows = ref([])
 const total = ref(0)
 const itemList = ref([])
+const agentRemarkSaving = ref(false)
+const agentRemarkEditor = reactive({ visible: false, itemId: null, phone: '', remark: '' })
 const rowActionMap = ref({})
 const deadlineDate = ref('')
 const userOptionsLoading = ref(false)
 const hiddenUserSubmitting = ref(false)
 const hiddenUserCandidate = ref(null)
 const processUserOptions = ref([])
+let processUserOptionsLoaded = false
+let processUserOptionsRequest = null
 const activeSupplyKey = ref(props.defaultSupplyKey)
 const queryParams = reactive({
   pageNum: 1,
-  pageSize: 90,
+  pageSize: 30,
   userName: null,
   phone: null,
   processStatus: props.defaultProcessStatus,
@@ -359,15 +414,25 @@ function userOptionLabel(item) {
   return `${name || item?.userId}${item?.hidden ? '（已屏蔽）' : ''}`
 }
 
-function loadProcessUserOptions() {
+function loadProcessUserOptions(force = false) {
+  if (processUserOptionsLoaded && !force) return Promise.resolve(processUserOptions.value)
+  if (processUserOptionsRequest) return processUserOptionsRequest
   userOptionsLoading.value = true
-  return listMarkAgentProcessUserOptions()
+  processUserOptionsRequest = listMarkAgentProcessUserOptions()
     .then((res) => {
       processUserOptions.value = Array.isArray(res?.data) ? res.data : []
+      processUserOptionsLoaded = true
+      return processUserOptions.value
     })
     .finally(() => {
       userOptionsLoading.value = false
+      processUserOptionsRequest = null
     })
+  return processUserOptionsRequest
+}
+
+function handleUserOptionsVisibleChange(visible) {
+  if (visible) loadProcessUserOptions().catch(() => {})
 }
 
 function handleHiddenUserChange() {
@@ -380,7 +445,7 @@ function handleHiddenUserChange() {
     return updateMarkAgentProcessUserHidden({ userId: selected.userId, hidden })
   }).then(async () => {
     proxy.$modal.msgSuccess(`${action}成功`)
-    await Promise.all([loadProcessUserOptions(), refreshItemList()])
+    await Promise.all([loadProcessUserOptions(true), refreshItemList()])
   }).catch(() => {}).finally(() => {
     hiddenUserSubmitting.value = false
   })
@@ -470,6 +535,27 @@ function submitRemarkText(row) {
   if (remark) return remark
   const note = String(row?.processNote || '').trim()
   return note || '-'
+}
+function openAgentRemarkEditor(row) {
+  agentRemarkEditor.itemId = row.id
+  agentRemarkEditor.phone = row.phone || ''
+  agentRemarkEditor.remark = row.agentRemark || ''
+  agentRemarkEditor.visible = true
+}
+async function saveAgentRemark() {
+  if (agentRemarkSaving.value || !agentRemarkEditor.itemId) return
+  agentRemarkSaving.value = true
+  try {
+    const res = await updateMarkAgentOrderItemRemark(agentRemarkEditor.itemId, agentRemarkEditor.remark)
+    const row = itemList.value.find((item) => item.id === agentRemarkEditor.itemId)
+    if (row) row.agentRemark = res.data
+    agentRemarkEditor.visible = false
+    proxy.$modal.msgSuccess('备注已保存')
+  } catch {
+    // Keep the editor open so the entered remark can be retried.
+  } finally {
+    agentRemarkSaving.value = false
+  }
 }
 function processedTimeText(row) {
   if (!row || row.processStatus === '0') return '-'
@@ -626,6 +712,7 @@ function buildExportRow(row) {
     platformText(row),
     verifyCodeText(row),
     submitRemarkText(row),
+    row?.agentRemark || '',
     processStatusLabel(row?.processStatus, row),
     row?.orderNo || '',
     formatAgentDateTime(row?.createTime),
@@ -661,7 +748,7 @@ async function handleExport() {
       proxy.$modal.msgWarning('当前筛选条件下没有可导出数据')
       return
     }
-    const header = ['提交用户', '手机/固话', '处理平台', '验证码', '备注', '处理状态', '批次编号', '创建时间', '处理时间']
+    const header = ['提交用户', '手机/固话', '处理平台', '验证码', '备注', '手动备注', '处理状态', '批次编号', '创建时间', '处理时间']
     downloadCsv(resolveExportFilename(), [header, ...rows.map((row) => buildExportRow(row))])
     proxy.$modal.msgSuccess(`已导出 ${rows.length} 条记录`)
   } catch (error) {
@@ -745,7 +832,6 @@ watch(() => [props.platformCode, props.platformCodes], () => {
 
 onMounted(() => {
   applyPlatformFilter()
-  loadProcessUserOptions()
   getList()
 })
 
@@ -755,6 +841,18 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+.agent-remark-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-remark-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mark-agent-process-page {
   padding: 0;
   margin: 0;
