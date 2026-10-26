@@ -22,6 +22,8 @@ public interface MarkOrderItemMapper {
 
     List<MarkOrderItem> selectMarkOrderItemsByOrderId(Long orderId);
 
+    List<MarkOrderItem> selectMarkOrderItemsByOrderIdForUpdate(@Param("orderId") Long orderId);
+
     int insertMarkOrderItem(MarkOrderItem markOrderItem);
 
     int updateMarkOrderItem(MarkOrderItem markOrderItem);
@@ -29,6 +31,10 @@ public interface MarkOrderItemMapper {
     int updateAgentOrderItemRemark(@Param("itemId") Long itemId,
                                   @Param("agentRemark") String agentRemark,
                                   @Param("updateBy") String updateBy);
+
+    int updateAgentOrderItemRemarks(@Param("itemIds") List<Long> itemIds,
+                                    @Param("agentRemark") String agentRemark,
+                                    @Param("updateBy") String updateBy);
 
     int updateMyOrderItemRemarks(@Param("itemIds") List<Long> itemIds,
                                  @Param("userId") Long userId,

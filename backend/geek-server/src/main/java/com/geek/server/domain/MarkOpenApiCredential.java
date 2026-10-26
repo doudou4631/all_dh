@@ -12,9 +12,15 @@ public class MarkOpenApiCredential {
     private String secretHash;
     private Long userId;
     private String userName;
+    /** PROCESSING: agent task API; CUSTOMER: customer submit/query API. */
+    private String credentialType;
+    /** Required for CUSTOMER credentials. New customer orders are assigned to this agent. */
+    private Long assignedAgentId;
+    private String assignedAgentName;
     private String status;
     private String scopes;
     private Date expireTime;
     private Date lastUsedTime;
     private Date createTime;
+    private java.util.List<String> platformCodes;
 }

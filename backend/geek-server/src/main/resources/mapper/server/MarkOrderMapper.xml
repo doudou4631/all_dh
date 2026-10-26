@@ -79,6 +79,10 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where mo.id = #{id}
     </select>
 
+    <select id="lockMarkOrderById" resultType="Long" flushCache="true" useCache="false">
+        select id from mark_order where id = #{id} for update
+    </select>
+
     <select id="selectMarkOrderList" parameterType="MarkOrder" resultMap="MarkOrderResult">
         <include refid="selectMarkOrderVo"/>
         <where>

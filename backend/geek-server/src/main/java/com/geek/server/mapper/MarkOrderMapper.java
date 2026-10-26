@@ -11,6 +11,7 @@ import java.util.List;
 public interface MarkOrderMapper {
 
     MarkOrder selectMarkOrderById(Long id);
+    Long lockMarkOrderById(@Param("id") Long id);
 
     List<MarkOrder> selectMarkOrderList(MarkOrder markOrder);
     List<MarkOrder> selectMyOrderItemList(MarkOrder markOrder);

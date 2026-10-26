@@ -1,0 +1,84 @@
+<view class="page">
+  <view wx:if="{{!result}}" class="home-view">
+    <view class="hero">
+      <image class="hero-image" src="/images/home-hero.png" mode="widthFix" />
+      <view class="hero-title">
+        <view class="hero-title-main">取消号码标记</view>
+        <view class="hero-title-sub">高效提升您号码接听效率~</view>
+      </view>
+    </view>
+    <view class="content-section">
+      <view class="query-card">
+        <view class="query-input-frame">
+          <input class="query-input" type="number" maxlength="20" value="{{phone}}" disabled="{{loading}}" placeholder="请输入手机号或座机号" placeholder-class="query-placeholder" bindinput="onPhoneInput" bindconfirm="submitQuery" confirm-type="search" />
+          <text wx:if="{{phone && !loading}}" class="query-clear" bindtap="clearPhone">×</text>
+          <view class="query-embed-button {{loading ? 'is-loading' : ''}}" hover-class="query-button-hover" hover-stay-time="100" bindtap="submitQuery">
+            <icon wx:if="{{!loading}}" type="search" size="18" color="#fff" />
+            <text class="query-button-label">{{loading ? '查询中' : '查询'}}</text>
+          </view>
+        </view>
+        <view class="platform-grid">
+          <view wx:for="{{platforms}}" wx:key="code" class="platform-item">
+            <view class="platform-logo"><image class="platform-logo-image" src="{{item.icon}}" mode="aspectFit" /></view>
+            <text class="platform-name">{{item.name}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view wx:if="{{error}}" class="error-box">{{error}}</view>
+    <view class="home-bottom-poster"><image class="home-bottom-poster-image" src="/images/home-bottom-service.png" mode="widthFix" /></view>
+  </view>
+
+  <view wx:if="{{result}}" class="result-view">
+    <view class="result-header">
+      <view class="result-header-tip">号码标记查询结果</view>
+      <view class="result-number">{{result.number}}</view>
+      <view wx:if="{{result.is_mark}}" class="result-summary">{{result.title}}</view>
+      <view wx:else class="result-summary">未发现平台标记</view>
+    </view>
+    <view wx:if="{{result.is_mark}}" class="platform-section">
+      <view class="platform-section-head">
+        <view class="section-title"><view class="section-title-bar"></view><text>标记平台详情</text></view>
+        <text class="platform-count">共 {{result.item.length}} 个平台</text>
+      </view>
+      <view wx:for="{{result.item}}" wx:key="platform" class="result-platform-card">
+        <view class="result-platform-main">
+          <image class="result-platform-icon" src="{{item.iconPath}}" mode="aspectFit" />
+          <view class="result-platform-name">{{item.platform_name}}</view>
+          <view wx:if="{{item.content}}" class="result-platform-tag">标记名称：{{item.content}}</view>
+        </view>
+      </view>
+    </view>
+    <view wx:else class="healthy-card">
+      <image class="healthy-image" src="/images/safety.png" mode="aspectFit" />
+      <view class="healthy-title">您的号码很健康</view>
+      <view class="healthy-desc">没有查询到任何标记，可放心使用</view>
+    </view>
+    <view class="result-bottom">
+      <button class="back-button" bindtap="backToQuery"><text class="action-button-label">返回继续查询</text></button>
+      <button class="contact-button" bindtap="openQrModal">联系客服微信</button>
+      <view class="contact-phone">客服电话：{{contactPhone}}</view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading}}" class="query-progress-modal" catchtouchmove="preventTouchMove" catchtap="preventTouchMove">
+    <view class="query-progress-mask"></view>
+    <view class="query-progress-panel">
+      <view class="query-progress-title">正在努力查询中，请稍候...</view>
+      <view class="query-progress-track">
+        <view class="query-progress-fill" style="width: {{queryProgress}}%;"></view>
+        <text class="query-progress-value">{{queryProgress}}%</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{showQrModal}}" class="qr-modal">
+    <view class="qr-mask" bindtap="closeQrModal"></view>
+    <view class="qr-panel">
+      <view class="qr-title">联系客服微信</view>
+      <image class="qr-image" src="/images/contact-qr.png" mode="aspectFit" />
+      <view class="qr-tip">长按二维码添加客服</view>
+      <button class="qr-close" bindtap="closeQrModal"><text class="action-button-label">关闭</text></button>
+    </view>
+  </view>
+</view>

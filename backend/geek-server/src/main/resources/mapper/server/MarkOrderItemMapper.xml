@@ -86,6 +86,13 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         order by moi.id asc
     </select>
 
+    <select id="selectMarkOrderItemsByOrderIdForUpdate" resultMap="MarkOrderItemResult" flushCache="true" useCache="false">
+        <include refid="selectMarkOrderItemVo"/>
+        where moi.order_id = #{orderId}
+        order by moi.id asc
+        for update
+    </select>
+
     <insert id="insertMarkOrderItem" parameterType="MarkOrderItem" useGeneratedKeys="true" keyProperty="id">
         insert into mark_order_item
         <trim prefix="(" suffix=")" suffixOverrides=",">
@@ -156,6 +163,17 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             update_by = #{updateBy},
             update_time = now()
         where id = #{itemId}
+    </update>
+
+    <update id="updateAgentOrderItemRemarks">
+        update mark_order_item
+        set agent_remark = #{agentRemark},
+            update_by = #{updateBy},
+            update_time = now()
+        where id in
+        <foreach collection="itemIds" item="itemId" open="(" separator="," close=")">
+            #{itemId}
+        </foreach>
     </update>
 
     <update id="updateMyOrderItemRemarks">
@@ -245,7 +263,9 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
             su.user_name as user_name,
             su.nick_name as nick_name,
             moi.agent_remark,
-            mo.remark as order_remark
+            case when lower(mo.platform_code) in ('wuma_taidixiong', 'wuma_tengxun', 'wuma_360')
+                then coalesce(moi.user_remark, mo.user_remark)
+                else mo.remark end as order_remark
         from mark_order_item moi
         <if test="query == null or ((query.processStatus == null or query.processStatus == '') and (query.pendingOnly == null or query.pendingOnly.toString() != '1') and (query.processingOnly == null or query.processingOnly.toString() != '1') and (query.params == null or (query.params.pendingOnly == null or query.params.pendingOnly.toString() != '1') and (query.params.processingOnly == null or query.params.processingOnly.toString() != '1'))) ">
             FORCE INDEX (idx_mark_order_item_created_id_order)
@@ -514,6 +534,7 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         where (
             moi.process_status = '0'
             or (lower(#{platformCode}) = 'xiaomi' and moi.process_status = '3')
+            or (lower(#{platformCode}) in ('wuma_taidixiong', 'wuma_tengxun', 'wuma_360') and moi.process_status = '3')
         )
           and mo.audit_status = '1'
           and lower(mo.platform_code) = lower(#{platformCode})

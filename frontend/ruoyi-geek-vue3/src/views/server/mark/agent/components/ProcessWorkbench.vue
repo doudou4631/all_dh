@@ -110,6 +110,18 @@
             已选择 <strong>{{ selectedRows.length }}</strong> 条号码
           </span>
           <el-button
+            v-if="selectedRows.length"
+            type="primary"
+            plain
+            size="small"
+            class="batch-compact-button"
+            :loading="agentBatchRemarkSaving"
+            v-hasPermi="['server:markAgent:item:feedback']"
+            @click="openAgentBatchRemarkEditor"
+          >
+            批量备注
+          </el-button>
+          <el-button
             v-if="selectedRows.length && !isXiaomiWorkbench"
             type="warning"
             plain
@@ -120,6 +132,18 @@
             @click="handleBatchFeedback('0')"
           >
             批量待处理
+          </el-button>
+          <el-button
+            v-if="selectedRows.length && isWumaWorkbench"
+            type="primary"
+            plain
+            size="small"
+            class="batch-compact-button"
+            :loading="batchFeedbackSubmitting"
+            v-hasPermi="['server:markAgent:item:feedback']"
+            @click="handleBatchFeedback('3')"
+          >
+            批量开始处理
           </el-button>
           <el-button
             v-if="selectedRows.length && !isXiaomiWorkbench"
@@ -187,6 +211,7 @@
 
     <el-card shadow="never" class="table-card">
       <el-table
+        ref="processTableRef"
         v-loading="loading"
         :data="itemList"
         border
@@ -207,8 +232,8 @@
         <el-table-column label="处理平台" min-width="120" align="center" show-overflow-tooltip>
           <template #default="scope">{{ platformText(scope.row) }}</template>
         </el-table-column>
-        <el-table-column label="验证码" min-width="88" align="center" show-overflow-tooltip>
-          <template #default="scope">{{ verifyCodeText(scope.row) }}</template>
+        <el-table-column :label="isWumaWorkbench ? '处理结果' : '验证码'" min-width="110" align="center" show-overflow-tooltip>
+          <template #default="scope">{{ isWumaWorkbench ? manualResultText(scope.row) : verifyCodeText(scope.row) }}</template>
         </el-table-column>
         <el-table-column label="备注" min-width="100" align="center" show-overflow-tooltip>
           <template #default="scope">
@@ -247,6 +272,7 @@
         <el-table-column label="处理时间" width="152" align="center" show-overflow-tooltip>
           <template #default="scope">{{ processedTimeText(scope.row) }}</template>
         </el-table-column>
+        <el-table-column v-if="isWumaWorkbench" label="处理人" prop="processedBy" width="110" align="center" show-overflow-tooltip />
         <el-table-column label="操作" width="130" align="center" fixed="right">
           <template #default="scope">
             <div v-if="canManualProcess(scope.row)" class="action-cell">
@@ -316,10 +342,42 @@
         <el-button type="primary" :loading="agentRemarkSaving" @click="saveAgentRemark">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog
+      v-model="agentBatchRemarkEditor.visible"
+      title="批量编辑手动备注"
+      width="min(520px, 92vw)"
+      append-to-body
+      :close-on-click-modal="false"
+      :close-on-press-escape="!agentBatchRemarkSaving"
+      :show-close="!agentBatchRemarkSaving"
+    >
+      <el-form label-width="80px">
+        <el-form-item label="选中号码">
+          <span>{{ agentBatchRemarkEditor.itemIds.length }} 条</span>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input
+            v-model="agentBatchRemarkEditor.remark"
+            type="textarea"
+            :rows="4"
+            :maxlength="500"
+            show-word-limit
+            :disabled="agentBatchRemarkSaving"
+            placeholder="输入同一段备注；留空保存可清除所选号码的备注"
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button :disabled="agentBatchRemarkSaving" @click="agentBatchRemarkEditor.visible = false">取消</el-button>
+        <el-button type="primary" :loading="agentBatchRemarkSaving" @click="saveAgentBatchRemark">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
+import { isWumaPlatformCode } from '@/utils/markWumaPlatform'
 import { computed } from 'vue'
 import {
   listMarkAgentOrderItem,
@@ -327,6 +385,7 @@ import {
   updateMarkAgentProcessUserHidden,
   feedbackMarkOrderItem,
   updateMarkAgentOrderItemRemark,
+  batchUpdateMarkAgentOrderItemRemark,
   batchProcessXiaomi,
   batchMarkSuccess
 } from '@/api/server/markAgent'
@@ -371,11 +430,14 @@ const submittingId = ref(null)
 const batchSubmitting = ref(false)
 const batchSuccessSubmitting = ref(false)
 const batchFeedbackSubmitting = ref(false)
+const agentBatchRemarkSaving = ref(false)
 const selectedRows = ref([])
 const total = ref(0)
 const itemList = ref([])
 const agentRemarkSaving = ref(false)
 const agentRemarkEditor = reactive({ visible: false, itemId: null, phone: '', remark: '' })
+const agentBatchRemarkEditor = reactive({ visible: false, itemIds: [], remark: '' })
+const processTableRef = ref(null)
 const rowActionMap = ref({})
 const deadlineDate = ref('')
 const userOptionsLoading = ref(false)
@@ -398,9 +460,15 @@ const isXiaomiWorkbench = computed(() => {
   const code = String(props.platformCode || '').trim().toLowerCase()
   return code === XIAOMI_PLATFORM_CODE
 })
+const isWumaWorkbench = computed(() => {
+  const codes = resolvePlatformCodes().split(',').map((code) => code.trim()).filter(Boolean)
+  return codes.length > 0 && codes.every(isWumaPlatformCode)
+})
 const processStatusOptions = computed(() => MARK_ITEM_PROCESS_STATUS_OPTIONS)
 const emptyDescription = '暂无订单数据'
-const rowFeedbackOptions = MARK_ITEM_FEEDBACK_OPTIONS
+const rowFeedbackOptions = computed(() => isWumaWorkbench.value
+  ? [{ label: '开始处理', value: '3' }, ...MARK_ITEM_FEEDBACK_OPTIONS]
+  : MARK_ITEM_FEEDBACK_OPTIONS)
 const processStatusLabel = markItemProcessStatusLabel
 const processStatusTagType = markItemProcessStatusTagType
 const selectedProcessRows = computed(() => (selectedRows.value || []).filter((row) => canBatchProcessXiaomi(row)))
@@ -462,6 +530,12 @@ function verifyCodeText(row) {
   if (row?.processStatus === '1') return 'success'
   return '-'
 }
+function manualResultText(row) {
+  const result = String(row?.processResult || '').trim()
+  if (result === 'success') return '处理成功'
+  if (result === 'failed') return '处理失败'
+  return result || '-'
+}
 function platformText(row) {
   return String(row?.platformName || row?.platformCode || '-').trim() || '-'
 }
@@ -518,6 +592,7 @@ function hasXiaomiProcessingItems(items) {
   return (items || []).some((row) => isXiaomiPlatform(row) && String(row?.processStatus || '0') === '3')
 }
 function shouldRunTencentAutoRefresh() {
+  if (isWumaWorkbench.value) return false
   if (!hasTencentPending(itemList.value)) return false
   const status = queryParams.processStatus
   if (status === '1' || status === '2') return false
@@ -533,6 +608,7 @@ const autoDetectBanner = computed(() => {
 function submitRemarkText(row) {
   const remark = String(row?.orderRemark || '').trim()
   if (remark) return remark
+  if (isWumaWorkbench.value) return '-'
   const note = String(row?.processNote || '').trim()
   return note || '-'
 }
@@ -556,6 +632,46 @@ async function saveAgentRemark() {
   } finally {
     agentRemarkSaving.value = false
   }
+}
+function openAgentBatchRemarkEditor() {
+  const itemIds = [...new Set(
+    (selectedRows.value || []).map((row) => row?.id).filter((id) => id != null)
+  )]
+  if (!itemIds.length) {
+    proxy.$modal.msgWarning('请先勾选要备注的号码')
+    return
+  }
+  agentBatchRemarkEditor.itemIds = itemIds
+  agentBatchRemarkEditor.remark = ''
+  agentBatchRemarkEditor.visible = true
+}
+function saveAgentBatchRemark() {
+  if (agentBatchRemarkSaving.value || !agentBatchRemarkEditor.itemIds.length) return
+  const itemIds = [...agentBatchRemarkEditor.itemIds]
+  const remark = String(agentBatchRemarkEditor.remark || '').trim()
+  const action = remark ? '覆盖备注' : '清除备注'
+  const message = remark
+    ? `确认将这段备注覆盖到选中的 ${itemIds.length} 条号码？`
+    : `备注为空，确认清除选中的 ${itemIds.length} 条号码的代理备注？`
+
+  proxy.$modal.confirm(message).then(async () => {
+    agentBatchRemarkSaving.value = true
+    try {
+      await batchUpdateMarkAgentOrderItemRemark({ itemIds, remark })
+      const selectedIds = new Set(itemIds)
+      itemList.value.forEach((row) => {
+        if (selectedIds.has(row.id)) row.agentRemark = remark
+      })
+      agentBatchRemarkEditor.visible = false
+      processTableRef.value?.clearSelection()
+      proxy.$modal.msgSuccess(`${action}成功，共 ${itemIds.length} 条`)
+      getList()
+    } catch {
+      // Keep the dialog open so the entered remark can be retried.
+    } finally {
+      agentBatchRemarkSaving.value = false
+    }
+  }).catch(() => {})
 }
 function processedTimeText(row) {
   if (!row || row.processStatus === '0') return '-'
@@ -671,7 +787,7 @@ function handleBatchSuccess() {
 async function handleBatchFeedback(processStatus) {
   const rows = (selectedRows.value || []).filter((row) => canManualProcess(row))
   if (!rows.length || batchFeedbackSubmitting.value) return
-  const actionLabel = processStatus === '0' ? '待处理' : processStatus === '1' ? '处理成功' : '处理失败'
+  const actionLabel = processStatus === '0' ? '待处理' : processStatus === '1' ? '处理成功' : processStatus === '3' ? '开始处理' : '处理失败'
   proxy.$modal.confirm(`确认将选中的 ${rows.length} 条号码批量标记为${actionLabel}？`).then(async () => {
     batchFeedbackSubmitting.value = true
     const processResult = processStatus === '1' ? 'success' : processStatus === '2' ? 'failed' : ''
@@ -710,13 +826,14 @@ function buildExportRow(row) {
     row?.userName || '',
     row?.phone || '',
     platformText(row),
-    verifyCodeText(row),
+    isWumaWorkbench.value ? manualResultText(row) : verifyCodeText(row),
     submitRemarkText(row),
     row?.agentRemark || '',
     processStatusLabel(row?.processStatus, row),
     row?.orderNo || '',
     formatAgentDateTime(row?.createTime),
-    processedTimeText(row)
+    processedTimeText(row),
+    ...(isWumaWorkbench.value ? [row?.processedBy || ''] : [])
   ]
 }
 async function fetchAllExportRows() {
@@ -748,7 +865,7 @@ async function handleExport() {
       proxy.$modal.msgWarning('当前筛选条件下没有可导出数据')
       return
     }
-    const header = ['提交用户', '手机/固话', '处理平台', '验证码', '备注', '手动备注', '处理状态', '批次编号', '创建时间', '处理时间']
+    const header = ['提交用户', '手机/固话', '处理平台', isWumaWorkbench.value ? '处理结果' : '验证码', '备注', '手动备注', '处理状态', '批次编号', '创建时间', '处理时间', ...(isWumaWorkbench.value ? ['处理人'] : [])]
     downloadCsv(resolveExportFilename(), [header, ...rows.map((row) => buildExportRow(row))])
     proxy.$modal.msgSuccess(`已导出 ${rows.length} 条记录`)
   } catch (error) {
@@ -794,6 +911,8 @@ function submitFeedback(row, processStatus) {
   let confirmText = ''
   if (processStatus === '0') {
     confirmText = '确认将该号码标记为待处理？将清除当前处理结果'
+  } else if (processStatus === '3' && isWumaWorkbench.value) {
+    confirmText = '确认开始处理该号码？开始后系统将按无码平台巡检策略自动检测是否已无标记'
   } else if (currentStatus === '0' || currentStatus === '3') {
     confirmText = processStatus === '1'
       ? '确认将该号码标记成功?'

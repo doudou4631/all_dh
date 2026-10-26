@@ -76,7 +76,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         self.send_response(204)
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header(
+            "Access-Control-Allow-Headers",
+            "Content-Type, X-Visitor-Id, X-Device-Fingerprint, X-Free-Query-Token",
+        )
         self.end_headers()
 
     def do_GET(self) -> None:
@@ -313,6 +316,9 @@ class Handler(SimpleHTTPRequestHandler):
         return parsed.scheme in {"http", "https"} and parsed.netloc.lower() == host
 
     def _ensure_visitor_id(self) -> str:
+        requested = self.headers.get("X-Visitor-Id", "").strip()
+        if 8 <= len(requested) <= 64 and requested.replace("-", "").replace("_", "").isalnum():
+            return requested
         cookie = SimpleCookie()
         try:
             cookie.load(self.headers.get("Cookie", ""))

@@ -259,7 +259,7 @@ public class MarkPlatformTemplateServiceImpl implements IMarkPlatformTemplateSer
                 .eq(SysMenu::getParentId, MARK_USER_PARENT_MENU_ID)
                 .eq(SysMenu::getMenuType, "C")
                 .eq(SysMenu::getStatus, "0")
-                .eq(SysMenu::getComponent, MARK_USER_MENU_COMPONENT)
+                .in(SysMenu::getComponent, MARK_USER_MENU_COMPONENT, "server/mark/user/wuma")
                 .orderBy(SysMenu::getOrderNum, true)
                 .list();
         for (SysMenu menu : menus) {

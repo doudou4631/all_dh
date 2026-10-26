@@ -4,6 +4,7 @@ import com.geek.common.exception.ServiceException;
 import com.geek.common.utils.SecurityUtils;
 import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkOrderItem;
+import com.geek.server.domain.dto.MarkOrderBatchRemarkUpdateRequest;
 import com.geek.server.domain.dto.MarkOrderRemarkUpdateRequest;
 import com.geek.server.mapper.MarkOrderItemMapper;
 import com.geek.server.mapper.MarkOrderMapper;
@@ -16,6 +17,8 @@ import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Date;
+import java.util.Arrays;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -113,8 +116,56 @@ class MarkAgentOrderItemRemarkTest {
         verify(itemMapper, never()).updateAgentOrderItemRemark(anyLong(), anyString(), anyString());
     }
 
+    @Test
+    void batchUpdatesUniqueSelectedItemsAfterValidatingEachOrder() {
+        MarkOrderItem secondItem = new MarkOrderItem();
+        secondItem.setId(12L);
+        secondItem.setOrderId(22L);
+        when(itemMapper.selectMarkOrderItemById(12L)).thenReturn(secondItem);
+        MarkOrderBatchRemarkUpdateRequest request = batchRequest(
+                Arrays.asList(11L, 12L, 11L, null), "  批量联系  ");
+        when(itemMapper.updateAgentOrderItemRemarks(List.of(11L, 12L), "批量联系", "test-agent"))
+                .thenReturn(2);
+
+        assertEquals(2, service.updateAgentOrderItemRemarks(request));
+
+        verify(itemMapper).updateAgentOrderItemRemarks(List.of(11L, 12L), "批量联系", "test-agent");
+        verify(itemMapper, never()).updateAgentOrderItemRemark(anyLong(), anyString(), anyString());
+    }
+
+    @Test
+    void batchRejectsAnyUnapprovedOrderBeforeUpdatingItems() {
+        MarkOrderItem secondItem = new MarkOrderItem();
+        secondItem.setId(12L);
+        secondItem.setOrderId(23L);
+        MarkOrder pendingOrder = new MarkOrder();
+        pendingOrder.setId(23L);
+        pendingOrder.setAuditStatus("0");
+        when(itemMapper.selectMarkOrderItemById(12L)).thenReturn(secondItem);
+        when(orderMapper.selectMarkOrderById(23L)).thenReturn(pendingOrder);
+
+        assertThrows(ServiceException.class,
+                () -> service.updateAgentOrderItemRemarks(batchRequest(List.of(11L, 12L), "批量联系")));
+
+        verify(itemMapper, never()).updateAgentOrderItemRemarks(anyList(), anyString(), anyString());
+    }
+
+    @Test
+    void batchRejectsEmptySelection() {
+        assertThrows(ServiceException.class,
+                () -> service.updateAgentOrderItemRemarks(batchRequest(Arrays.asList(null, null), "备注")));
+        verify(itemMapper, never()).updateAgentOrderItemRemarks(anyList(), anyString(), anyString());
+    }
+
     private MarkOrderRemarkUpdateRequest request(String remark) {
         MarkOrderRemarkUpdateRequest request = new MarkOrderRemarkUpdateRequest();
+        request.setRemark(remark);
+        return request;
+    }
+
+    private MarkOrderBatchRemarkUpdateRequest batchRequest(List<Long> itemIds, String remark) {
+        MarkOrderBatchRemarkUpdateRequest request = new MarkOrderBatchRemarkUpdateRequest();
+        request.setItemIds(itemIds);
         request.setRemark(remark);
         return request;
     }

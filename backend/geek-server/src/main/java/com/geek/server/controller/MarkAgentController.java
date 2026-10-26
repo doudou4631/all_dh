@@ -12,6 +12,7 @@ import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
 import com.geek.server.domain.dto.MarkAgentPlatformStatusRequest;
 import com.geek.server.domain.dto.MarkAgentHiddenUserRequest;
+import com.geek.server.domain.dto.MarkOrderBatchRemarkUpdateRequest;
 import com.geek.server.domain.dto.MarkOrderAuditRequest;
 import com.geek.server.domain.dto.MarkOrderItemBatchIdsRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
@@ -209,6 +210,15 @@ public class MarkAgentController extends BaseController {
     @PostMapping("/item/{itemId}/remark")
     public AjaxResult updateOrderItemRemark(@PathVariable Long itemId, @Valid @RequestBody MarkOrderRemarkUpdateRequest request) {
         return AjaxResult.success("备注已保存", markOrderService.updateAgentOrderItemRemark(itemId, request));
+    }
+
+    @Operation(summary = "代理批量修改号码手动备注")
+    @PreAuthorize("@ss.hasPermi('server:markAgent:item:feedback')")
+    @Log(title = "代理批量备注", businessType = BusinessType.UPDATE)
+    @PostMapping("/item/remark/batch")
+    public AjaxResult updateOrderItemRemarks(@Valid @RequestBody MarkOrderBatchRemarkUpdateRequest request) {
+        int updated = markOrderService.updateAgentOrderItemRemarks(request);
+        return AjaxResult.success("批量备注已保存", updated);
     }
 
     @Operation(summary = "代理回填处理结果")

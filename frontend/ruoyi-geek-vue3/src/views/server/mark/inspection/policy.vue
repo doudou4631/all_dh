@@ -26,7 +26,7 @@
     <el-dialog v-model="dialog" :title="form.id?'编辑巡检策略':'新增巡检策略'" width="520px" append-to-body>
       <el-form ref="formRef" :model="form" :rules="rules" label-width="105px">
         <el-form-item label="策略名称" prop="policyName"><el-input v-model="form.policyName" maxlength="100"/></el-form-item>
-        <el-form-item label="处理平台" prop="platformCode"><el-select v-model="form.platformCode" style="width:100%"><el-option v-for="p in platforms" :key="p.platformCode" :label="`${p.platformName} / ${p.platformCode}${p.enabled?'':'（已关闭）'}`" :value="p.platformCode" :disabled="!p.enabled"/></el-select></el-form-item>
+        <el-form-item label="处理平台" prop="platformCode"><el-select v-model="form.platformCode" style="width:100%"><el-option v-for="p in platforms" :key="p.platformCode" :label="`${p.platformName} / ${p.platformCode}${p.enabled ? '' : '（已关闭）'}`" :value="p.platformCode" :disabled="!p.enabled"/></el-select></el-form-item>
         <el-form-item label="检测订单"><el-input model-value="待处理订单" disabled/></el-form-item>
         <el-form-item label="巡检间隔" prop="intervalValue">
           <div class="interval-control"><el-input-number v-model="form.intervalValue" :min="1" :max="9999" controls-position="right"/><el-select v-model="form.intervalUnit" style="width:100px"><el-option label="分钟" value="MINUTE"/><el-option label="小时" value="HOUR"/></el-select></div>

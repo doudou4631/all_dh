@@ -8,6 +8,7 @@
 .local-logs/
 .tmp/
 backups/
+output/customer-api-delete/
 docs/正式服务器信息.md
 
 # IDE and build output
@@ -22,3 +23,4 @@ frontend/ruoyi-geek-vue3/td/backend/.env
 backend/geek-admin/src/main/resources/application-auth.yml
 backend/geek-admin/src/main/resources/application-data.yml
 backend/geek-admin/src/main/resources/application.yml
+frontend/free-query-mini/project.private.config.json

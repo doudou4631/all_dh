@@ -33,6 +33,7 @@ import { ref } from 'vue'
 import { useRoute } from 'vue-router'
 import useUserStore from '@/store/modules/user'
 import { resolveMarkPlatformCodeFromRoute } from '@/utils/markPlatformRoute'
+import { WUMA_PLATFORM_NAMES } from '@/utils/markWumaPlatform'
 
 const route = useRoute()
 const userStore = useUserStore()
@@ -45,6 +46,7 @@ const canViewAudit = computed(() => {
   return name === 'admin' || userStore.roles.some((role) => String(role).toLowerCase() === 'admin' || String(role).toLowerCase() === 'role_admin')
 })
 const platformNames = Object.freeze({
+  ...WUMA_PLATFORM_NAMES,
   taidixiong: '泰迪熊',
   td_gaopin: 'TdGaopin高频',
   td_second: 'Taidixiong二次',

@@ -147,6 +147,16 @@ export function updateMarkAgentOrderItemRemark(itemId, remark) {
   })
 }
 
+// 代理批量修改号码手动备注
+export function batchUpdateMarkAgentOrderItemRemark(data) {
+  return request({
+    url: '/server/markAgent/item/remark/batch',
+    method: 'post',
+    data,
+    headers: { repeatSubmit: false }
+  })
+}
+
 // 代理回填处理结果
 export function feedbackMarkOrderItem(itemId, data) {
   return request({

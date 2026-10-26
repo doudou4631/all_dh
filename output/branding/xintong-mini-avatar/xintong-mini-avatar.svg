@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="信通号码服务小程序头像：深蓝底色，白色放大镜与金色电话">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#174D76"/>
+      <stop offset="1" stop-color="#082C4B"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#background)"/>
+  <path d="M666 658L806 798" fill="none" stroke="#E8C37C" stroke-width="82" stroke-linecap="round"/>
+  <circle cx="480" cy="472" r="246" fill="none" stroke="#F6FAFC" stroke-width="66"/>
+  <path transform="translate(324 316) scale(13)" fill="#E8C37C" d="M6.3 2C4.2 2 2.4 3.3 2.2 5.3C1.8 9.7 5.2 15.4 9.8 19C13 21.5 16.3 22.5 18.8 21.8C20.6 21.3 21.9 19.6 21.9 17.9C21.9 17.4 21.6 17 21.2 16.8L17.4 14.9C16.8 14.6 16.2 14.8 15.8 15.3L14.2 17C11 15.4 8.5 12.9 6.9 9.7L8.6 8.1C9.1 7.7 9.3 7.1 9 6.5L7.1 2.7C7 2.3 6.7 2 6.3 2Z"/>
+</svg>

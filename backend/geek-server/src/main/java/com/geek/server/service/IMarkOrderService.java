@@ -39,6 +39,9 @@ public interface IMarkOrderService {
 
     MarkOrderDetailVO createOrder(MarkOrderCreateRequest request);
 
+    /** Customer API orders are assigned to the agent configured on the customer API credential. */
+    MarkOrderDetailVO createCustomerApiOrder(MarkOrderCreateRequest request, Long assignedAgentId);
+
     MarkOrderPrecheckResultVO precheckOrder(MarkOrderCreateRequest request);
     MarkTencentStatusQueryResultVO queryTencentStatus(MarkTencentStatusQueryRequest request);
     MarkTencentSubmitResultVO submitTencent(MarkTencentSubmitRequest request);
@@ -85,6 +88,8 @@ public interface IMarkOrderService {
     MarkOrderDetailVO feedbackOrderItem(Long itemId, MarkOrderItemProcessRequest request);
 
     String updateAgentOrderItemRemark(Long itemId, MarkOrderRemarkUpdateRequest request);
+
+    int updateAgentOrderItemRemarks(MarkOrderBatchRemarkUpdateRequest request);
 
     MarkOrderDetailVO completeOrder(Long orderId);
     MarkOrderDetailVO completeOrder(Long orderId, MarkOrderItemProcessRequest request);
