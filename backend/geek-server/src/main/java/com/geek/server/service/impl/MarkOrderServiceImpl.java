@@ -202,13 +202,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (assignedAgentId == null) {
             throw new ServiceException("客户 API 未配置责任代理");
         }
-        String requestNo = request == null ? null : StringUtils.trimToNull(request.getRequestNo());
-        if (requestNo != null) {
-            Long existingOrderId = markOrderMapper.selectOrderIdByUserAndRequestNo(SecurityUtils.getUserId(), requestNo);
-            if (existingOrderId != null) {
-                return selectMyOrderDetail(existingOrderId);
-            }
-        }
+        return createOrderInternal(request, assignedAgentId);
+    }
+
+    private void assertOrderPrecheckPassed(MarkOrderCreateRequest request) {
         MarkOrderPrecheckResultVO precheck = precheckOrder(request);
         if (precheck.getFailedCount() != null && precheck.getFailedCount() > 0) {
             throw new ServiceException("存在检测失败号码，不能提交：" + String.join("、", precheck.getFailedPhones()));
@@ -219,7 +216,6 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (precheck.getMarkedCount() == null || !precheck.getMarkedCount().equals(precheck.getTotalCount())) {
             throw new ServiceException("号码检测结果不完整，不能提交");
         }
-        return createOrderInternal(request, assignedAgentId);
     }
 
     private MarkOrderDetailVO createOrderInternal(MarkOrderCreateRequest request, Long assignedAgentIdOverride) {
@@ -253,6 +249,12 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         assertUserPlatformQuotaSufficient(currentUserId, platformCode, totalAmount);
 
         assertPhonesNotSubmittedToday(currentUserId, platformCode, normalizedPhones);
+
+        // Validate the entire batch before locking/debiting quota or writing any order.
+        // Customer API and Wuma web orders share this check, including idempotent retries.
+        if (assignedAgentIdOverride != null || MarkWumaPlatform.contains(platformCode)) {
+            assertOrderPrecheckPassed(request);
+        }
 
         String platformName = resolvePlatformNameByUser(currentUserId, platformCode, request.getPlatformName());
         assertTdGaopinOrderPhonesValid(
@@ -507,6 +509,11 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 .collect(Collectors.toList());
         if (enabledPlatforms.isEmpty()) {
             return null;
+        }
+        if (MarkWumaPlatform.contains(platformCode)) {
+            return enabledPlatforms.stream()
+                    .filter(platform -> StringUtils.equalsIgnoreCase(StringUtils.trim(platform.getPlatformKey()), platformCode))
+                    .findFirst().orElse(null);
         }
         List<String> candidates = buildMarkPrecheckPlatformCandidates(platformCode, platformName);
         if (candidates.isEmpty()) {

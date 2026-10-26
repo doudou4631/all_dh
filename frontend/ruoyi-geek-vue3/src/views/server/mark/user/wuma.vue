@@ -11,7 +11,7 @@
               <div class="wuma-content-shell">
                 <div class="wuma-submit-panel">
                   <div class="wuma-submit-title">{{ platformName }}标记提交</div>
-                  <el-input v-model="phonesText" type="textarea" :rows="9" resize="vertical" class="wuma-submit-textarea" :disabled="submitting" placeholder="可粘贴混合文本，点击「号码提取」整理号码；支持手机号或座机号" />
+                  <el-input v-model="phonesText" type="textarea" :rows="9" resize="vertical" class="wuma-submit-textarea" :disabled="checking || submitting" placeholder="可粘贴混合文本，点击「号码提取」整理号码；支持手机号或座机号" />
                   <div class="wuma-submit-stats">
                     有效号码：<strong>{{ phoneStats.phones.length }}</strong> 个
                     <span v-if="phoneStats.duplicateCount">· 已去重 {{ phoneStats.duplicateCount }} 个</span>
@@ -23,9 +23,9 @@
                     <div v-else-if="!hasSubmitQuota" class="submit-warning-bar">当前平台剩余次数不足，无法提交。</div>
                     <div v-else-if="insufficientRemain && phoneStats.phones.length" class="submit-warning-bar">当前平台剩余次数不足，本次需 {{ expectedAmount }} 次，剩余 {{ remainCount }} 次。</div>
                     <div class="wuma-submit-buttons">
-                      <el-button type="warning" class="wuma-action-btn wuma-action-btn--extract" :disabled="!String(phonesText || '').trim() || submitting" @click="extractPhones">号码提取</el-button>
-                      <el-button type="primary" class="wuma-action-btn" :loading="submitting" :disabled="!canSubmit" v-hasPermi="['server:markUser:order:add']" @click="prepareSubmit">批量提交</el-button>
-                      <el-button class="wuma-action-btn" :disabled="submitting || !String(phonesText || '').trim()" @click="resetSubmission">重置</el-button>
+                      <el-button type="warning" class="wuma-action-btn wuma-action-btn--extract" :disabled="!String(phonesText || '').trim() || checking || submitting" @click="extractPhones">号码提取</el-button>
+                      <el-button type="primary" class="wuma-action-btn" :loading="checking || submitting" :disabled="!canSubmit" v-hasPermi="['server:markUser:order:add']" @click="prepareSubmit">{{ checking ? '正在检测' : '批量提交' }}</el-button>
+                      <el-button class="wuma-action-btn" :disabled="checking || submitting || !String(phonesText || '').trim()" @click="resetSubmission">重置</el-button>
                     </div>
                   </div>
                 </div>
@@ -66,7 +66,21 @@
         </el-tabs>
       </div>
     </el-card>
-    <SubmitConfirmDialog v-model="confirmOpen" :platform-name="pendingSubmission?.platformName || ''" :phones="pendingSubmission?.phones || []" :loading="submitting" @confirm="submitOrder" @cancel="confirmOpen = false" />
+    <el-dialog v-model="confirmOpen" title="号码检测与提交确认" width="min(760px, 94vw)" :close-on-click-modal="false" :close-on-press-escape="!checking && !submitting" :show-close="!checking && !submitting" destroy-on-close>
+      <p>提交平台：<strong>{{ pendingSubmission?.platformName }}</strong> · 共 {{ pendingSubmission?.phones.length || 0 }} 个号码</p>
+      <el-alert :title="precheckMessage" :type="precheckPassed ? 'success' : checking ? 'info' : 'warning'" :closable="false" show-icon />
+      <el-table v-loading="checking" :data="precheckRows" border max-height="360" class="wuma-precheck-table">
+        <el-table-column prop="phone" label="号码" min-width="145" />
+        <el-table-column label="检测结果" width="110"><template #default="{ row }"><el-tag :type="row.querySuccess === true && row.marked === true ? 'success' : row.querySuccess === true ? 'info' : 'danger'">{{ row.querySuccess === true ? row.marked === true ? '有标记' : '无标记/不符合' : '检测失败' }}</el-tag></template></el-table-column>
+        <el-table-column label="检测说明" min-width="240"><template #default="{ row }">{{ row.errorMessage || row.detail || '-' }}</template></el-table-column>
+      </el-table>
+      <el-checkbox v-model="submissionChecked" :disabled="!precheckPassed || checking || submitting">我已核对平台、号码和检测结果</el-checkbox>
+      <template #footer>
+        <el-button :disabled="checking || submitting" @click="confirmOpen = false">返回修改</el-button>
+        <el-button v-if="!precheckPassed" :loading="checking" :disabled="submitting" @click="prepareSubmit">重新检测</el-button>
+        <el-button type="primary" :loading="submitting" :disabled="!precheckPassed || !submissionChecked || checking" @click="submitOrder">确认提交{{ pendingSubmission?.platformName }}</el-button>
+      </template>
+    </el-dialog>
     <el-dialog v-model="resultOpen" title="处理结果" width="min(560px, 92vw)" destroy-on-close>
       <div v-loading="resultLoading">
         <el-descriptions v-if="resultItem" :column="1" border>
@@ -84,14 +98,13 @@
 </template>
 
 <script setup name="MarkUserWuma">
-import { computed, getCurrentInstance, reactive, ref, watch } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
-import { createMarkUserOrder, getMarkUserOrderDetail, listMarkUserOrder, listMarkUserPlatformPrice } from '@/api/server/markUser'
+import { createMarkUserOrder, getMarkUserOrderDetail, listMarkUserOrder, listMarkUserPlatformPrice, precheckMarkUserOrder } from '@/api/server/markUser'
 import { extractPhoneNumbersPreservingOrder, formatExtractedPhones } from '@/utils/markPhoneExtract'
 import { resolveMarkPlatformCodeFromRoute } from '@/utils/markPlatformRoute'
 import { WUMA_PLATFORM_CODES, WUMA_PLATFORM_NAMES } from '@/utils/markWumaPlatform'
 import { markItemProcessStatusLabel, markItemProcessStatusTagType } from '@/utils/markProcessStatus'
-import SubmitConfirmDialog from './components/SubmitConfirmDialog.vue'
 import OrderRemarkEditor from './components/OrderRemarkEditor.vue'
 import RecordBatchActions from './components/RecordBatchActions.vue'
 
@@ -110,6 +123,11 @@ const activeTab = ref('submit')
 const phonesText = ref('')
 const remark = ref('')
 const submitting = ref(false)
+const checking = ref(false)
+const precheckRows = ref([])
+const precheckError = ref('')
+const submissionChecked = ref(false)
+let precheckRequest = 0
 const submitResult = ref(null)
 const confirmOpen = ref(false)
 const pendingSubmission = ref(null)
@@ -124,7 +142,20 @@ const phoneStats = computed(() => {
 const expectedAmount = computed(() => phoneStats.value.phones.length * unitPrice.value)
 const hasSubmitQuota = computed(() => remainCount.value >= unitPrice.value)
 const insufficientRemain = computed(() => expectedAmount.value > remainCount.value)
-const canSubmit = computed(() => platformEnabled.value && !platformLoading.value && !!phoneStats.value.phones.length && !insufficientRemain.value)
+const canSubmit = computed(() => !checking.value && !submitting.value && platformEnabled.value && !platformLoading.value && !!phoneStats.value.phones.length && !insufficientRemain.value)
+const precheckPassed = computed(() => {
+  const phones = pendingSubmission.value?.phones || []
+  const rows = precheckRows.value
+  return !checking.value && !precheckError.value && phones.length > 0 && rows.length === phones.length
+    && new Set(rows.map((row) => row.phone)).size === phones.length
+    && rows.every((row) => phones.includes(row.phone) && row.querySuccess === true && row.marked === true)
+})
+const precheckMessage = computed(() => {
+  if (checking.value) return '正在逐个检测号码，请稍候…'
+  if (precheckError.value) return precheckError.value
+  if (precheckPassed.value) return '所有号码均有标记，可确认提交；提交时将再次校验。'
+  return '存在无标记、不符合条件或检测失败的号码，本批次不能提交，不扣处理次数。请修改号码后重试。'
+})
 const submitResultRows = computed(() => {
   if (!submitResult.value) return []
   return [
@@ -176,12 +207,26 @@ function resetSubmission() {
   submitResult.value = null
   pendingSubmission.value = null
   submissionRequestNo = ''
+  invalidatePrecheck()
 }
 
-watch([phonesText, remark, platformCode], () => { submissionRequestNo = '' })
+function invalidatePrecheck() {
+  precheckRequest++
+  checking.value = false
+  precheckRows.value = []
+  precheckError.value = ''
+  submissionChecked.value = false
+  confirmOpen.value = false
+  pendingSubmission.value = null
+}
 
-function prepareSubmit() {
-  if (submitting.value) return
+watch([phonesText, remark, platformCode], () => {
+  submissionRequestNo = ''
+  invalidatePrecheck()
+}, { flush: 'sync' })
+
+async function prepareSubmit() {
+  if (checking.value || submitting.value) return
   if (!phoneStats.value.phones.length) return proxy.$modal.msgWarning('请输入有效号码（手机号或座机号）')
   if (!platformEnabled.value) return proxy.$modal.msgWarning(`${platformName.value}平台未开启，请联系管理员`)
   if (insufficientRemain.value) return proxy.$modal.msgWarning(`当前平台剩余次数不足，本次需 ${expectedAmount.value} 次，剩余 ${remainCount.value} 次`)
@@ -190,15 +235,31 @@ function prepareSubmit() {
     platformCode: platformCode.value, platformName: platformName.value,
     phones: [...phoneStats.value.phones], remark: remark.value.trim(), requestNo: submissionRequestNo
   }
+  const payload = pendingSubmission.value
+  const request = ++precheckRequest
+  precheckRows.value = []
+  precheckError.value = ''
+  submissionChecked.value = false
+  checking.value = true
   confirmOpen.value = true
+  try {
+    const response = await precheckMarkUserOrder(payload, { timeout: 600000 })
+    if (request !== precheckRequest) return
+    precheckRows.value = Array.isArray(response.data?.items) ? response.data.items : []
+    if (!precheckRows.value.length) precheckError.value = '检测未返回有效结果，请重新检测。'
+  } catch {
+    if (request === precheckRequest) precheckError.value = '号码检测失败，请重新检测；本次未创建订单、未扣处理次数。'
+  } finally {
+    if (request === precheckRequest) checking.value = false
+  }
 }
 
 async function submitOrder() {
-  if (submitting.value || !pendingSubmission.value) return
+  if (submitting.value || !confirmOpen.value || !precheckPassed.value || !submissionChecked.value) return
   submitting.value = true
   const payload = pendingSubmission.value
   try {
-    const response = await createMarkUserOrder(payload)
+    const response = await createMarkUserOrder(payload, { timeout: 600000 })
     const order = response.data?.order || response.data || {}
     submitResult.value = {
       orderNo: order.orderNo || '-',
@@ -308,8 +369,9 @@ watch(platformCode, () => {
   if (platformCode.value) loadPlatform()
 }, { immediate: true })
 watch(activeTab, (tab) => { if (tab === 'record') { loadRecords().catch(() => {}); loadPlatform() } })
-onBeforeRouteLeave(() => !submitting.value)
-onBeforeRouteUpdate(() => !submitting.value)
+onBeforeRouteLeave(() => !checking.value && !submitting.value)
+onBeforeRouteUpdate(() => !checking.value && !submitting.value)
+onBeforeUnmount(() => { precheckRequest++ })
 </script>
 
 <style scoped>
@@ -338,6 +400,7 @@ onBeforeRouteUpdate(() => !submitting.value)
 .wuma-action-btn--extract { color: #fff; background: #e6bd73; border-color: #e6bd73; }
 .wuma-action-btn--extract:hover { background: #d9ae60; border-color: #d9ae60; }
 .wuma-result-block { margin-top: 14px; padding: 16px; }
+.wuma-precheck-table { margin: 16px 0; }
 .wuma-result-table :deep(.el-table__header th) { background: #eef4f9; color: #1f2d3d; }
 .wuma-result-empty { display: inline-block; padding: 48px 0; color: #909399; }
 .record-form { margin-bottom: 4px; }

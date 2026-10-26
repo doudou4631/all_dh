@@ -28,6 +28,12 @@ const ROUTE_TOKEN_PLATFORM_CODES = Object.freeze({
   xiaomi: 'xiaomi',
   xiaomimark: 'xiaomi',
   markuserxiaomi: 'xiaomi',
+  wumataidixiong: 'wuma_taidixiong',
+  markuserwumataidixiong: 'wuma_taidixiong',
+  wumatengxun: 'wuma_tengxun',
+  markuserwumatengxun: 'wuma_tengxun',
+  wuma360: 'wuma_360',
+  markuserwuma360: 'wuma_360',
   agenttaidixiong: 'taidixiong',
   agenttdgaopin: 'td_gaopin',
   agenttdsecond: 'td_second',
@@ -38,7 +44,13 @@ const ROUTE_TOKEN_PLATFORM_CODES = Object.freeze({
   agentyidong: 'yidonggaopin',
   agentdianhuabang: 'dianhuabang',
   agentltgj: 'ltgj',
-  agentxiaomi: 'xiaomi'
+  agentxiaomi: 'xiaomi',
+  agentwumataidixiong: 'wuma_taidixiong',
+  markagentwumataidixiong: 'wuma_taidixiong',
+  agentwumatengxun: 'wuma_tengxun',
+  markagentwumatengxun: 'wuma_tengxun',
+  agentwuma360: 'wuma_360',
+  markagentwuma360: 'wuma_360'
 })
 
 const PLATFORM_NAME_CODES = Object.freeze({
@@ -53,7 +65,10 @@ const PLATFORM_NAME_CODES = Object.freeze({
   '移动高频': 'yidonggaopin',
   '电话邦': 'dianhuabang',
   '联通管家': 'ltgj',
-  '小米手机': 'xiaomi'
+  '小米手机': 'xiaomi',
+  'Taidixiong无码': 'wuma_taidixiong',
+  'Tengxun无码': 'wuma_tengxun',
+  '360无码': 'wuma_360'
 })
 
 function normalizeCode(code) {

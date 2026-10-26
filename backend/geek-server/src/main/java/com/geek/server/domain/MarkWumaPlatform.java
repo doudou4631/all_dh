@@ -1,6 +1,6 @@
 package com.geek.server.domain;
 
-/** Independent platforms fulfilled manually without verification codes or upstream queries. */
+/** Independent platforms fulfilled manually without verification codes, after a mark precheck. */
 public enum MarkWumaPlatform {
     TAIDIXIONG("wuma_taidixiong", "Taidixiong无码"),
     TENGXUN("wuma_tengxun", "Tengxun无码"),

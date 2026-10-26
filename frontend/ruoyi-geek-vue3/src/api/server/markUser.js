@@ -19,11 +19,12 @@ export function listMarkUserOrder(query) {
 }
 
 // 用户提交订单
-export function createMarkUserOrder(data) {
+export function createMarkUserOrder(data, config = {}) {
   return request({
     url: '/server/markUser/order',
     method: 'post',
-    data
+    data,
+    ...config
   })
 }
 // 用户提交消除订单
@@ -37,11 +38,12 @@ export function createMarkUserClearOrder(data, config = {}) {
 }
 
 // 用户提交前预查询
-export function precheckMarkUserOrder(data) {
+export function precheckMarkUserOrder(data, config = {}) {
   return request({
     url: '/server/markUser/order/precheck',
     method: 'post',
-    data
+    data,
+    ...config
   })
 }
 

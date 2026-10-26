@@ -8,11 +8,16 @@ import com.geek.common.utils.SecurityUtils;
 import com.geek.server.domain.*;
 import com.geek.server.domain.dto.MarkOrderCreateRequest;
 import com.geek.server.domain.dto.MarkOrderItemProcessRequest;
+import com.geek.server.domain.dto.OptimizedBatchItemOutcome;
+import com.geek.server.domain.entity.BatchTask;
+import com.geek.server.domain.vo.ApiRequestVO;
 import com.geek.server.domain.vo.MarkOrderPrecheckResultVO;
 import com.geek.server.mapper.*;
 import com.geek.server.service.IMarkPlatformMappingService;
 import com.geek.server.service.IMarkUserNoticeService;
 import com.geek.server.service.IUserPlatformUrlConfigService;
+import com.geek.server.service.IUserAggregateConfigService;
+import com.geek.server.service.IOptimizedBatchApiExecutor;
 import com.geek.system.mapper.SysUserMapper;
 import com.mybatisflex.core.query.QueryChain;
 import org.junit.jupiter.api.AfterEach;
@@ -39,6 +44,7 @@ class MarkWumaProcessingTest {
     private final MarkWalletLogMapper wallets = mock(MarkWalletLogMapper.class);
     private final IMarkPlatformMappingService mappings = mock(IMarkPlatformMappingService.class);
     private final IUserPlatformUrlConfigService queryApis = mock(IUserPlatformUrlConfigService.class);
+    private final IOptimizedBatchApiExecutor executor = mock(IOptimizedBatchApiExecutor.class);
     private final Map<String, MarkUserPlatformQuota> balances = new LinkedHashMap<>();
     private final List<MarkOrderItem> savedItems = new ArrayList<>();
     private MarkOrder savedOrder;
@@ -61,6 +67,22 @@ class MarkWumaProcessingTest {
         ReflectionTestUtils.setField(service, "objectMapper", new ObjectMapper());
         ReflectionTestUtils.setField(service, "markUserNoticeService", mock(IMarkUserNoticeService.class));
         ReflectionTestUtils.setField(service, "userPlatformUrlConfigService", queryApis);
+        ReflectionTestUtils.setField(service, "optimizedBatchApiExecutor", executor);
+        IUserAggregateConfigService aggregates = mock(IUserAggregateConfigService.class);
+        ReflectionTestUtils.setField(service, "userAggregateConfigService", aggregates);
+        when(aggregates.selectUserAggregateConfigById(1L)).thenReturn(new UserAggregateConfig());
+        List<UserPlatformUrlConfig> providers = new ArrayList<>();
+        for (MarkWumaPlatform platform : MarkWumaPlatform.values()) {
+            UserPlatformUrlConfig provider = new UserPlatformUrlConfig();
+            provider.setId(14L + providers.size());
+            provider.setPlatformKey(platform.getCode());
+            provider.setPlatformName(platform.getDisplayName());
+            provider.setStatus("0");
+            provider.setUrl("https://example.invalid/query");
+            providers.add(provider);
+        }
+        when(queryApis.selectUserPlatformUrlConfigList(any())).thenReturn(providers);
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("yes-骚扰电话"));
 
         security = mockStatic(SecurityUtils.class);
         security.when(SecurityUtils::getUserId).thenReturn(100L);
@@ -126,7 +148,7 @@ class MarkWumaProcessingTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
-    void directlySubmitsDeduplicatedPhonesAndOnlyDebitsItsOwnPlatform(String code) {
+    void checksDeduplicatedPhonesBeforeSubmissionAndOnlyDebitsItsOwnPlatform(String code) {
         service.createOrder(request(code));
         assertEquals(code, savedOrder.getPlatformCode());
         assertEquals(200L, savedOrder.getAssignedAgentId());
@@ -140,13 +162,18 @@ class MarkWumaProcessingTest {
         verify(wallets).insertMarkWalletLog(log.capture());
         assertEquals(code, log.getValue().getPlatformCode());
         assertEquals(-4L, log.getValue().getChangeAmount());
-        verifyNoInteractions(queryApis);
+        ArgumentCaptor<ApiRequestVO> calls = ArgumentCaptor.forClass(ApiRequestVO.class);
+        verify(executor, times(2)).execute(calls.capture(), any(), anyString());
+        assertEquals(List.of("13800138000", "01012345678"), calls.getAllValues().stream().map(ApiRequestVO::getPhoneNumber).toList());
+        String expectedName = Arrays.stream(MarkWumaPlatform.values()).filter(platform -> platform.getCode().equals(code)).findFirst().orElseThrow().getDisplayName();
+        assertTrue(calls.getAllValues().stream().allMatch(call -> expectedName.equals(call.getPlatformName())));
     }
 
     @ParameterizedTest
     @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
     void refundsFailureOnceAndRechargesSuccessEvenAfterResetToPending(String code) {
         service.createOrder(request(code));
+        clearInvocations(queryApis, executor);
         savedOrder.setAuditStatus("1");
         service.feedbackOrderItem(11L, feedback("2"));
         service.feedbackOrderItem(11L, feedback("2"));
@@ -164,6 +191,7 @@ class MarkWumaProcessingTest {
         assertTrue(log.getAllValues().stream().allMatch(entry -> code.equals(entry.getPlatformCode())));
         verify(orders, times(4)).lockMarkOrderById(22L);
         verifyNoInteractions(queryApis);
+        verifyNoInteractions(executor);
     }
 
     @Test
@@ -176,6 +204,7 @@ class MarkWumaProcessingTest {
         assertEquals(0L, balances.get("wuma_360").getRemainCount());
         verify(orders, times(1)).insertMarkOrder(any());
         verify(wallets, times(1)).insertMarkWalletLog(any());
+        verify(executor, times(2)).execute(any(), any(), anyString());
     }
 
     @Test
@@ -241,11 +270,107 @@ class MarkWumaProcessingTest {
         when(items.selectPendingProcessItems(code, 1)).thenReturn(List.of(savedItems.get(0)));
         assertTrue(service.hasPendingInspection(code));
 
-        // This test has no configured provider. The inspection failure must keep the agent-started item processing for retry.
+        // A provider disabled after submission must not complete or refund an agent-started item.
+        clearInvocations(queryApis);
+        when(queryApis.selectUserPlatformUrlConfigList(any())).thenReturn(List.of());
         assertEquals("FAILED", service.processGenericPendingOrderItemAuto(11L, code, "SUCCESS"));
         assertEquals("3", savedItems.get(0).getProcessStatus());
         assertEquals("0", savedItems.get(0).getRefunded());
         verify(queryApis).selectUserPlatformUrlConfigList(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void rejectsUnmarkedNumbersEvenWhenCallingCreateDirectly(String code) {
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("no"));
+        ServiceException error = assertThrows(ServiceException.class, () -> service.createOrder(request(code)));
+        assertTrue(error.getMessage().contains("无标记"));
+        assertRejectedWithoutWrites(code);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void rejectsFailedQueryAndEntireMixedBatch(String code) {
+        BatchTask.ApiResult failure = BatchTask.ApiResult.builder().success(false).error("检测服务超时").build();
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("yes-骚扰电话"),
+                OptimizedBatchItemOutcome.builder().apiResult(failure).build());
+        ServiceException error = assertThrows(ServiceException.class, () -> service.createOrder(request(code)));
+        assertTrue(error.getMessage().contains("检测失败"));
+        assertTrue(error.getMessage().contains("01012345678"));
+        assertRejectedWithoutWrites(code);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void rejectsMixedMarkedAndUnmarkedBatch(String code) {
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("yes-骚扰电话"), outcome("no"));
+        assertThrows(ServiceException.class, () -> service.createOrder(request(code)));
+        assertRejectedWithoutWrites(code);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void rejectsMissingOrDisabledProvider(String code) {
+        queryApis.selectUserPlatformUrlConfigList(new UserPlatformUrlConfig()).forEach(provider -> provider.setStatus("1"));
+        assertThrows(ServiceException.class, () -> service.createOrder(request(code)));
+        assertRejectedWithoutWrites(code);
+        verifyNoInteractions(executor);
+    }
+
+    @Test
+    void rejectsProviderResponseWithoutMarkResults() {
+        BatchTask.ApiResult empty = BatchTask.ApiResult.builder().success(true).data(Map.of()).build();
+        when(executor.execute(any(), any(), anyString())).thenReturn(OptimizedBatchItemOutcome.builder().apiResult(empty).build());
+        assertThrows(ServiceException.class, () -> service.createOrder(request("wuma_360")));
+        assertRejectedWithoutWrites("wuma_360");
+    }
+
+    @Test
+    void cannotUseSubmittedPlatformNameToBypassMissingWumaProvider() {
+        UserPlatformUrlConfig other = new UserPlatformUrlConfig();
+        other.setId(1L); other.setPlatformKey("tengxun"); other.setPlatformName("腾讯"); other.setStatus("0");
+        when(queryApis.selectUserPlatformUrlConfigList(any())).thenReturn(List.of(other));
+        MarkOrderCreateRequest request = request("wuma_360");
+        request.setPlatformName("腾讯");
+        assertThrows(ServiceException.class, () -> service.createOrder(request));
+        assertRejectedWithoutWrites("wuma_360");
+        verifyNoInteractions(executor);
+    }
+
+    @Test
+    void repeatsValidationAtCreationAfterSuccessfulWebPrecheck() {
+        MarkOrderCreateRequest request = request("wuma_360");
+        assertEquals(2, service.precheckOrder(request).getMarkedCount());
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("no"));
+        assertThrows(ServiceException.class, () -> service.createOrder(request));
+        assertRejectedWithoutWrites("wuma_360");
+    }
+
+    @Test
+    void customerApiChecksOnceAndRetainsCredentialAgentAndIdempotency() {
+        MarkOrderCreateRequest request = request("wuma_360");
+        service.createCustomerApiOrder(request, 300L);
+        assertEquals(300L, savedOrder.getAssignedAgentId());
+        when(orders.selectOrderIdByUserAndRequestNo(100L, "wuma-request")).thenReturn(22L);
+        service.createCustomerApiOrder(request, 300L);
+        verify(executor, times(2)).execute(any(), any(), anyString());
+        verify(orders).insertMarkOrder(any());
+        verify(wallets).insertMarkWalletLog(any());
+    }
+
+    private void assertRejectedWithoutWrites(String code) {
+        assertEquals(10L, balances.get(code).getRemainCount());
+        verify(quotas, never()).selectByUserAndPlatformForUpdate(anyLong(), anyString());
+        verify(quotas, never()).updateMarkUserPlatformQuota(any());
+        verify(orders, never()).insertMarkOrder(any());
+        verify(items, never()).insertMarkOrderItem(any());
+        verifyNoInteractions(wallets);
+    }
+
+    private OptimizedBatchItemOutcome outcome(String status) {
+        BatchTask.ApiResult result = BatchTask.ApiResult.builder().success(true)
+                .data(Map.of("platformResults", List.of(Map.of("platform", "测试平台", "status", status)))).build();
+        return OptimizedBatchItemOutcome.builder().apiResult(result).build();
     }
 
     private MarkOrderCreateRequest request(String code) {
