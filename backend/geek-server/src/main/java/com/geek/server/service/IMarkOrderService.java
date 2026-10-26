@@ -1,6 +1,7 @@
 package com.geek.server.service;
 
 import com.geek.server.domain.MarkOrder;
+import com.geek.server.domain.MarkInspectionPolicy;
 import com.geek.server.domain.MarkUserPlatformPrice;
 import com.geek.server.domain.MarkWalletLog;
 import com.geek.server.domain.dto.MarkAgentPlatformQuotaAdjustRequest;
@@ -123,6 +124,10 @@ public interface IMarkOrderService {
     java.util.Map<String, Object> processPendingInspection(String platformCode, int batchLimit, String autoAction, Long inspectionRunLogId);
 
     boolean hasPendingInspection(String platformCode);
+
+    boolean hasPendingInspection(MarkInspectionPolicy policy);
+
+    java.util.Map<String, Object> processPendingInspection(MarkInspectionPolicy policy, Long inspectionRunLogId);
 
     java.util.Map<String, Object> batchProcessXiaomiItems(java.util.List<Long> itemIds);
 

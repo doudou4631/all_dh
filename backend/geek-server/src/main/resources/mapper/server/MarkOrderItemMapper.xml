@@ -542,6 +542,20 @@ PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         limit #{limit}
     </select>
 
+    <select id="selectInspectionProcessItems" resultMap="MarkOrderItemResult">
+        <include refid="selectMarkOrderItemVo"/>
+        inner join mark_order mo on mo.id = moi.order_id
+        where mo.audit_status = '1'
+          and lower(mo.platform_code) = lower(#{platformCode})
+          and (
+            (#{orderScope} in ('PENDING', 'BOTH') and moi.process_status = '0'
+             and (lower(#{platformCode}) not in ('wuma_taidixiong', 'wuma_tengxun', 'wuma_360') or #{autoTakeover} = true))
+            or (#{orderScope} in ('PROCESSING', 'BOTH') and moi.process_status = '3')
+          )
+        order by coalesce(moi.update_time, moi.create_time) asc, moi.id asc
+        limit #{limit}
+    </select>
+
     <select id="selectPendingTdxSecondItems" resultMap="MarkOrderItemResult">
         <include refid="selectMarkOrderItemVo"/>
         inner join mark_order mo on mo.id = moi.order_id

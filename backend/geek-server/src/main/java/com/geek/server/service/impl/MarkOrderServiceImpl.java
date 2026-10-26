@@ -12,6 +12,7 @@ import com.geek.server.domain.MarkOrder;
 import com.geek.server.domain.MarkOrderItem;
 import com.geek.server.domain.MarkWumaPlatform;
 import com.geek.server.domain.MarkInspectionRunDetail;
+import com.geek.server.domain.MarkInspectionPolicy;
 import com.geek.server.domain.MarkPlatformMapping;
 import com.geek.server.domain.MarkPlatformTemplate;
 import com.geek.server.domain.MarkUserPlatformPrice;
@@ -1494,7 +1495,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         assertAuditPassed(order);
         List<MarkOrderItem> lockedItems = null;
         if (MarkWumaPlatform.contains(order.getPlatformCode())) {
-            lockedItems = lockWumaOrderItems(order);
+            lockedItems = lockOrderItems(order);
             item = lockedItems.stream().filter(current -> itemId.equals(current.getId())).findFirst()
                     .orElseThrow(() -> new ServiceException("订单明细不存在"));
         }
@@ -1553,7 +1554,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         return buildOrderDetail(order.getId());
     }
 
-    private List<MarkOrderItem> lockWumaOrderItems(MarkOrder order) {
+    private List<MarkOrderItem> lockOrderItems(MarkOrder order) {
         if (markOrderMapper.lockMarkOrderById(order.getId()) == null) {
             throw new ServiceException("订单不存在");
         }
@@ -1568,7 +1569,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         assertAgentReadable(order, true);
         assertAuditPassed(order);
         List<MarkOrderItem> itemList = MarkWumaPlatform.contains(order.getPlatformCode())
-                ? lockWumaOrderItems(order) : markOrderItemMapper.selectMarkOrderItemsByOrderId(orderId);
+                ? lockOrderItems(order) : markOrderItemMapper.selectMarkOrderItemsByOrderId(orderId);
         boolean hasPending = itemList.stream().anyMatch(item -> {
             String status = StringUtils.defaultIfBlank(item.getProcessStatus(), "0");
             return "0".equals(status) || "3".equals(status);
@@ -1595,7 +1596,7 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         assertAuditPassed(order);
         boolean wumaOrder = MarkWumaPlatform.contains(order.getPlatformCode());
         List<MarkOrderItem> itemList = wumaOrder
-                ? lockWumaOrderItems(order) : markOrderItemMapper.selectMarkOrderItemsByOrderId(orderId);
+                ? lockOrderItems(order) : markOrderItemMapper.selectMarkOrderItemsByOrderId(orderId);
         Date now = DateUtils.getNowDate();
         String currentUserName = SecurityUtils.getUsername();
         String processResult = StringUtils.trimToNull(request.getProcessResult());
@@ -2208,15 +2209,37 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Override
     public Map<String, Object> processPendingInspection(String platformCode, int batchLimit, String autoAction, Long inspectionRunLogId) {
-        String normalizedCode = StringUtils.lowerCase(StringUtils.trimToEmpty(platformCode));
+        MarkInspectionPolicy policy = new MarkInspectionPolicy();
+        policy.setPlatformCode(platformCode);
+        policy.setBatchLimit(batchLimit);
+        policy.setAutoAction(autoAction);
+        return processPendingInspection(policy, inspectionRunLogId);
+    }
+
+    @Override
+    public boolean hasPendingInspection(MarkInspectionPolicy policy) {
+        List<MarkOrderItem> items = selectInspectionItems(policy, 1);
+        return items != null && !items.isEmpty();
+    }
+
+    private List<MarkOrderItem> selectInspectionItems(MarkInspectionPolicy policy, int limit) {
+        String code = StringUtils.lowerCase(StringUtils.trimToEmpty(policy.getPlatformCode()));
+        return "td_gaopin".equals(code)
+                ? markOrderItemMapper.selectPendingTdGaopinProcessItems(limit)
+                : markOrderItemMapper.selectInspectionProcessItems(code, policy.resolvedOrderScope(), policy.takeoverEnabled(), limit);
+    }
+
+    @Override
+    public Map<String, Object> processPendingInspection(MarkInspectionPolicy policy, Long inspectionRunLogId) {
+        String normalizedCode = StringUtils.lowerCase(StringUtils.trimToEmpty(policy.getPlatformCode()));
         if (StringUtils.isBlank(normalizedCode)) throw new ServiceException("巡检平台编码不能为空");
-        String normalizedAction = "FAILED".equalsIgnoreCase(autoAction) ? "FAILED" : "SUCCESS";
-        int safeLimit = Math.max(1, Math.min(batchLimit, 500));
+        String normalizedAction = "FAILED".equalsIgnoreCase(policy.getAutoAction()) ? "FAILED" : "SUCCESS";
+        int safeLimit = Math.max(1, Math.min(policy.getBatchLimit() == null ? 100 : policy.getBatchLimit(), 500));
         boolean tdGaopin = "td_gaopin".equals(normalizedCode);
-        List<MarkOrderItem> pendingItems = tdGaopin
-                ? markOrderItemMapper.selectPendingTdGaopinProcessItems(safeLimit)
-                : markOrderItemMapper.selectPendingProcessItems(normalizedCode, safeLimit);
+        List<MarkOrderItem> pendingItems = selectInspectionItems(policy, safeLimit);
         int scannedCount = pendingItems == null ? 0 : pendingItems.size();
+        int checkedCount = 0;
+        int markedCount = 0;
         int successCount = 0;
         int failedCount = 0;
         int skippedCount = 0;
@@ -2231,10 +2254,13 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             try {
                 String result = tdGaopin
                         ? applicationContext.getBean(MarkOrderServiceImpl.class).processTdGaopinOrderItemAuto(pendingItem.getId(), normalizedAction)
-                        : applicationContext.getBean(MarkOrderServiceImpl.class).processGenericPendingOrderItemAuto(pendingItem.getId(), normalizedCode, normalizedAction);
+                        : applicationContext.getBean(MarkOrderServiceImpl.class).processGenericPendingOrderItemAuto(
+                                pendingItem.getId(), normalizedCode, normalizedAction, policy.resolvedOrderScope(), policy.takeoverEnabled());
                 recordInspectionDetail(inspectionRunLogId, pendingItem, result, null);
+                if (!"SKIPPED".equals(result)) checkedCount++;
                 if ("PROCESSED".equals(result)) successCount++;
                 else if ("FAILED".equals(result)) failedCount++;
+                else if ("HAS_MARK".equals(result)) markedCount++;
                 else skippedCount++;
             } catch (Exception ex) {
                 failedCount++;
@@ -2242,7 +2268,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
                 log.warn("平台自动巡检失败 platformCode={} itemId={}", normalizedCode, pendingItem.getId(), ex);
             }
         }
-        return inspectionResult(scannedCount, successCount, failedCount, skippedCount);
+        Map<String, Object> result = inspectionResult(scannedCount, successCount, failedCount, skippedCount);
+        result.put("checkedCount", checkedCount);
+        result.put("markedCount", markedCount);
+        return result;
     }
 
     private void recordInspectionDetail(Long runLogId, MarkOrderItem sourceItem, String result, String errorMessage) {
@@ -2256,6 +2285,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             String processResult = item == null ? null : item.getProcessResult();
             String detail = StringUtils.defaultIfBlank(processResult, errorMessage);
             String detectionResult = resolveInspectionDetectionResult(detail, item == null ? null : item.getProcessNote());
+            boolean skipped = "SKIPPED".equals(result) || "SKIPPED_AFTER_QUERY".equals(result);
+            if (skipped) detectionResult = "SKIPPED_AFTER_QUERY".equals(result) ? "状态已更新" : "未检测";
             MarkInspectionRunDetail record = new MarkInspectionRunDetail();
             record.setRunLogId(runLogId);
             record.setOrderId(item == null ? sourceItem.getOrderId() : item.getOrderId());
@@ -2264,9 +2295,10 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             record.setPhone(item == null ? sourceItem.getPhone() : item.getPhone());
             record.setDetectionResult(detectionResult);
             record.setQualified("无标记".equals(detectionResult) ? "1" : "0");
-            record.setSubmissionStatus("1".equals(processStatus) ? "SUCCESS" : ("2".equals(processStatus) || "FAILED".equals(result) ? "FAILED" : "SKIPPED"));
-            record.setSubmissionResult("1".equals(processStatus) ? "已提交成功" : ("2".equals(processStatus) ? "已提交失败" : "未提交"));
-            record.setProcessNote(StringUtils.defaultIfBlank(item == null ? null : item.getProcessNote(), errorMessage));
+            record.setSubmissionStatus(skipped ? "SKIPPED" : ("1".equals(processStatus) ? "SUCCESS" : ("2".equals(processStatus) || "FAILED".equals(result) ? "FAILED" : "SKIPPED")));
+            record.setSubmissionResult(skipped ? "本轮未处理" : ("1".equals(processStatus) ? "处理成功" : ("2".equals(processStatus) ? "处理失败" : "等待下次巡检")));
+            record.setProcessNote(skipped ? "当前订单状态不符合策略或已被其他任务更新，本轮跳过"
+                    : StringUtils.defaultIfBlank(item == null ? null : item.getProcessNote(), errorMessage));
             record.setDetectedTime(DateUtils.getNowDate());
             markInspectionMapper.insertDetail(record);
         } catch (Exception ex) {
@@ -2286,6 +2318,8 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
     private Map<String, Object> inspectionResult(int scanned, int success, int failed, int skipped) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("scannedCount", scanned);
+        result.put("checkedCount", 0);
+        result.put("markedCount", 0);
         result.put("matchedCount", success);
         result.put("successCount", success);
         result.put("failedCount", failed);
@@ -2295,31 +2329,53 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
 
     @Transactional(rollbackFor = Exception.class)
     public String processGenericPendingOrderItemAuto(Long itemId, String platformCode, String autoAction) {
+        MarkInspectionPolicy legacy = new MarkInspectionPolicy();
+        legacy.setPlatformCode(platformCode);
+        return processGenericPendingOrderItemAuto(itemId, platformCode, autoAction, legacy.resolvedOrderScope(), false);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public String processGenericPendingOrderItemAuto(Long itemId, String platformCode, String autoAction,
+                                                     String orderScope, boolean autoTakeover) {
+        MarkInspectionPolicy policy = new MarkInspectionPolicy();
+        policy.setPlatformCode(platformCode); policy.setOrderScope(orderScope); policy.setAutoTakeover(autoTakeover);
         MarkOrderItem item = markOrderItemMapper.selectMarkOrderItemById(itemId);
         if (item == null) return "SKIPPED";
         String processStatus = StringUtils.defaultIfBlank(item.getProcessStatus(), "0");
-        boolean inspectionProcessing = (isXiaomiPlatform(platformCode) || MarkWumaPlatform.contains(platformCode))
-                && "3".equals(processStatus);
-        if (MarkWumaPlatform.contains(platformCode) && !inspectionProcessing) return "SKIPPED";
-        if (!"0".equals(processStatus) && !inspectionProcessing) return "SKIPPED";
+        if (!policy.acceptsStatus(processStatus)) return "SKIPPED";
         MarkOrder order = requireOrder(item.getOrderId());
         if (!StringUtils.equalsIgnoreCase(StringUtils.trim(order.getPlatformCode()), StringUtils.trim(platformCode))) return "SKIPPED";
         if (!"1".equals(StringUtils.defaultIfBlank(order.getAuditStatus(), "0")) || order.getUserId() == null) return "SKIPPED";
 
+        Long beforeUpdateTime = item.getUpdateTime() == null ? null : item.getUpdateTime().getTime();
+        String beforeRefunded = item.getRefunded();
         SysUser orderUser = requireUser(order.getUserId());
         MarkPhoneCheckItemVO checkItem = queryXiaomiPhoneStatus(item.getPhone(), orderUser.getUserId(), orderUser.getUserName(), order);
+
+        // Query without holding row locks, then use a current read to protect concurrent feedback and settlement.
+        List<MarkOrderItem> lockedItems = lockOrderItems(order);
+        item = lockedItems.stream().filter(current -> itemId.equals(current.getId())).findFirst().orElse(null);
+        if (item == null || !policy.acceptsStatus(item.getProcessStatus())
+                || !Objects.equals(processStatus, item.getProcessStatus())
+                || !Objects.equals(beforeRefunded, item.getRefunded())
+                || !Objects.equals(beforeUpdateTime, item.getUpdateTime() == null ? null : item.getUpdateTime().getTime())) {
+            return "SKIPPED_AFTER_QUERY";
+        }
         Date now = DateUtils.getNowDate();
+        // A pending-only policy keeps pending items eligible for its next retry.
+        if (autoTakeover && "0".equals(processStatus) && "BOTH".equals(orderScope)) item.setProcessStatus("3");
         if (!Boolean.TRUE.equals(checkItem.getQuerySuccess()) || !isXiaomiNoMark(checkItem)) {
             boolean queryFailed = !Boolean.TRUE.equals(checkItem.getQuerySuccess());
             item.setProcessResult(queryFailed ? null : checkItem.getDetail());
+            String remainingStatus = "3".equals(item.getProcessStatus()) ? "处理中" : "待处理";
             item.setProcessNote(queryFailed
-                    ? "自动巡检：平台查询失败，保持处理中并等待下次巡检"
-                    : "自动巡检：仍有标记，保持处理中等待下次巡检");
+                    ? "自动巡检：平台查询失败，保持" + remainingStatus + "并等待下次巡检：" + StringUtils.substring(checkItem.getDetail(), 0, 200)
+                    : "自动巡检：仍有标记，保持" + remainingStatus + "等待下次巡检");
             item.setUpdateBy(GENERIC_INSPECTION_OPERATOR); item.setUpdateTime(now);
             markOrderItemMapper.updateMarkOrderItem(item);
             // A failed platform query is an inspection failure, not a business skip.
             // Keep the item pending, but surface the failure in run statistics/logs.
-            return queryFailed ? "FAILED" : "SKIPPED";
+            return queryFailed ? "FAILED" : "HAS_MARK";
         }
 
         boolean markFailed = "FAILED".equals(autoAction);
@@ -2330,9 +2386,12 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
         if (markFailed && !"1".equals(item.getRefunded())) {
             refundOrderItem(order, item, GENERIC_INSPECTION_OPERATOR, now, "自动巡检处理失败退款");
             item.setRefunded("1");
+        } else if (!markFailed && "1".equals(item.getRefunded())) {
+            deductOrderItem(order, item, GENERIC_INSPECTION_OPERATOR, now, "自动巡检完成已退款明细重新扣费");
+            item.setRefunded("0");
         }
         markOrderItemMapper.updateMarkOrderItem(item);
-        refreshOrderStats(order.getId(), GENERIC_INSPECTION_OPERATOR);
+        refreshOrderStats(order.getId(), GENERIC_INSPECTION_OPERATOR, lockedItems);
         return "PROCESSED";
     }
 
@@ -2578,6 +2637,20 @@ public class MarkOrderServiceImpl implements IMarkOrderService {
             }
             item.setQuerySuccess(true);
             fillPrecheckItemFromData(item, queryResult.get("data"));
+            if (MarkWumaPlatform.contains(order.getPlatformCode())) {
+                String status = StringUtils.lowerCase(StringUtils.trimToEmpty(item.getStatus()));
+                boolean knownUnmarked = Set.of("no", "无", "无标记", "未标记").contains(status) || status.startsWith("no-");
+                boolean knownMarked = Set.of("yes", "有标记").contains(status) || status.startsWith("yes-");
+                if (!knownUnmarked && !knownMarked) {
+                    item.setQuerySuccess(false);
+                    item.setMarked(null);
+                    item.setDetail("平台未返回可识别的标记结果");
+                    return item;
+                }
+                item.setMarked(knownMarked);
+                item.setDetail(knownMarked ? "有标记" : "无标记");
+                return item;
+            }
             applyXiaomiPrecheckRules(item);
             if (StringUtils.isBlank(item.getDetail())) {
                 item.setDetail(normalizeTeddyMarkDetailLabel(StringUtils.defaultIfBlank(item.getStatus(), "未知")));

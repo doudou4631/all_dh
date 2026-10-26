@@ -6,6 +6,7 @@ import com.geek.server.domain.MarkInspectionPolicy;
 import com.geek.server.domain.MarkInspectionRunDetail;
 import com.geek.server.domain.MarkInspectionRunLog;
 import com.geek.server.domain.MarkPlatformMapping;
+import com.geek.server.domain.MarkWumaPlatform;
 import com.geek.server.mapper.MarkInspectionMapper;
 import com.geek.server.service.IMarkInspectionService;
 import com.geek.server.service.IMarkOrderService;
@@ -24,8 +25,20 @@ public class MarkInspectionServiceImpl implements IMarkInspectionService {
 
     @Override public List<MarkInspectionPolicy> selectPolicies(MarkInspectionPolicy query) { return mapper.selectPolicyList(query == null ? new MarkInspectionPolicy() : query); }
     @Override public MarkInspectionPolicy selectPolicy(Long id) { return mapper.selectPolicyById(id); }
-    @Override public int savePolicy(MarkInspectionPolicy policy) { policy.setStatus("1"); normalize(policy); policy.setNextRunTime(nextTime(policy)); return mapper.insertPolicy(policy); }
-    @Override public int updatePolicy(MarkInspectionPolicy policy) { if (policy == null || policy.getId() == null) throw new ServiceException("策略ID不能为空"); normalize(policy); policy.setNextRunTime(nextTime(policy)); return mapper.updatePolicy(policy); }
+    @Override public int savePolicy(MarkInspectionPolicy policy) { normalize(policy); policy.setNextRunTime(nextTime(policy)); return mapper.insertPolicy(policy); }
+    @Override public int updatePolicy(MarkInspectionPolicy policy) {
+        if (policy == null || policy.getId() == null) throw new ServiceException("策略ID不能为空");
+        MarkInspectionPolicy existing = mapper.selectPolicyById(policy.getId());
+        if (existing == null) throw new ServiceException("巡检策略不存在");
+        if ("1".equals(existing.getRunning())) throw new ServiceException("策略正在执行，请结束后再修改");
+        if (policy.getOrderScope() == null) policy.setOrderScope(existing.resolvedOrderScope());
+        if (policy.getAutoTakeover() == null) policy.setAutoTakeover(existing.takeoverEnabled());
+        normalize(policy);
+        policy.setNextRunTime(nextTime(policy));
+        int updated = mapper.updatePolicy(policy);
+        if (updated == 0) throw new ServiceException("策略正在执行或已删除，请刷新后重试");
+        return updated;
+    }
     @Override public int deletePolicy(Long id) { if (id == null) throw new ServiceException("策略ID不能为空"); return mapper.deletePolicy(id); }
     @Override public List<MarkInspectionRunLog> selectLogs(MarkInspectionRunLog query) { return mapper.selectLogList(query == null ? new MarkInspectionRunLog() : query); }
     @Override public List<MarkInspectionRunDetail> selectLogDetails(Long runLogId) { return runLogId == null ? Collections.emptyList() : mapper.selectDetailList(runLogId); }
@@ -49,7 +62,7 @@ public class MarkInspectionServiceImpl implements IMarkInspectionService {
     @Override public void runDuePolicies() {
         for (MarkInspectionPolicy policy : mapper.selectDuePolicies(new Date())) {
             try {
-                if (!orderService.hasPendingInspection(policy.getPlatformCode())) {
+                if (!orderService.hasPendingInspection(policy)) {
                     mapper.deferPolicy(policy.getId(), nextTime(policy));
                     continue;
                 }
@@ -87,6 +100,7 @@ public class MarkInspectionServiceImpl implements IMarkInspectionService {
         if (policy == null) throw new ServiceException("巡检策略不存在");
         if (!platformMappingService.isTargetEnabled(policy.getPlatformCode())) throw new ServiceException("平台已关闭，不能执行巡检");
         if (mapper.claimPolicy(id) == 0) throw new ServiceException("策略已停用或正在执行");
+        policy = mapper.selectPolicyById(id);
         Date start = new Date();
         MarkInspectionRunLog log = new MarkInspectionRunLog();
         log.setRunNo("XJ" + System.currentTimeMillis()); log.setPolicyId(id); log.setPolicyName(policy.getPolicyName());
@@ -94,13 +108,15 @@ public class MarkInspectionServiceImpl implements IMarkInspectionService {
         log.setTriggerType(StringUtils.defaultIfBlank(triggerType, "MANUAL")); log.setRunStatus("RUNNING"); log.setStartTime(start);
         mapper.insertLog(log);
         try {
-            Map<String, Object> stats = orderService.processPendingInspection(policy.getPlatformCode(), policy.getBatchLimit(), policy.getAutoAction(), log.getId());
+            Map<String, Object> stats = orderService.processPendingInspection(policy, log.getId());
             log.setScannedCount(number(stats, "scannedCount")); log.setMatchedCount(number(stats, "matchedCount"));
+            log.setCheckedCount(number(stats, "checkedCount")); log.setMarkedCount(number(stats, "markedCount"));
             log.setSuccessCount(number(stats, "successCount")); log.setFailedCount(number(stats, "failedCount"));
             log.setSkippedCount(number(stats, "skippedCount"));
             log.setRunStatus(log.getFailedCount() > 0 ? "PARTIAL" : "SUCCESS");
         } catch (Exception ex) {
             log.setScannedCount(0); log.setMatchedCount(0); log.setSuccessCount(0); log.setFailedCount(1); log.setSkippedCount(0);
+            log.setCheckedCount(0); log.setMarkedCount(0);
             log.setRunStatus("FAILED"); log.setErrorMessage(StringUtils.substring(ex.getMessage(), 0, 500));
         } finally {
             Date end = new Date(); log.setEndTime(end); mapper.updateLog(log);
@@ -126,6 +142,16 @@ public class MarkInspectionServiceImpl implements IMarkInspectionService {
         policy.setIntervalSeconds((int) Math.min(Integer.MAX_VALUE, intervalSeconds));
         policy.setBatchLimit(Math.max(1, Math.min(500, policy.getBatchLimit() == null ? 100 : policy.getBatchLimit())));
         policy.setAutoAction("FAILED".equalsIgnoreCase(policy.getAutoAction()) ? "FAILED" : "SUCCESS");
+        String scope = StringUtils.upperCase(StringUtils.trimToEmpty(policy.resolvedOrderScope()));
+        if (!Set.of("PENDING", "PROCESSING", "BOTH").contains(scope)) throw new ServiceException("检测订单范围无效");
+        policy.setOrderScope(scope);
+        policy.setAutoTakeover(policy.takeoverEnabled());
+        if (MarkWumaPlatform.contains(platformCode) && !"PROCESSING".equals(scope) && !policy.takeoverEnabled()) {
+            throw new ServiceException("无码巡检包含待处理订单时需开启自动接管，或选择仅处理中");
+        }
+        if ("td_gaopin".equals(platformCode) && (!"PENDING".equals(scope) || policy.takeoverEnabled())) {
+            throw new ServiceException("泰迪高频使用专用待处理队列，仅支持待处理且无需自动接管");
+        }
         if (!"0".equals(policy.getStatus()) && !"1".equals(policy.getStatus())) policy.setStatus("1");
     }
     private Date nextTime(MarkInspectionPolicy policy) { return new Date(System.currentTimeMillis() + policy.getIntervalSeconds() * 1000L); }

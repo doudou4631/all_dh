@@ -28,6 +28,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.ApplicationContext;
 
 import java.util.*;
 
@@ -68,6 +69,10 @@ class MarkWumaProcessingTest {
         ReflectionTestUtils.setField(service, "markUserNoticeService", mock(IMarkUserNoticeService.class));
         ReflectionTestUtils.setField(service, "userPlatformUrlConfigService", queryApis);
         ReflectionTestUtils.setField(service, "optimizedBatchApiExecutor", executor);
+        ApplicationContext context = mock(ApplicationContext.class);
+        when(context.getBean(MarkOrderServiceImpl.class)).thenReturn(service);
+        ReflectionTestUtils.setField(service, "applicationContext", context);
+        ReflectionTestUtils.setField(service, "markInspectionMapper", mock(MarkInspectionMapper.class));
         IUserAggregateConfigService aggregates = mock(IUserAggregateConfigService.class);
         ReflectionTestUtils.setField(service, "userAggregateConfigService", aggregates);
         when(aggregates.selectUserAggregateConfigById(1L)).thenReturn(new UserAggregateConfig());
@@ -140,7 +145,10 @@ class MarkWumaProcessingTest {
         });
         when(items.selectMarkOrderItemsByOrderId(22L)).thenReturn(savedItems);
         when(items.selectMarkOrderItemsByOrderIdForUpdate(22L)).thenReturn(savedItems);
-        when(items.selectMarkOrderItemById(11L)).thenAnswer(invocation -> savedItems.isEmpty() ? null : savedItems.get(0));
+        when(items.selectMarkOrderItemById(anyLong())).thenAnswer(invocation -> {
+            Long id = invocation.getArgument(0);
+            return savedItems.stream().filter(item -> id.equals(item.getId())).findFirst().orElse(null);
+        });
     }
 
     @AfterEach
@@ -358,6 +366,165 @@ class MarkWumaProcessingTest {
         verify(wallets).insertMarkWalletLog(any());
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void automaticallyCompletesPendingUnmarkedItemWithoutAgentAndWithoutAnotherDebit(String code) {
+        service.createOrder(request(code));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(executor, wallets, items);
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("no"));
+
+        assertEquals("PROCESSED", service.processGenericPendingOrderItemAuto(11L, code, "SUCCESS", "BOTH", true));
+        assertEquals("1", savedItems.get(0).getProcessStatus());
+        assertEquals("无标记", savedItems.get(0).getProcessResult());
+        assertNotNull(savedItems.get(0).getProcessedTime());
+        assertEquals(6L, balances.get(code).getRemainCount());
+        assertEquals("SKIPPED", service.processGenericPendingOrderItemAuto(11L, code, "SUCCESS", "BOTH", true));
+        verify(executor).execute(any(), any(), anyString());
+        verify(items).updateMarkOrderItem(any());
+        verifyNoInteractions(wallets);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void automaticallyTakesOverMarkedPendingItemAndKeepsItForRetry(String code) {
+        service.createOrder(request(code));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(wallets);
+        assertEquals("HAS_MARK", service.processGenericPendingOrderItemAuto(11L, code, "SUCCESS", "BOTH", true));
+        assertEquals("3", savedItems.get(0).getProcessStatus());
+        assertTrue(savedItems.get(0).getProcessNote().contains("仍有标记"));
+        assertNull(savedItems.get(0).getProcessedTime());
+        verifyNoInteractions(wallets);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"wuma_taidixiong", "wuma_tengxun", "wuma_360"})
+    void queryFailureNeverCompletesOrRefundsPendingOrder(String code) {
+        service.createOrder(request(code));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(wallets);
+        when(executor.execute(any(), any(), anyString())).thenReturn(null);
+        assertEquals("FAILED", service.processGenericPendingOrderItemAuto(11L, code, "FAILED", "BOTH", true));
+        assertEquals("3", savedItems.get(0).getProcessStatus());
+        assertEquals("0", savedItems.get(0).getRefunded());
+        assertTrue(savedItems.get(0).getProcessNote().contains("查询失败"));
+        verifyNoInteractions(wallets);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"UNKNOWN", "error", "yesterday", ""})
+    void unknownMarkStatusIsAQueryFailure(String status) {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(wallets);
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome(status));
+        assertEquals("FAILED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", true));
+        assertEquals("3", savedItems.get(0).getProcessStatus());
+        assertTrue(savedItems.get(0).getProcessNote().contains("未返回可识别"));
+        verifyNoInteractions(wallets);
+    }
+
+    @Test
+    void successfulHttpResponseWithoutPlatformResultsCannotCompleteOrder() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        when(executor.execute(any(), any(), anyString())).thenReturn(OptimizedBatchItemOutcome.builder()
+                .apiResult(BatchTask.ApiResult.builder().success(true).data(Map.of()).build()).build());
+        assertEquals("FAILED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", true));
+        assertEquals("3", savedItems.get(0).getProcessStatus());
+    }
+
+    @Test
+    void scopeAndTakeoverSwitchPreventUnwantedPendingProcessing() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(executor);
+        assertEquals("SKIPPED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", false));
+        assertEquals("SKIPPED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "PROCESSING", true));
+        savedItems.get(0).setProcessStatus("3");
+        assertEquals("SKIPPED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "PENDING", true));
+        verifyNoInteractions(executor);
+    }
+
+    @Test
+    void pendingOnlyPolicyKeepsMarkedItemPendingForNextRetry() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        assertEquals("HAS_MARK", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "PENDING", true));
+        assertEquals("0", savedItems.get(0).getProcessStatus());
+        assertEquals("HAS_MARK", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "PENDING", true));
+    }
+
+    @Test
+    void failedActionRefundsOnceAndRecompletedRefundedItemIsChargedOnce() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(wallets);
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("no"));
+        assertEquals("PROCESSED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "FAILED", "BOTH", true));
+        assertEquals(8L, balances.get("wuma_360").getRemainCount());
+        assertEquals("SKIPPED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "FAILED", "BOTH", true));
+        savedItems.get(0).setProcessStatus("0");
+        assertEquals("PROCESSED", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", true));
+        assertEquals(6L, balances.get("wuma_360").getRemainCount());
+        assertEquals("0", savedItems.get(0).getRefunded());
+        verify(wallets, times(2)).insertMarkWalletLog(any());
+    }
+
+    @Test
+    void cannotOverwriteManualCompletionWhileQueryWasRunning() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        clearInvocations(items, wallets);
+        when(executor.execute(any(), any(), anyString())).thenAnswer(call -> {
+            savedItems.get(0).setProcessStatus("2");
+            savedItems.get(0).setRefunded("1");
+            savedItems.get(0).setProcessResult("代理已回填失败");
+            return outcome("no");
+        });
+        assertEquals("SKIPPED_AFTER_QUERY", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", true));
+        assertEquals("代理已回填失败", savedItems.get(0).getProcessResult());
+        verify(items, never()).updateMarkOrderItem(any());
+        verifyNoInteractions(wallets);
+    }
+
+    @Test
+    void aConcurrentInspectionWithSameStatusInvalidatesOldDetection() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        savedItems.get(0).setProcessStatus("3");
+        clearInvocations(items);
+        when(executor.execute(any(), any(), anyString())).thenAnswer(call -> {
+            savedItems.get(0).setUpdateTime(new Date(savedItems.get(0).getUpdateTime().getTime() + 1000));
+            savedItems.get(0).setProcessResult("另一轮巡检仍有标记");
+            return outcome("no");
+        });
+        assertEquals("SKIPPED_AFTER_QUERY", service.processGenericPendingOrderItemAuto(11L, "wuma_360", "SUCCESS", "BOTH", true));
+        assertEquals("3", savedItems.get(0).getProcessStatus());
+        verify(items, never()).updateMarkOrderItem(any());
+    }
+
+    @Test
+    void policyIsUsedForScheduledSelectionAndDetailedRunCounts() {
+        service.createOrder(request("wuma_360"));
+        savedOrder.setAuditStatus("1");
+        MarkInspectionPolicy policy = new MarkInspectionPolicy();
+        policy.setPlatformCode("wuma_360"); policy.setOrderScope("BOTH"); policy.setAutoTakeover(true);
+        policy.setBatchLimit(100); policy.setAutoAction("SUCCESS");
+        when(items.selectInspectionProcessItems("wuma_360", "BOTH", true, 1)).thenReturn(List.of(savedItems.get(0)));
+        assertTrue(service.hasPendingInspection(policy));
+        when(items.selectInspectionProcessItems("wuma_360", "BOTH", true, 100)).thenReturn(savedItems);
+        when(executor.execute(any(), any(), anyString())).thenReturn(outcome("no"), outcome("yes-骚扰电话"));
+        Map<String, Object> result = service.processPendingInspection(policy, 99L);
+        assertEquals(2, result.get("scannedCount")); assertEquals(2, result.get("checkedCount"));
+        assertEquals(1, result.get("successCount")); assertEquals(1, result.get("markedCount"));
+        assertEquals(0, result.get("failedCount")); assertEquals(0, result.get("skippedCount"));
+        assertEquals("1", savedItems.get(0).getProcessStatus()); assertEquals("3", savedItems.get(1).getProcessStatus());
+        MarkInspectionMapper inspection = (MarkInspectionMapper) ReflectionTestUtils.getField(service, "markInspectionMapper");
+        verify(inspection, times(2)).insertDetail(any());
+    }
+
     private void assertRejectedWithoutWrites(String code) {
         assertEquals(10L, balances.get(code).getRemainCount());
         verify(quotas, never()).selectByUserAndPlatformForUpdate(anyLong(), anyString());
@@ -365,6 +532,22 @@ class MarkWumaProcessingTest {
         verify(orders, never()).insertMarkOrder(any());
         verify(items, never()).insertMarkOrderItem(any());
         verifyNoInteractions(wallets);
+    }
+
+    @Test
+    void skippedCompletedItemIsNeverReportedAsCompletedByThisRun() {
+        service.createOrder(request("wuma_360")); savedOrder.setAuditStatus("1");
+        savedItems.get(0).setProcessStatus("1"); savedItems.get(0).setProcessResult("人工已完成");
+        MarkInspectionPolicy policy = new MarkInspectionPolicy();
+        policy.setPlatformCode("wuma_360"); policy.setOrderScope("BOTH"); policy.setAutoTakeover(true); policy.setBatchLimit(100);
+        when(items.selectInspectionProcessItems("wuma_360", "BOTH", true, 100)).thenReturn(List.of(savedItems.get(0)));
+        Map<String, Object> result = service.processPendingInspection(policy, 99L);
+        assertEquals(0, result.get("checkedCount")); assertEquals(0, result.get("successCount")); assertEquals(1, result.get("skippedCount"));
+        MarkInspectionMapper inspection = (MarkInspectionMapper) ReflectionTestUtils.getField(service, "markInspectionMapper");
+        ArgumentCaptor<MarkInspectionRunDetail> detail = ArgumentCaptor.forClass(MarkInspectionRunDetail.class);
+        verify(inspection).insertDetail(detail.capture());
+        assertEquals("SKIPPED", detail.getValue().getSubmissionStatus());
+        assertEquals("未检测", detail.getValue().getDetectionResult());
     }
 
     private OptimizedBatchItemOutcome outcome(String status) {

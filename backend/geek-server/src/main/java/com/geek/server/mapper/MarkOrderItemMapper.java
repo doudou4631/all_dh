@@ -69,6 +69,11 @@ public interface MarkOrderItemMapper {
 
     List<MarkOrderItem> selectPendingProcessItems(@Param("platformCode") String platformCode, @Param("limit") int limit);
 
+    List<MarkOrderItem> selectInspectionProcessItems(@Param("platformCode") String platformCode,
+                                                  @Param("orderScope") String orderScope,
+                                                  @Param("autoTakeover") boolean autoTakeover,
+                                                  @Param("limit") int limit);
+
     List<MarkOrderItem> selectPendingTdxSecondItems(@Param("checkIntervalMinutes") int checkIntervalMinutes,
                                                      @Param("limit") int limit);
 

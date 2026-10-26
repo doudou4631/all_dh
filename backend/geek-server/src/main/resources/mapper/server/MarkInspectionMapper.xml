@@ -7,6 +7,7 @@
     <result property="intervalSeconds" column="interval_seconds"/><result property="batchLimit" column="batch_limit"/>
     <result property="intervalValue" column="interval_value"/><result property="intervalUnit" column="interval_unit"/>
     <result property="autoAction" column="auto_action"/>
+    <result property="orderScope" column="order_scope"/><result property="autoTakeover" column="auto_takeover"/>
     <result property="status" column="status"/><result property="running" column="running"/>
     <result property="lastRunTime" column="last_run_time"/><result property="nextRunTime" column="next_run_time"/>
   </resultMap>
@@ -15,6 +16,7 @@
     <result property="policyName" column="policy_name"/><result property="platformCode" column="platform_code"/>
     <result property="platformName" column="platform_name"/><result property="triggerType" column="trigger_type"/>
     <result property="scannedCount" column="scanned_count"/><result property="matchedCount" column="matched_count"/>
+    <result property="checkedCount" column="checked_count"/><result property="markedCount" column="marked_count"/>
     <result property="successCount" column="success_count"/><result property="failedCount" column="failed_count"/>
     <result property="skippedCount" column="skipped_count"/><result property="runStatus" column="run_status"/>
     <result property="errorMessage" column="error_message"/><result property="startTime" column="start_time"/>
@@ -27,21 +29,22 @@
     <result property="submissionStatus" column="submission_status"/><result property="submissionResult" column="submission_result"/>
     <result property="processNote" column="process_note"/><result property="detectedTime" column="detected_time"/>
   </resultMap>
-  <sql id="policyColumns">select id,policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,status,running,last_run_time,next_run_time from mark_inspection_policy</sql>
+  <sql id="policyColumns">select id,policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,order_scope,auto_takeover,status,running,last_run_time,next_run_time from mark_inspection_policy</sql>
   <select id="selectPolicyList" resultMap="PolicyResult"><include refid="policyColumns"/><where>
     <if test="policyName != null and policyName != ''">and policy_name like concat('%',#{policyName},'%')</if>
     <if test="platformCode != null and platformCode != ''">and platform_code=#{platformCode}</if>
     <if test="status != null and status != ''">and status=#{status}</if>
   </where>order by id desc</select>
   <select id="selectPolicyById" resultMap="PolicyResult"><include refid="policyColumns"/> where id=#{id}</select>
-  <insert id="insertPolicy" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_policy(policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,status,running,next_run_time) values(#{policyName},#{platformCode},#{platformName},#{intervalSeconds},#{intervalValue},#{intervalUnit},#{batchLimit},#{autoAction},#{status},'0',#{nextRunTime})</insert>
+  <insert id="insertPolicy" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_policy(policy_name,platform_code,platform_name,interval_seconds,interval_value,interval_unit,batch_limit,auto_action,order_scope,auto_takeover,status,running,next_run_time) values(#{policyName},#{platformCode},#{platformName},#{intervalSeconds},#{intervalValue},#{intervalUnit},#{batchLimit},#{autoAction},#{orderScope},#{autoTakeover},#{status},'0',#{nextRunTime})</insert>
   <update id="updatePolicy">update mark_inspection_policy<set>
     <if test="policyName != null">policy_name=#{policyName},</if><if test="platformCode != null">platform_code=#{platformCode},</if>
     <if test="platformName != null">platform_name=#{platformName},</if><if test="intervalSeconds != null">interval_seconds=#{intervalSeconds},</if>
     <if test="intervalValue != null">interval_value=#{intervalValue},</if><if test="intervalUnit != null">interval_unit=#{intervalUnit},</if>
     <if test="batchLimit != null">batch_limit=#{batchLimit},</if><if test="autoAction != null">auto_action=#{autoAction},</if><if test="status != null">status=#{status},</if>
+    <if test="orderScope != null">order_scope=#{orderScope},</if><if test="autoTakeover != null">auto_takeover=#{autoTakeover},</if>
     <if test="nextRunTime != null">next_run_time=#{nextRunTime},</if>
-  </set>where id=#{id}</update>
+  </set>where id=#{id} and running='0'</update>
   <delete id="deletePolicy">delete from mark_inspection_policy where id=#{id} and running='0'</delete>
   <select id="selectDuePolicies" resultMap="PolicyResult"><include refid="policyColumns"/> where status='0' and running='0' and (next_run_time is null or next_run_time&lt;=#{now}) order by coalesce(next_run_time,'1970-01-01') limit 20</select>
   <update id="claimPolicy">update mark_inspection_policy set running='1' where id=#{id} and status='0' and running='0'</update>
@@ -57,9 +60,9 @@
     <if test="triggerType != null and triggerType != ''">and trigger_type=#{triggerType}</if>
   </where>order by id desc</select>
   <select id="selectDetailList" resultMap="DetailResult">select * from mark_inspection_run_detail where run_log_id=#{runLogId} order by id asc</select>
-  <insert id="insertLog" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_run_log(run_no,policy_id,policy_name,platform_code,platform_name,trigger_type,scanned_count,matched_count,success_count,failed_count,skipped_count,run_status,start_time) values(#{runNo},#{policyId},#{policyName},#{platformCode},#{platformName},#{triggerType},0,0,0,0,0,#{runStatus},#{startTime})</insert>
+  <insert id="insertLog" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_run_log(run_no,policy_id,policy_name,platform_code,platform_name,trigger_type,scanned_count,checked_count,marked_count,matched_count,success_count,failed_count,skipped_count,run_status,start_time) values(#{runNo},#{policyId},#{policyName},#{platformCode},#{platformName},#{triggerType},0,0,0,0,0,0,0,#{runStatus},#{startTime})</insert>
   <insert id="insertDetail" useGeneratedKeys="true" keyProperty="id">insert into mark_inspection_run_detail(run_log_id,order_id,order_item_id,order_no,phone,detection_result,qualified,submission_status,submission_result,process_note,detected_time) values(#{runLogId},#{orderId},#{orderItemId},#{orderNo},#{phone},#{detectionResult},#{qualified},#{submissionStatus},#{submissionResult},#{processNote},#{detectedTime})</insert>
-  <update id="updateLog">update mark_inspection_run_log set scanned_count=#{scannedCount},matched_count=#{matchedCount},success_count=#{successCount},failed_count=#{failedCount},skipped_count=#{skippedCount},run_status=#{runStatus},error_message=#{errorMessage},end_time=#{endTime} where id=#{id}</update>
+  <update id="updateLog">update mark_inspection_run_log set scanned_count=#{scannedCount},checked_count=#{checkedCount},marked_count=#{markedCount},matched_count=#{matchedCount},success_count=#{successCount},failed_count=#{failedCount},skipped_count=#{skippedCount},run_status=#{runStatus},error_message=#{errorMessage},end_time=#{endTime} where id=#{id}</update>
   <update id="failInterruptedRuns">
     update mark_inspection_run_log
     set run_status='FAILED', failed_count=greatest(failed_count,1),

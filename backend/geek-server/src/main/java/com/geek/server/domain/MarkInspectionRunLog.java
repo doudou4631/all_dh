@@ -15,6 +15,8 @@ public class MarkInspectionRunLog implements Serializable {
     private String platformName;
     private String triggerType;
     private Integer scannedCount;
+    private Integer checkedCount;
+    private Integer markedCount;
     private Integer matchedCount;
     private Integer successCount;
     /** Success count filter: SUCCESS (greater than zero) or NO_SUCCESS (zero). */
